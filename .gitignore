@@ -1,0 +1,10 @@
+.env
+.tmp/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+credentials.json
+token.json
+n8n-mcp/
+n8n-skills/

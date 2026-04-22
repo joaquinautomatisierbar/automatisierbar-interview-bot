@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "/Users/sexyjoaquin/.nvm/versions/node/v20.20.2/bin/node",
+      "args": [
+        "/Users/sexyjoaquin/Desktop/Claude Code/n8n Automation/n8n-mcp/dist/mcp/index.js"
+      ]
+    }
+  }
+}
