@@ -61,15 +61,18 @@ PHASES = ["INTERVIEW", "MAPPING", "PROTOTYPE", "PILOT"]
 PHASE_FOR_TYPE = {
     "discovery": "INTERVIEW",
     "followup":  "MAPPING",
+    "spec":      "PROTOTYPE",
 }
 
 DOC_TITLES = {
     "discovery": "Bedarfsanalyse",
     "followup":  "Weiterführende Fragen",
+    "spec":      "Automatisierungs-Spezifikation",
 }
 
 DOC_SUBTITLES = {
     "discovery": "Discovery-Fragebogen für die Automatisierungsplanung",
+    "spec":      "Vollständige Build-Spezifikation für Claude Code",
     "followup":  "Offene Punkte & Ergänzungen vor dem Build",
 }
 

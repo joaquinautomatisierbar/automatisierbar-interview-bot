@@ -9,3 +9,9 @@ services:
         generateValue: true
       - key: PYTHON_VERSION
         value: "3.11.0"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_DATABASE_ID
+        sync: false

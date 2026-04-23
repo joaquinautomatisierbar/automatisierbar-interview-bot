@@ -1,40 +1,51 @@
 #!/usr/bin/env python3
-"""Flask API for automatisierbar PDF generation.
-
-Deployed to Render.com so the n8n cloud workflow can generate branded PDFs
-without needing a local machine running.
+"""Flask API for automatisierbar — PDF generation + adaptive survey.
 
 Endpoints:
-  GET  /health          — health check
-  POST /generate-pdf    — generate branded PDF, returns binary
+  GET  /health                       — health check
+  POST /generate-pdf                 — generate branded PDF (Telegram bot)
+  GET  /                             — serve survey web app
+  POST /api/session/start            — create session, return round 1 questions
+  GET  /api/session/<id>             — get session state (for resume)
+  POST /api/session/<id>/answers     — submit round answers
+  GET  /api/session/<id>/pdf         — generate build-spec PDF, return binary
 
-Auth: X-API-Key header (set PDF_API_KEY env var on Render)
+Auth for /generate-pdf: X-API-Key header (PDF_API_KEY env var)
 """
 
 import io
 import os
-import sys
 import json
+import sys
+from pathlib import Path
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "tools"))
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
 
-API_KEY = os.environ.get("PDF_API_KEY", "")
+PDF_API_KEY = os.environ.get("PDF_API_KEY", "")
 
 
 def _auth_ok() -> bool:
-    if not API_KEY:
+    if not PDF_API_KEY:
         return True
-    return request.headers.get("X-API-Key") == API_KEY
+    return request.headers.get("X-API-Key") == PDF_API_KEY
 
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
 
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
 
+
+# ---------------------------------------------------------------------------
+# Existing: PDF generation for Telegram bot
+# ---------------------------------------------------------------------------
 
 @app.route("/generate-pdf", methods=["POST"])
 def generate_pdf_route():
@@ -47,9 +58,7 @@ def generate_pdf_route():
 
     try:
         from generate_pdf import generate
-
         path = generate(data)
-
         return send_file(
             path,
             mimetype="application/pdf",
@@ -63,6 +72,198 @@ def generate_pdf_route():
         return jsonify({"error": "PDF generation failed"}), 500
 
 
+# ---------------------------------------------------------------------------
+# Survey web app — serve frontend
+# ---------------------------------------------------------------------------
+
+@app.route("/")
+def index():
+    return send_from_directory("static", "index.html")
+
+
+# ---------------------------------------------------------------------------
+# Survey API
+# ---------------------------------------------------------------------------
+
+@app.route("/api/session/start", methods=["POST"])
+def start_session():
+    data = request.get_json(silent=True) or {}
+    context = (data.get("context") or "").strip()
+    if not context:
+        return jsonify({"error": "context required"}), 400
+
+    try:
+        from claude_client import evaluate_context
+        from notion_client import create_session, update_session, available as notion_available
+
+        # Create session in Notion (or get UUID if Notion not configured)
+        session_id = create_session(context)
+
+        # Get round 1 questions from Claude
+        result = evaluate_context(context)
+        questions = result.get("questions", [])
+
+        # Save state
+        if notion_available():
+            update_session(session_id, {
+                "current_questions": questions,
+                "round": 1,
+            })
+
+        return jsonify({
+            "session_id": session_id,
+            "round": 1,
+            "status": result.get("status", "needs_process_selection"),
+            "questions": questions,
+        })
+
+    except Exception as e:
+        app.logger.error("start_session error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/session/<session_id>", methods=["GET"])
+def get_session(session_id):
+    try:
+        from notion_client import get_session as _get, available as notion_available
+        if not notion_available():
+            return jsonify({"error": "session not found"}), 404
+
+        state = _get(session_id)
+        if not state:
+            return jsonify({"error": "session not found"}), 404
+
+        return jsonify(state)
+
+    except Exception as e:
+        app.logger.error("get_session error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/session/<session_id>/answers", methods=["POST"])
+def submit_answers(session_id):
+    data = request.get_json(silent=True) or {}
+    round_num = data.get("round", 1)
+    answers = data.get("answers", [])
+
+    if not answers:
+        return jsonify({"error": "answers required"}), 400
+
+    try:
+        from claude_client import evaluate_answers
+        from notion_client import get_session as _get, update_session, available as notion_available
+
+        # Get context from Notion (or from request if Notion unavailable)
+        context = ""
+        all_qa = []
+        if notion_available():
+            state = _get(session_id)
+            if state:
+                context = state.get("context", "")
+                all_qa = state.get("all_qa", [])
+
+        context = context or data.get("context", "")
+
+        # Append this round
+        all_qa.append({"round": round_num, "qa": answers})
+
+        # Ask Claude what's next
+        result = evaluate_answers(context, all_qa)
+
+        if result.get("status") == "complete":
+            roi = result.get("roi", {})
+            if notion_available():
+                update_session(session_id, {
+                    "status": "complete",
+                    "all_qa": all_qa,
+                    "current_questions": [],
+                    "roi": roi,
+                })
+            return jsonify({
+                "status": "complete",
+                "assumptions": result.get("assumptions", []),
+                "roi": roi,
+            })
+
+        else:
+            next_questions = result.get("questions", [])
+            next_round = round_num + 1
+            if notion_available():
+                update_session(session_id, {
+                    "all_qa": all_qa,
+                    "current_questions": next_questions,
+                    "round": next_round,
+                })
+            return jsonify({
+                "status": "needs_more",
+                "round": next_round,
+                "questions": next_questions,
+                "assumptions": result.get("assumptions", []),
+            })
+
+    except Exception as e:
+        app.logger.error("submit_answers error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/session/<session_id>/pdf", methods=["GET"])
+def session_pdf(session_id):
+    try:
+        from claude_client import generate_spec_summary
+        from notion_client import get_session as _get, available as notion_available
+        from generate_pdf import generate
+
+        context = request.args.get("context", "")
+        all_qa = []
+
+        if notion_available():
+            state = _get(session_id)
+            if state:
+                context = state.get("context", context)
+                all_qa = state.get("all_qa", [])
+
+        # Build spec text via Claude
+        spec_text = generate_spec_summary(context, all_qa)
+
+        # Format Q&A into PDF questions structure
+        questions = {}
+        for round_data in all_qa:
+            rn = round_data["round"]
+            cat = f"Runde {rn}"
+            questions[cat] = []
+            for item in round_data.get("qa", []):
+                q = item.get("question", "")
+                a = item.get("answer", "nicht beantwortet")
+                questions[cat].append(f"{q}\n→ {a}")
+
+        if not questions:
+            questions = {"Spezifikation": [spec_text[:500]]}
+
+        import datetime
+        pdf_data = {
+            "type": "spec",
+            "client_problem": context[:300] if context else "Automatisierungsprojekt",
+            "questions": questions,
+            "metadata": {"date": datetime.date.today().isoformat()},
+        }
+
+        path = generate(pdf_data)
+        return send_file(
+            path,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"automatisierung_spezifikation_{session_id[:8]}.pdf",
+        )
+
+    except Exception as e:
+        app.logger.error("session_pdf error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)

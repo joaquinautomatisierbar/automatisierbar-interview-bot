@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>automatisierbar · Automatisierungsanalyse</title>
+<style>
+/* ── Variables ────────────────────────────────────────────────── */
+:root {
+  --violet:       #7C3ABD;
+  --violet-dark:  #5B21B6;
+  --violet-deep:  #2E1065;
+  --violet-light: #EDE8FF;
+  --black:        #0C1410;
+  --dark:         #1E2B24;
+  --mid:          #4A6358;
+  --off-white:    #F4FCF8;
+  --white:        #FFFFFF;
+  --radius:       4px;
+  --transition:   0.35s ease;
+}
+
+/* ── Reset ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background: var(--violet-deep); color: var(--white); }
+
+/* ── Screens ──────────────────────────────────────────────────── */
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* ── Dot grid background ──────────────────────────────────────── */
+.dot-bg {
+  background-image: radial-gradient(circle, rgba(124,58,189,0.18) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* ── Corner markers ───────────────────────────────────────────── */
+.corners { position: absolute; inset: 0; pointer-events: none; }
+.corners::before, .corners::after,
+.corners span::before, .corners span::after {
+  content: "";
+  position: absolute;
+  width: 10px; height: 10px;
+  border-color: rgba(124,58,189,0.55);
+  border-style: solid;
+}
+.corners::before   { top: 18px; left: 18px;  border-width: 1.5px 0 0 1.5px; }
+.corners::after    { top: 18px; right: 18px; border-width: 1.5px 1.5px 0 0; }
+.corners span::before { bottom: 18px; left: 18px;  border-width: 0 0 1.5px 1.5px; }
+.corners span::after  { bottom: 18px; right: 18px; border-width: 0 1.5px 1.5px 0; }
+
+/* ── Phase bar ─────────────────────────────────────────────────── */
+.phase-bar { display: flex; align-items: center; gap: 0; }
+.phase-bar .phase {
+  font-family: Courier, monospace;
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  padding: 3px 10px;
+  border: 1px solid var(--violet);
+  color: var(--violet);
+}
+.phase-bar .phase.active {
+  background: var(--violet);
+  color: var(--white);
+}
+.phase-bar .arrow {
+  font-family: Courier, monospace;
+  font-size: 9px;
+  color: var(--violet);
+  padding: 0 4px;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SCREEN 1: CONTEXT INPUT (dark violet)
+   ════════════════════════════════════════════════════════════════ */
+#screen-context {
+  background: var(--violet-deep);
+  position: relative;
+  justify-content: center;
+  align-items: center;
+  padding: 48px 32px;
+}
+
+.context-inner {
+  width: 100%;
+  max-width: 640px;
+  position: relative;
+  z-index: 1;
+}
+
+.logo-mark {
+  font-family: Courier, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.15em;
+  color: rgba(237,232,255,0.55);
+  margin-bottom: 8px;
+}
+
+.brand-name {
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--violet);
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+
+.doc-title {
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--off-white);
+  margin-bottom: 4px;
+}
+
+.doc-subtitle {
+  font-family: Courier, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.12em;
+  color: rgba(124,58,189,0.9);
+  margin-bottom: 28px;
+}
+
+.phase-row { margin-bottom: 32px; }
+
+.field-label {
+  font-family: Courier, monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.12em;
+  color: var(--violet);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.context-textarea {
+  width: 100%;
+  min-height: 160px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(124,58,189,0.4);
+  border-left: 3px solid var(--violet);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--off-white);
+  resize: vertical;
+  transition: border-color var(--transition);
+  font-family: inherit;
+}
+.context-textarea::placeholder { color: rgba(244,252,248,0.3); }
+.context-textarea:focus { outline: none; border-color: var(--violet); background: rgba(255,255,255,0.09); }
+
+.btn-primary {
+  margin-top: 20px;
+  padding: 13px 28px;
+  background: var(--violet);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition), transform 0.1s;
+  letter-spacing: 0.02em;
+}
+.btn-primary:hover  { background: var(--violet-dark); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+.context-hint {
+  margin-top: 12px;
+  font-size: 11px;
+  color: rgba(244,252,248,0.35);
+  line-height: 1.5;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SCREEN 2: LOADING (dark violet)
+   ════════════════════════════════════════════════════════════════ */
+#screen-loading {
+  background: var(--violet-deep);
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  flex-direction: column;
+}
+
+.spinner {
+  width: 40px; height: 40px;
+  border: 2.5px solid rgba(124,58,189,0.25);
+  border-top-color: var(--violet);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#loading-text {
+  font-family: Courier, monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: rgba(237,232,255,0.65);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SCREEN 3: QUESTIONS (light bg)
+   ════════════════════════════════════════════════════════════════ */
+#screen-questions {
+  background: var(--off-white);
+  color: var(--dark);
+  flex-direction: column;
+}
+
+.q-topbar {
+  background: var(--white);
+  border-bottom: 1px solid rgba(124,58,189,0.12);
+  padding: 12px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.q-topbar-logo {
+  font-size: 16px;
+  color: var(--violet);
+  font-weight: 400;
+}
+
+.q-topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+#round-indicator {
+  font-family: Courier, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--mid);
+  text-transform: uppercase;
+}
+
+.q-body {
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 32px 80px;
+}
+
+.q-intro {
+  margin-bottom: 32px;
+}
+.q-intro h2 {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--dark);
+  margin-bottom: 6px;
+}
+.q-intro p {
+  font-size: 13px;
+  color: var(--mid);
+  line-height: 1.5;
+}
+
+.question-card {
+  background: var(--white);
+  border: 1px solid rgba(124,58,189,0.1);
+  border-left: 3px solid var(--violet);
+  border-radius: var(--radius);
+  padding: 20px 20px 20px 24px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 16px;
+  transition: border-color var(--transition);
+}
+.question-card:focus-within { border-left-color: var(--violet-dark); }
+
+.q-num {
+  font-family: Courier, monospace;
+  font-size: 11px;
+  color: var(--violet);
+  min-width: 24px;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+
+.q-content { flex: 1; }
+
+.q-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--dark);
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+
+.q-textarea {
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid rgba(124,58,189,0.2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--dark);
+  resize: vertical;
+  background: var(--off-white);
+  transition: border-color var(--transition);
+  line-height: 1.5;
+}
+.q-textarea:focus { outline: none; border-color: var(--violet); background: var(--white); }
+.q-textarea::placeholder { color: rgba(74,99,88,0.4); }
+
+.choice-options { display: flex; flex-direction: column; gap: 8px; }
+.choice-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid rgba(124,58,189,0.2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--dark);
+  transition: all var(--transition);
+  background: var(--off-white);
+}
+.choice-label:hover { border-color: var(--violet); background: var(--violet-light); }
+.choice-label input[type=radio] { accent-color: var(--violet); }
+.choice-label.selected { border-color: var(--violet); background: var(--violet-light); }
+
+.q-actions {
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.autosave-indicator {
+  font-family: Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--mid);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.autosave-indicator.visible { opacity: 1; }
+
+/* ════════════════════════════════════════════════════════════════
+   SCREEN 4: ROI / COMPLETE (dark violet)
+   ════════════════════════════════════════════════════════════════ */
+#screen-roi {
+  background: var(--violet-deep);
+  justify-content: center;
+  align-items: center;
+  padding: 48px 32px;
+  position: relative;
+}
+
+.roi-inner {
+  width: 100%;
+  max-width: 600px;
+  position: relative;
+  z-index: 1;
+}
+
+.roi-header {
+  margin-bottom: 40px;
+}
+.roi-check {
+  font-size: 28px;
+  color: var(--violet-light);
+  margin-bottom: 6px;
+}
+.roi-title {
+  font-size: 22px;
+  font-weight: 300;
+  color: var(--off-white);
+  margin-bottom: 4px;
+}
+#roi-process-name {
+  font-family: Courier, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(124,58,189,0.9);
+  text-transform: uppercase;
+}
+
+/* bars */
+.roi-bars {
+  display: flex;
+  gap: 24px;
+  align-items: flex-end;
+  margin-bottom: 36px;
+  height: 220px;
+}
+
+.bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.bar-label-top {
+  font-family: Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: rgba(237,232,255,0.5);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.bar {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  transition: height 1.4s cubic-bezier(0.22,1,0.36,1);
+}
+.bar-now   { background: rgba(124,58,189,0.35); height: 0; }
+.bar-after { background: var(--violet); height: 0; }
+
+.bar-value {
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--off-white);
+  margin-top: 12px;
+  text-align: center;
+  min-height: 38px;
+}
+.bar-unit {
+  font-family: Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--mid);
+  text-align: center;
+  margin-top: 2px;
+}
+
+.roi-divider {
+  height: 1px;
+  background: rgba(124,58,189,0.25);
+  margin: 28px 0;
+}
+
+.roi-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.roi-stat-label {
+  font-family: Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: rgba(237,232,255,0.45);
+  text-transform: uppercase;
+}
+.roi-stat-value {
+  font-size: 20px;
+  font-weight: 300;
+  color: var(--off-white);
+}
+.roi-stat-value.accent { color: var(--violet-light); }
+
+.assumptions-box {
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: rgba(124,58,189,0.12);
+  border-left: 2px solid var(--violet);
+  border-radius: var(--radius);
+}
+.assumptions-box .label {
+  font-family: Courier, monospace;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--violet);
+  margin-bottom: 6px;
+}
+.assumptions-box ul {
+  list-style: none;
+  padding: 0;
+}
+.assumptions-box li {
+  font-size: 12px;
+  color: rgba(237,232,255,0.65);
+  line-height: 1.5;
+  padding-left: 12px;
+  position: relative;
+}
+.assumptions-box li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--violet);
+  font-size: 10px;
+}
+
+.roi-actions {
+  margin-top: 32px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-outline {
+  padding: 11px 22px;
+  border: 1px solid rgba(124,58,189,0.6);
+  color: var(--violet-light);
+  background: transparent;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-outline:hover { background: rgba(124,58,189,0.15); border-color: var(--violet); }
+
+/* ── Misc ──────────────────────────────────────────────────────── */
+.divider-line {
+  height: 1px;
+  background: rgba(124,58,189,0.25);
+  margin: 24px 0;
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 520px) {
+  #screen-context, #screen-roi { padding: 32px 20px; }
+  .q-body { padding: 24px 16px 60px; }
+  .q-topbar { padding: 10px 16px; }
+  .roi-bars { height: 160px; }
+  .bar-value { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ════ SCREEN 1: CONTEXT ════ -->
+<div id="screen-context" class="screen dot-bg active">
+  <div class="corners"><span></span></div>
+  <div class="context-inner">
+    <div class="logo-mark">// automatisierbar.ch · INTERVIEW PHASE</div>
+    <div class="brand-name">automatisierbar</div>
+    <div class="doc-title">Automatisierungsanalyse</div>
+    <div class="doc-subtitle">// DISCOVERY · ADAPTIVE QUESTIONNAIRE · n8n AUTOMATION</div>
+
+    <div class="phase-row">
+      <div class="phase-bar">
+        <div class="phase active">INTERVIEW</div>
+        <div class="arrow">→</div>
+        <div class="phase">MAPPING</div>
+        <div class="arrow">→</div>
+        <div class="phase">PROTOTYPE</div>
+        <div class="arrow">→</div>
+        <div class="phase">PILOT</div>
+      </div>
+    </div>
+
+    <div class="divider-line"></div>
+
+    <label class="field-label">// SITUATIONSBESCHREIBUNG DES KLIENTEN</label>
+    <textarea id="context-input" class="context-textarea" rows="6"
+      placeholder="Beschreibe die aktuelle Situation: welche Aufgaben wiederholen sich, welche Tools sind im Einsatz, was kostet am meisten Zeit...&#10;&#10;Beispiel: Bei Kundenanfragen wollen fast alle die gleichen Dokumente — es ist sehr zeitraubend, allen separat eine E-Mail zu schreiben. Mieten muss man kontrollieren und sauber verbuchen, dabei Rechnungen hinterlegen."></textarea>
+
+    <button id="start-btn" class="btn-primary">Analyse starten →</button>
+    <p class="context-hint">Claude analysiert die Situation und generiert einen massgeschneiderten Fragebogen. Ziel: alle Informationen für den Automations-Build in möglichst wenigen Runden.</p>
+  </div>
+</div>
+
+<!-- ════ SCREEN 2: LOADING ════ -->
+<div id="screen-loading" class="screen">
+  <div class="spinner"></div>
+  <div id="loading-text">Analysiere die Situation…</div>
+</div>
+
+<!-- ════ SCREEN 3: QUESTIONS ════ -->
+<div id="screen-questions" class="screen">
+  <div class="q-topbar">
+    <div class="q-topbar-logo">automatisierbar</div>
+    <div class="q-topbar-meta">
+      <span id="round-indicator">Runde 1</span>
+      <div class="phase-bar" style="transform: scale(0.85); transform-origin: right;">
+        <div class="phase active" id="phase-tag">INTERVIEW</div>
+        <div class="arrow">→</div>
+        <div class="phase">MAPPING</div>
+        <div class="arrow">→</div>
+        <div class="phase">PROTOTYPE</div>
+        <div class="arrow">→</div>
+        <div class="phase">PILOT</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="q-body">
+    <div class="q-intro">
+      <h2 id="q-intro-title">Prozessidentifikation</h2>
+      <p id="q-intro-subtitle">Beantworte alle Fragen so konkret wie möglich — je präziser die Antworten, desto weniger Runden werden benötigt.</p>
+    </div>
+
+    <div id="questions-container"></div>
+
+    <div class="q-actions">
+      <button id="submit-btn" class="btn-primary">Weiter →</button>
+      <span id="autosave-indicator" class="autosave-indicator">// gespeichert</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SCREEN 4: ROI ════ -->
+<div id="screen-roi" class="screen dot-bg">
+  <div class="corners"><span></span></div>
+  <div class="roi-inner">
+    <div class="roi-header">
+      <div class="roi-check">✓</div>
+      <div class="roi-title">Analyse abgeschlossen</div>
+      <div id="roi-process-name"></div>
+    </div>
+
+    <div class="roi-bars">
+      <div class="bar-col">
+        <div class="bar-label-top">// JETZT</div>
+        <div class="bar bar-now" id="bar-now"></div>
+        <div class="bar-value" id="val-now">–</div>
+        <div class="bar-unit">Std/Woche</div>
+      </div>
+      <div class="bar-col">
+        <div class="bar-label-top">// MIT AUTOMATION</div>
+        <div class="bar bar-after" id="bar-after"></div>
+        <div class="bar-value" id="val-after">–</div>
+        <div class="bar-unit">Min/Woche</div>
+      </div>
+    </div>
+
+    <div class="roi-divider"></div>
+
+    <div class="roi-stat">
+      <span class="roi-stat-label">// EINSPARUNG / MONAT</span>
+      <span class="roi-stat-value accent">CHF <span id="roi-chf">0</span></span>
+    </div>
+    <div class="roi-stat">
+      <span class="roi-stat-label">// ENTWICKLUNGSZEIT</span>
+      <span class="roi-stat-value" id="roi-build">–</span>
+    </div>
+    <div class="roi-stat">
+      <span class="roi-stat-label">// KOMPLEXITÄT</span>
+      <span class="roi-stat-value" id="roi-complexity">–</span>
+    </div>
+
+    <div id="assumptions-section" style="display:none">
+      <div class="roi-divider"></div>
+      <div class="assumptions-box">
+        <div class="label">// MVP-ANNAHMEN</div>
+        <ul id="assumptions-list"></ul>
+      </div>
+    </div>
+
+    <div class="roi-divider"></div>
+
+    <div class="roi-actions">
+      <a id="pdf-btn" href="#" class="btn-outline" target="_blank">PDF herunterladen ↓</a>
+      <button onclick="App.restart()" class="btn-outline">Neue Analyse →</button>
+    </div>
+
+    <p style="margin-top:20px; font-family: Courier, monospace; font-size: 9px; letter-spacing: 0.08em; color: rgba(237,232,255,0.3);">
+      // automatisierbar.ch · wir starten die Entwicklung
+    </p>
+  </div>
+</div>
+
+<script>
+const App = {
+  sessionId: null,
+  currentRound: 0,
+  context: "",
+  allQA: [],
+
+  // ── Init ──────────────────────────────────────────────────────
+  async init() {
+    const params = new URLSearchParams(location.search);
+    const sid = params.get("s");
+    if (sid) {
+      await this.resumeSession(sid);
+    }
+    document.getElementById("start-btn").addEventListener("click", () => this.startSession());
+    document.getElementById("submit-btn").addEventListener("click", () => this.submitAnswers());
+  },
+
+  // ── Start ─────────────────────────────────────────────────────
+  async startSession() {
+    const context = document.getElementById("context-input").value.trim();
+    if (!context) { this.shake("context-input"); return; }
+
+    this.context = context;
+    this.showLoading("Analysiere die Situation…");
+
+    try {
+      const resp = await fetch("/api/session/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Unbekannter Fehler");
+
+      this.sessionId = data.session_id;
+      this.currentRound = data.round;
+      history.pushState({}, "", `?s=${this.sessionId}`);
+      this.ls("set", "context", context);
+      this.showQuestions(data.questions, data.round, data.status);
+    } catch (e) {
+      this.showContext(e.message);
+    }
+  },
+
+  // ── Submit answers ─────────────────────────────────────────────
+  async submitAnswers() {
+    const answers = this.collectAnswers();
+    const empty = answers.find(a => !a.answer.trim());
+    if (empty) {
+      const cards = document.querySelectorAll(".question-card");
+      cards.forEach(c => {
+        const a = c.querySelector("textarea");
+        if (a && !a.value.trim()) c.classList.add("error");
+      });
+      document.querySelector(".question-card.error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    this.showLoading("Verarbeite Antworten…");
+
+    try {
+      const resp = await fetch(`/api/session/${this.sessionId}/answers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          round: this.currentRound,
+          answers,
+          context: this.context,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Unbekannter Fehler");
+
+      this.allQA.push({ round: this.currentRound, qa: answers });
+      this.ls("set", "allQA", JSON.stringify(this.allQA));
+
+      if (data.status === "complete") {
+        this.showROI(data.roi, data.assumptions || []);
+      } else {
+        this.currentRound = data.round;
+        this.showQuestions(data.questions, data.round, data.status, data.assumptions);
+      }
+    } catch (e) {
+      alert("Fehler: " + e.message);
+      this.showScreen("screen-questions");
+    }
+  },
+
+  // ── Collect answers from DOM ───────────────────────────────────
+  collectAnswers() {
+    const cards = document.querySelectorAll(".question-card");
+    const answers = [];
+    cards.forEach(card => {
+      const qid   = card.dataset.qid;
+      const qtext = card.dataset.qtext;
+      const ta = card.querySelector("textarea");
+      const radio = card.querySelector("input[type=radio]:checked");
+      const answer = (ta ? ta.value : (radio ? radio.value : "")).trim();
+      answers.push({ question_id: qid, question: qtext, answer });
+    });
+    return answers;
+  },
+
+  // ── Render questions screen ────────────────────────────────────
+  showQuestions(questions, round, status, assumptions) {
+    const intros = {
+      needs_process_selection: {
+        title: "Prozessidentifikation",
+        sub:   "Welcher Prozess soll zuerst automatisiert werden? Deine Antworten helfen uns, den optimalen Quick Win zu finden.",
+      },
+      needs_technical_detail: {
+        title: "Technische Implementierung",
+        sub:   "Fast geschafft — diese Fragen liefern alle Details, die für den Build benötigt werden.",
+      },
+    };
+    const intro = intros[status] || { title: `Runde ${round}`, sub: "Beantworte alle Fragen so konkret wie möglich." };
+    document.getElementById("q-intro-title").textContent = intro.title;
+    document.getElementById("q-intro-subtitle").textContent = intro.sub;
+    document.getElementById("round-indicator").textContent = `// RUNDE ${round}`;
+
+    // Phase tag
+    const phaseMap = { needs_process_selection: "INTERVIEW", needs_technical_detail: "MAPPING" };
+    document.getElementById("phase-tag").textContent = phaseMap[status] || "INTERVIEW";
+
+    const container = document.getElementById("questions-container");
+    container.innerHTML = "";
+
+    // Assumptions notice
+    if (assumptions && assumptions.length) {
+      const box = document.createElement("div");
+      box.className = "assumptions-box";
+      box.style.marginBottom = "20px";
+      box.innerHTML = `<div class="label">// MVP-ANNAHMEN DER LETZTEN RUNDE</div><ul>${assumptions.map(a => `<li>${a}</li>`).join("")}</ul>`;
+      container.appendChild(box);
+    }
+
+    questions.forEach((q, i) => {
+      const saved = this.ls("get", `a_${this.sessionId}_${round}_${q.id}`) || "";
+      const card = document.createElement("div");
+      card.className = "question-card";
+      card.dataset.qid = q.id;
+      card.dataset.qtext = q.text;
+
+      let inputHtml;
+      if (q.type === "choice" && q.options?.length) {
+        inputHtml = `<div class="choice-options">${q.options.map(opt =>
+          `<label class="choice-label">
+            <input type="radio" name="${q.id}" value="${this.esc(opt)}"${saved === opt ? " checked" : ""}>
+            <span>${this.esc(opt)}</span>
+          </label>`
+        ).join("")}</div>`;
+      } else {
+        inputHtml = `<textarea class="q-textarea" placeholder="Antwort…" rows="3" oninput="App.autoSave(this,'${q.id}',${round})" onchange="document.getElementById('autosave-indicator').classList.add('visible'); setTimeout(()=>document.getElementById('autosave-indicator').classList.remove('visible'), 2000)">${saved}</textarea>`;
+      }
+
+      card.innerHTML = `
+        <div class="q-num">${String(i + 1).padStart(2, "0")}</div>
+        <div class="q-content">
+          <div class="q-text">${this.esc(q.text)}</div>
+          ${inputHtml}
+        </div>`;
+
+      card.addEventListener("input", () => card.classList.remove("error"));
+      container.appendChild(card);
+    });
+
+    this.showScreen("screen-questions");
+    window.scrollTo(0, 0);
+  },
+
+  // ── Render ROI screen ──────────────────────────────────────────
+  showROI(roi, assumptions) {
+    const process     = roi.process || "Automatisierungsprojekt";
+    const hoursNow    = Number(roi.hours_per_week_now)    || 5;
+    const minsAfter   = Number(roi.minutes_per_week_after) || Math.round((roi.hours_per_week_after || 0.25) * 60);
+    const chfSavings  = Number(roi.chf_monthly_savings)   || 0;
+    const buildTime   = roi.build_time_days || "2–3 Tage";
+    const complexity  = { easy: "Einfach ✓", medium: "Mittel", complex: "Komplex" }[roi.complexity] || "–";
+
+    document.getElementById("roi-process-name").textContent = `// ${process.toUpperCase()}`;
+    document.getElementById("roi-build").textContent       = buildTime;
+    document.getElementById("roi-complexity").textContent  = complexity;
+
+    // Assumptions
+    if (assumptions && assumptions.length) {
+      document.getElementById("assumptions-section").style.display = "block";
+      document.getElementById("assumptions-list").innerHTML = assumptions.map(a => `<li>${this.esc(a)}</li>`).join("");
+    }
+
+    // PDF button
+    document.getElementById("pdf-btn").href = `/api/session/${this.sessionId}/pdf`;
+
+    this.showScreen("screen-roi");
+
+    // Animate bars after paint
+    requestAnimationFrame(() => {
+      const MAX_H = Math.min(window.innerHeight * 0.3, 180);
+      const nowBar   = document.getElementById("bar-now");
+      const afterBar = document.getElementById("bar-after");
+
+      setTimeout(() => {
+        nowBar.style.height = MAX_H + "px";
+        const ratio = Math.max(0.08, minsAfter / (hoursNow * 60));
+        setTimeout(() => { afterBar.style.height = (MAX_H * ratio) + "px"; }, 300);
+      }, 200);
+
+      // Counters
+      setTimeout(() => this.counter("val-now",   0, hoursNow,   " Std",     1500), 300);
+      setTimeout(() => this.counter("val-after",  0, minsAfter,  " Min",     1500), 600);
+      setTimeout(() => this.counter("roi-chf",    0, chfSavings, "",         2000), 900);
+    });
+  },
+
+  // ── Counter animation ──────────────────────────────────────────
+  counter(id, from, to, suffix, duration) {
+    const el = document.getElementById(id);
+    const start = performance.now();
+    const tick = now => {
+      const t    = Math.min(1, (now - start) / duration);
+      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const val  = Math.round(from + (to - from) * ease);
+      el.textContent = val.toLocaleString("de-CH") + suffix;
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  },
+
+  // ── Resume ─────────────────────────────────────────────────────
+  async resumeSession(sid) {
+    this.sessionId = sid;
+    this.showLoading("Lade Session…");
+    try {
+      const resp = await fetch(`/api/session/${sid}`);
+      if (!resp.ok) { this.showScreen("screen-context"); return; }
+      const state = await resp.json();
+      this.context     = state.context || this.ls("get", "context") || "";
+      this.currentRound = state.round || 1;
+      this.allQA       = state.all_qa || [];
+
+      if (state.status === "complete" && state.roi) {
+        this.showROI(state.roi, []);
+      } else if (state.current_questions?.length) {
+        this.showQuestions(state.current_questions, this.currentRound, "needs_technical_detail");
+      } else {
+        this.showScreen("screen-context");
+      }
+    } catch {
+      this.showScreen("screen-context");
+    }
+  },
+
+  // ── Helpers ────────────────────────────────────────────────────
+  showScreen(id) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+    window.scrollTo(0, 0);
+  },
+  showContext(err) {
+    if (err) console.error(err);
+    this.showScreen("screen-context");
+  },
+  showLoading(text) {
+    document.getElementById("loading-text").textContent = text;
+    this.showScreen("screen-loading");
+  },
+  autoSave(el, qid, round) {
+    this.ls("set", `a_${this.sessionId}_${round}_${qid}`, el.value);
+  },
+  restart() {
+    this.sessionId   = null;
+    this.currentRound = 0;
+    this.context     = "";
+    this.allQA       = [];
+    history.pushState({}, "", "/");
+    document.getElementById("context-input").value = "";
+    this.showScreen("screen-context");
+  },
+  shake(id) {
+    const el = document.getElementById(id);
+    el.style.borderColor = "#e55";
+    setTimeout(() => { el.style.borderColor = ""; }, 1200);
+  },
+  esc(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  },
+  ls(op, key, val) {
+    try {
+      if (op === "set") localStorage.setItem(`ab_${key}`, val);
+      if (op === "get") return localStorage.getItem(`ab_${key}`);
+    } catch { return null; }
+  },
+};
+
+document.addEventListener("DOMContentLoaded", () => App.init());
+</script>
+</body>
+</html>
