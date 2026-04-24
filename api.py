@@ -86,6 +86,29 @@ def index():
 # ---------------------------------------------------------------------------
 # Leads search
 # ---------------------------------------------------------------------------
+# Temporary debug endpoint — remove after diagnosing autocomplete issue
+# ---------------------------------------------------------------------------
+
+@app.route("/api/debug/leads", methods=["GET"])
+def debug_leads():
+    try:
+        from notion_session import _client, _leads_db, _extract_lead
+        n = _client()
+        db_id = _leads_db()
+        r = n.databases.query(database_id=db_id, page_size=5)
+        pages = r.get("results", [])
+        out = []
+        for p in pages:
+            try:
+                lead = _extract_lead(p)
+                out.append({"ok": True, "lead": lead})
+            except Exception as e:
+                out.append({"ok": False, "error": str(e), "props": list(p.get("properties", {}).keys())})
+        return jsonify({"db_id": db_id, "total": len(pages), "pages": out})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ---------------------------------------------------------------------------
 
 @app.route("/api/leads/search", methods=["GET"])
 def search_leads():
