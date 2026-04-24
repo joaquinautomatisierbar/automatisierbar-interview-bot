@@ -61,16 +61,22 @@ VOLLSTÄNDIGKEITS-CHECKLISTE — prüfe jeden Punkt:
 4. LOGIK: Alle IF/THEN-Regeln, Berechnungen, Filterkriterien mit konkreten Schwellwerten
 5. OUTPUT: Was soll passieren? Wohin? Mit welchem genauen Inhalt/Format?
 6. FEHLER: Retry? Benachrichtigung? Wer wird informiert?
+7. ZEIT & VOLUMEN: Wie viele Stunden/Woche verbringt der Klient aktuell mit diesem Prozess? Wie viele Datensätze/Vorgänge pro Tag oder Woche?
 
-WENN alle 6 Punkte klar sind → status: "complete"
+WENN alle 7 Punkte klar sind → status: "complete"
 WENN Lücken bestehen → stelle max. 6 gezielte Fragen, nur was wirklich fehlt.
+
+WICHTIG zu Punkt 7: Die Zeitangabe MUSS vom Klienten kommen — niemals schätzen oder erfinden.
+Frage konkret: "Wie viele Stunden pro Woche verbringen Sie oder Ihr Team aktuell mit diesem Prozess?"
+Frage konkret: "Wie viele [Rechnungen / Anfragen / Einträge] bearbeiten Sie pro Tag oder Woche?"
 
 Für technische Details die der Klient nicht kennen kann (z.B. genaue Datenbankstruktur):
 Mache sinnvolle MVP-Annahmen und liste sie unter "assumptions".
 Beispiel: "Für den MVP verwenden wir Google Sheets statt der internen Datenbank."
 
-ROI-Schätzung bei complete: Schätze konservativ aber realistisch.
-Basiere auf: Häufigkeit × Zeitaufwand pro Durchgang → Stunden/Woche → CHF/Monat bei 80 CHF/h.
+ROI-Schätzung bei complete: Basiere AUSSCHLIESSLICH auf den vom Klienten genannten Zahlen.
+Berechnung: Stunden/Woche × 4.3 × CHF 80/h = CHF/Monat Einsparung.
+Nach Automation: ca. 15–30 Minuten/Woche für Monitoring (keine Schätzung, immer 15 Min als Standard).
 
 Antworte NUR als gültiges JSON (kein Markdown, kein Text davor/danach):
 

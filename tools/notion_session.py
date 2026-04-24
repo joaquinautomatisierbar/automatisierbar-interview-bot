@@ -166,15 +166,14 @@ def search_leads(query: str) -> list:
         return []
     try:
         n = _client()
-        r = n.databases.query(
-            database_id=LEADS_DB_ID,
-            filter={"property": "Name", "title": {"contains": query}},
-            page_size=12,
-        )
+        r = n.databases.query(database_id=LEADS_DB_ID, page_size=50)
+        q = query.lower()
         results = []
         for page in r["results"]:
             lead = _extract_lead(page)
             if not lead["name"]:
+                continue
+            if q not in lead["name"].lower() and q not in (lead["firma"] or "").lower():
                 continue
             if lead["pipeline_stage"] and lead["pipeline_stage"] not in ALLOWED_STAGES:
                 continue
