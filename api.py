@@ -93,8 +93,11 @@ def index():
 def debug_leads():
     try:
         from notion_session import _client, _leads_db, _extract_lead
+        import notion_client as nc_pkg
         n = _client()
         db_id = _leads_db()
+        methods = [m for m in dir(n.databases) if not m.startswith("_")]
+        version = getattr(nc_pkg, "__version__", "unknown")
         r = n.databases.query(database_id=db_id, page_size=5)
         pages = r.get("results", [])
         out = []
@@ -104,9 +107,16 @@ def debug_leads():
                 out.append({"ok": True, "lead": lead})
             except Exception as e:
                 out.append({"ok": False, "error": str(e), "props": list(p.get("properties", {}).keys())})
-        return jsonify({"db_id": db_id, "total": len(pages), "pages": out})
+        return jsonify({"version": version, "db_id": db_id, "methods": methods, "total": len(pages), "pages": out})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import notion_client as nc_pkg
+        from notion_session import _client
+        try:
+            n = _client()
+            methods = [m for m in dir(n.databases) if not m.startswith("_")]
+        except Exception:
+            methods = []
+        return jsonify({"error": str(e), "version": getattr(nc_pkg, "__version__", "unknown"), "db_methods": methods}), 500
 
 # ---------------------------------------------------------------------------
 
