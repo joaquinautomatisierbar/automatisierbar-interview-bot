@@ -11,6 +11,8 @@ import os
 import uuid
 from typing import Optional
 
+import requests
+
 CHUNK = 1999
 _LEADS_DB_ID_FALLBACK = "31cbebb0-c2f9-8075-b996-000b1747664a"
 
@@ -24,8 +26,29 @@ ALLOWED_STAGES = {
 
 
 def _client():
-    from notion_client import Client  # pip: notion-client — now resolves correctly
+    from notion_client import Client
     return Client(auth=os.environ["NOTION_API_KEY"])
+
+
+def _notion_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {os.environ['NOTION_API_KEY']}",
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+    }
+
+
+def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100) -> dict:
+    body: dict = {"page_size": page_size}
+    if filter_body:
+        body["filter"] = filter_body
+    r = requests.post(
+        f"https://api.notion.com/v1/databases/{database_id}/query",
+        headers=_notion_headers(),
+        json=body,
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 def _db() -> str:
@@ -55,13 +78,13 @@ def _rt(text: str) -> list:
 
 def _find_page(session_id: str):
     try:
-        n = _client()
-        r = n.databases.query(
-            database_id=_db(),
-            filter={"property": "Session ID", "rich_text": {"equals": session_id}},
+        r = _query_db(
+            _db(),
+            filter_body={"property": "Session ID", "rich_text": {"equals": session_id}},
+            page_size=1,
         )
         page = r["results"][0] if r["results"] else None
-        return page, n
+        return page, _client()
     except Exception:
         return None, None
 
@@ -169,8 +192,7 @@ def search_leads(query: str) -> list:
     if not available():
         return []
     try:
-        n = _client()
-        r = n.databases.query(database_id=_leads_db(), page_size=100)
+        r = _query_db(_leads_db(), page_size=100)
         q = query.lower()
         results = []
         for page in r["results"]:
