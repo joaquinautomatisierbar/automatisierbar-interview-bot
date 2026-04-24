@@ -537,13 +537,14 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 <div class="modal-overlay" id="sessions-modal" onclick="if(event.target===this)App.closeModal()">
   <div class="modal">
     <h3>Session fortsetzen</h3>
-    <p>
-      Jede Session hat eine eindeutige URL mit dem Parameter <code>?s=SESSION_ID</code>.<br><br>
-      Die URL findest du in Notion — öffne den Lead-Eintrag in der <strong>Interview Datenbank</strong>
-      und kopiere den Wert aus dem Feld <code>Session ID</code>.<br><br>
-      Dann einfach die URL <code>automatisierbar-interview-bot.onrender.com/?s=...</code> aufrufen.
-    </p>
-    <button class="modal-close" onclick="App.closeModal()">Verstanden</button>
+    <p style="margin-bottom:16px;">Session-ID eingeben (findest du in Notion im Feld <code>Session ID</code> des Lead-Eintrags):</p>
+    <input type="text" id="session-id-input" class="input-field" placeholder="z.B. 3f2a1b4c-…" autocomplete="off"
+      style="margin-bottom:12px;"
+      onkeydown="if(event.key==='Enter')App.loadSessionFromModal()"/>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" onclick="App.loadSessionFromModal()" style="flex:1;">Session laden</button>
+      <button class="modal-close" onclick="App.closeModal()" style="flex:0 0 auto;">Abbrechen</button>
+    </div>
   </div>
 </div>
 
@@ -757,8 +758,17 @@ const App = {
   },
 
   // ── Modal ──────────────────────────────────────────────────────
-  openModal()  { document.getElementById("sessions-modal").classList.add("open"); },
+  openModal() {
+    document.getElementById("sessions-modal").classList.add("open");
+    setTimeout(() => document.getElementById("session-id-input").focus(), 100);
+  },
   closeModal() { document.getElementById("sessions-modal").classList.remove("open"); },
+  loadSessionFromModal() {
+    const sid = document.getElementById("session-id-input").value.trim();
+    if (!sid) return;
+    this.closeModal();
+    this.resumeSession(sid);
+  },
 
   // ── Autocomplete ───────────────────────────────────────────────
   onClientSearch(val) {

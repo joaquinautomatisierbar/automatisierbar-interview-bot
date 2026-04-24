@@ -12,7 +12,11 @@ import uuid
 from typing import Optional
 
 CHUNK = 1999
-LEADS_DB_ID = "31cbebb0-c2f9-8075-b996-000b1747664a"
+_LEADS_DB_ID_FALLBACK = "31cbebb0-c2f9-8075-b996-000b1747664a"
+
+
+def _leads_db() -> str:
+    return os.environ.get("NOTION_DATABASE_ID") or _LEADS_DB_ID_FALLBACK
 ALLOWED_STAGES = {
     "Workflow Interview", "Process Mapping", "Prototype Building",
     "Prototype Testing", "Pilot Client", "Paying Client",
@@ -166,7 +170,7 @@ def search_leads(query: str) -> list:
         return []
     try:
         n = _client()
-        r = n.databases.query(database_id=LEADS_DB_ID, page_size=50)
+        r = n.databases.query(database_id=_leads_db(), page_size=100)
         q = query.lower()
         results = []
         for page in r["results"]:
