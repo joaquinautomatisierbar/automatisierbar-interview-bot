@@ -142,8 +142,9 @@ def _extract_lead(page: dict) -> dict:
         s = props.get(key, {}).get("select") or {}
         return s.get("name", "")
 
-    def _status(key):
-        s = props.get(key, {}).get("status") or {}
+    def _status_or_select(key):
+        prop = props.get(key, {})
+        s = prop.get("status") or prop.get("select") or {}
         return s.get("name", "")
 
     return {
@@ -155,7 +156,7 @@ def _extract_lead(page: dict) -> dict:
         "top_problem": _text("Top Problem"),
         "context": _text("Context"),
         "problem_cluster": _select("Problem Cluster"),
-        "pipeline_stage": _status("Pipeline Stage"),
+        "pipeline_stage": _status_or_select("Pipeline Stage"),
         "session_id": _text("Session ID"),
     }
 
@@ -173,8 +174,11 @@ def search_leads(query: str) -> list:
         results = []
         for page in r["results"]:
             lead = _extract_lead(page)
-            if lead["pipeline_stage"] in ALLOWED_STAGES:
-                results.append(lead)
+            if not lead["name"]:
+                continue
+            if lead["pipeline_stage"] and lead["pipeline_stage"] not in ALLOWED_STAGES:
+                continue
+            results.append(lead)
             if len(results) >= 6:
                 break
         return results
