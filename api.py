@@ -5,10 +5,12 @@ Endpoints:
   GET  /health                       — health check
   POST /generate-pdf                 — generate branded PDF (Telegram bot)
   GET  /                             — serve survey web app
+  GET  /api/leads/search?q=name      — search Interview Datenbank leads
   POST /api/session/start            — create session, return round 1 questions
   GET  /api/session/<id>             — get session state (for resume)
   POST /api/session/<id>/answers     — submit round answers
   GET  /api/session/<id>/pdf         — generate build-spec PDF, return binary
+  GET  /api/session/<id>/prompt      — generate Claude Code prompt, return JSON
 
 Auth for /generate-pdf: X-API-Key header (PDF_API_KEY env var)
 """
@@ -82,6 +84,24 @@ def index():
 
 
 # ---------------------------------------------------------------------------
+# Leads search
+# ---------------------------------------------------------------------------
+
+@app.route("/api/leads/search", methods=["GET"])
+def search_leads():
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    try:
+        from notion_session import search_leads as _search
+        results = _search(q)
+        return jsonify(results)
+    except Exception as e:
+        app.logger.error("search_leads error: %s", e)
+        return jsonify([])
+
+
+# ---------------------------------------------------------------------------
 # Survey API
 # ---------------------------------------------------------------------------
 
@@ -92,22 +112,26 @@ def start_session():
     if not context:
         return jsonify({"error": "context required"}), 400
 
+    lead_page_id = (data.get("lead_page_id") or "").strip() or None
+
     try:
         from claude_client import evaluate_context
-        from notion_client import create_session, update_session, available as notion_available
+        from notion_session import create_session, update_session, link_session_to_lead, available as notion_available
 
-        # Create session in Notion (or get UUID if Notion not configured)
         session_id = create_session(context)
 
-        # Get round 1 questions from Claude
+        # Link to lead page if provided
+        if lead_page_id:
+            link_session_to_lead(lead_page_id, session_id)
+
         result = evaluate_context(context)
         questions = result.get("questions", [])
 
-        # Save state
         if notion_available():
             update_session(session_id, {
                 "current_questions": questions,
                 "round": 1,
+                "lead_page_id": lead_page_id,
             })
 
         return jsonify({
@@ -125,7 +149,7 @@ def start_session():
 @app.route("/api/session/<session_id>", methods=["GET"])
 def get_session(session_id):
     try:
-        from notion_client import get_session as _get, available as notion_available
+        from notion_session import get_session as _get, available as notion_available
         if not notion_available():
             return jsonify({"error": "session not found"}), 404
 
@@ -151,37 +175,52 @@ def submit_answers(session_id):
 
     try:
         from claude_client import evaluate_answers
-        from notion_client import get_session as _get, update_session, available as notion_available
+        from notion_session import (
+            get_session as _get, update_session,
+            write_qa_to_page, write_roi_to_page,
+            available as notion_available,
+        )
 
-        # Get context from Notion (or from request if Notion unavailable)
         context = ""
         all_qa = []
+        lead_page_id = None
+
         if notion_available():
             state = _get(session_id)
             if state:
                 context = state.get("context", "")
                 all_qa = state.get("all_qa", [])
+                lead_page_id = state.get("lead_page_id")
 
         context = context or data.get("context", "")
-
-        # Append this round
         all_qa.append({"round": round_num, "qa": answers})
 
-        # Ask Claude what's next
+        # Write this round's Q&A to the lead's Notion page
+        if lead_page_id:
+            write_qa_to_page(lead_page_id, round_num, answers)
+
         result = evaluate_answers(context, all_qa)
 
         if result.get("status") == "complete":
             roi = result.get("roi", {})
+            assumptions = result.get("assumptions", [])
+
             if notion_available():
                 update_session(session_id, {
                     "status": "complete",
                     "all_qa": all_qa,
                     "current_questions": [],
                     "roi": roi,
+                    "assumptions": assumptions,
                 })
+
+            # Write ROI to lead page
+            if lead_page_id:
+                write_roi_to_page(lead_page_id, roi, assumptions)
+
             return jsonify({
                 "status": "complete",
-                "assumptions": result.get("assumptions", []),
+                "assumptions": assumptions,
                 "roi": roi,
             })
 
@@ -210,7 +249,7 @@ def submit_answers(session_id):
 def session_pdf(session_id):
     try:
         from claude_client import generate_spec_summary
-        from notion_client import get_session as _get, available as notion_available
+        from notion_session import get_session as _get, available as notion_available
         from generate_pdf import generate
 
         context = request.args.get("context", "")
@@ -222,10 +261,8 @@ def session_pdf(session_id):
                 context = state.get("context", context)
                 all_qa = state.get("all_qa", [])
 
-        # Build spec text via Claude
         spec_text = generate_spec_summary(context, all_qa)
 
-        # Format Q&A into PDF questions structure
         questions = {}
         for round_data in all_qa:
             rn = round_data["round"]
@@ -257,6 +294,43 @@ def session_pdf(session_id):
 
     except Exception as e:
         app.logger.error("session_pdf error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/session/<session_id>/prompt", methods=["GET"])
+def session_prompt(session_id):
+    try:
+        from claude_client import generate_claude_code_prompt
+        from notion_session import get_session as _get, available as notion_available
+
+        context = ""
+        all_qa = []
+        roi = {}
+        lead_page_id = None
+
+        if notion_available():
+            state = _get(session_id)
+            if state:
+                context = state.get("context", "")
+                all_qa = state.get("all_qa", [])
+                roi = state.get("roi", {}) or {}
+                lead_page_id = state.get("lead_page_id")
+
+        # Get lead info if linked
+        lead_info = None
+        if lead_page_id:
+            try:
+                from notion_session import search_leads
+                # We don't have a get_lead by page_id directly; pass None
+                pass
+            except Exception:
+                pass
+
+        prompt_text = generate_claude_code_prompt(context, all_qa, roi, lead_info)
+        return jsonify({"prompt": prompt_text})
+
+    except Exception as e:
+        app.logger.error("session_prompt error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 

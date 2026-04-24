@@ -1,11 +1,4 @@
-"""claude_client.py — Claude API calls for the automatisierbar survey app.
-
-Two main functions:
-  evaluate_context(context)        → questions for round 1
-  evaluate_answers(context, all_qa) → next questions OR complete + ROI
-
-Uses prompt caching on system prompts to reduce latency and cost.
-"""
+"""claude_client.py — Claude API calls for the automatisierbar survey app."""
 
 import json
 import os
@@ -112,7 +105,6 @@ Bei complete:
 # ---------------------------------------------------------------------------
 
 def _parse_json(text: str) -> dict:
-    """Extract JSON from Claude response (handles markdown code blocks)."""
     m = re.search(r"\{[\s\S]*\}", text)
     if not m:
         raise ValueError(f"No JSON found in response: {text[:200]}")
@@ -120,7 +112,6 @@ def _parse_json(text: str) -> dict:
 
 
 def _format_qa(all_qa: list) -> str:
-    """Format collected Q&A rounds for the Claude prompt."""
     parts = []
     for round_data in all_qa:
         parts.append(f"=== Runde {round_data['round']} ===")
@@ -136,15 +127,6 @@ def _format_qa(all_qa: list) -> str:
 # ---------------------------------------------------------------------------
 
 def evaluate_context(context: str) -> dict[str, Any]:
-    """
-    Analyse the initial context and return round 1 questions.
-
-    Returns:
-        {
-            "status": "needs_process_selection" | "needs_technical_detail",
-            "questions": [{"id": "q1", "text": "...", "type": "text"|"choice", "options": [...]}]
-        }
-    """
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = client.messages.create(
         model=MODEL,
@@ -163,15 +145,6 @@ def evaluate_context(context: str) -> dict[str, Any]:
 
 
 def evaluate_answers(context: str, all_qa: list) -> dict[str, Any]:
-    """
-    Given all Q&A collected so far, decide what's still needed or mark complete.
-
-    Returns needs_more:
-        {"status": "needs_more", "questions": [...], "assumptions": [...]}
-
-    Returns complete:
-        {"status": "complete", "assumptions": [...], "roi": {...}}
-    """
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     qa_text = _format_qa(all_qa)
     user_content = (
@@ -192,9 +165,6 @@ def evaluate_answers(context: str, all_qa: list) -> dict[str, Any]:
 
 
 def generate_spec_summary(context: str, all_qa: list) -> str:
-    """
-    Generate a structured build spec as text, suitable for Claude Code input.
-    """
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     qa_text = _format_qa(all_qa)
     message = client.messages.create(
@@ -205,18 +175,71 @@ def generate_spec_summary(context: str, all_qa: list) -> str:
             "content": (
                 "Erstelle eine vollständige Automatisierungs-Spezifikation basierend auf diesen Informationen.\n\n"
                 "Formatiere sie als strukturiertes Dokument mit diesen Abschnitten:\n"
-                "1. Automatisierungs-Ziel\n"
-                "2. Auslöser (Trigger)\n"
-                "3. Dienste & Zugangsdaten\n"
-                "4. Eingehende Daten (Schema)\n"
-                "5. Geschäftslogik & Regeln\n"
-                "6. Ausgabe & Aktionen\n"
-                "7. Fehlerbehandlung\n"
-                "8. Volumen & Timing\n"
-                "9. MVP-Annahmen\n\n"
-                f"KONTEXT:\n{context}\n\n"
-                f"ANTWORTEN:\n{qa_text}\n\n"
+                "1. Automatisierungs-Ziel\n2. Auslöser (Trigger)\n3. Dienste & Zugangsdaten\n"
+                "4. Eingehende Daten (Schema)\n5. Geschäftslogik & Regeln\n6. Ausgabe & Aktionen\n"
+                "7. Fehlerbehandlung\n8. Volumen & Timing\n9. MVP-Annahmen\n\n"
+                f"KONTEXT:\n{context}\n\nANTWORTEN:\n{qa_text}\n\n"
                 "Schreibe auf Deutsch. Sei präzise und technisch — ein Entwickler muss danach sofort loslegen können."
+            ),
+        }],
+    )
+    return message.content[0].text
+
+
+def generate_claude_code_prompt(
+    context: str,
+    all_qa: list,
+    roi: dict,
+    lead_info: dict = None,
+) -> str:
+    """Generate a ready-to-paste Claude Code prompt from the collected session data."""
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    qa_text = _format_qa(all_qa)
+
+    lead_section = ""
+    if lead_info:
+        parts = []
+        if lead_info.get("name"):   parts.append(f"Contact: {lead_info['name']}")
+        if lead_info.get("firma"):  parts.append(f"Company: {lead_info['firma']}")
+        if lead_info.get("branche"): parts.append(f"Industry: {lead_info['branche']}")
+        if lead_info.get("groesse"): parts.append(f"Size: {lead_info['groesse']}")
+        lead_section = "\n".join(parts)
+
+    roi_section = ""
+    if roi:
+        roi_section = (
+            f"Process: {roi.get('process', '')}\n"
+            f"Time now: {roi.get('hours_per_week_now', '')} h/week → "
+            f"{roi.get('minutes_per_week_after', '')} min/week after automation\n"
+            f"Monthly savings: CHF {roi.get('chf_monthly_savings', '')}\n"
+            f"Complexity: {roi.get('complexity', '')}\n"
+            f"Build time estimate: {roi.get('build_time_days', '')}"
+        )
+
+    message = client.messages.create(
+        model=MODEL,
+        max_tokens=3000,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Based on the following automation requirements, write a complete Claude Code prompt "
+                "that a developer can paste directly to start building the n8n workflow.\n\n"
+                "Write in English. Structure the prompt with these exact sections:\n"
+                "# Automation Build Spec — [Process Name]\n"
+                "## Client Context\n## Goal\n## Trigger\n## Services & Auth\n"
+                "## Input Data Schema (with example field values)\n"
+                "## Business Logic (with concrete thresholds and rules)\n"
+                "## Output & Actions\n## Error Handling\n## Volume & Timing\n"
+                "## MVP Assumptions\n## Build Instructions\n\n"
+                "End with this exact line:\n"
+                "'Build this as an n8n workflow. Start with a working MVP. "
+                "Flag any credentials or config the client needs to provide.'\n\n"
+                f"CLIENT INFO:\n{lead_section}\n\n"
+                f"ORIGINAL CONTEXT:\n{context}\n\n"
+                f"COLLECTED Q&A:\n{qa_text}\n\n"
+                f"ROI ESTIMATE:\n{roi_section}\n\n"
+                "Be concrete and specific — no vague descriptions. "
+                "A developer must be able to build this without asking any further questions."
             ),
         }],
     )
