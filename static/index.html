@@ -9,29 +9,29 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --violet:       #7C3ABD;
-  --violet-dark:  #5B21B6;
-  --violet-mid:   #9333EA;
-  --violet-light: #EDE8FF;
-  --violet-glow:  rgba(124,58,189,0.18);
-  --bg:           #09090F;
+  --green:        #15C87A;
+  --green-dark:   #0A8F54;
+  --green-deep:   #063D25;
+  --green-light:  #D4F7E9;
+  --green-glow:   rgba(21,200,122,0.15);
+  --bg:           #09100D;
   --bg-card:      rgba(255,255,255,0.04);
   --bg-card-hover:rgba(255,255,255,0.07);
   --border:       rgba(255,255,255,0.08);
-  --border-violet:rgba(124,58,189,0.35);
-  --text:         #F1F0F5;
-  --text-muted:   rgba(241,240,245,0.45);
-  --text-dim:     rgba(241,240,245,0.25);
+  --border-green: rgba(21,200,122,0.3);
+  --text:         #EEF5F1;
+  --text-muted:   rgba(238,245,241,0.45);
+  --text-dim:     rgba(238,245,241,0.25);
   --white:        #FFFFFF;
   --radius:       10px;
   --radius-sm:    6px;
   --ease:         0.22s ease;
 
   /* light (questions screen) */
-  --light-bg:     #F7F7FA;
+  --light-bg:     #F4FCF8;
   --light-card:   #FFFFFF;
-  --light-text:   #18181B;
-  --light-muted:  #71717A;
+  --light-text:   #0C1410;
+  --light-muted:  #4A6358;
   --light-border: rgba(0,0,0,0.07);
 }
 
@@ -59,7 +59,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   z-index: 9999; pointer-events: none; white-space: nowrap;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-#toast.success { background: var(--violet-dark); }
+#toast.success { background: var(--green-dark); }
 
 /* ── Modal ── */
 .modal-overlay {
@@ -79,7 +79,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 12px; }
 .modal p { font-size: 14px; color: var(--text-muted); line-height: 1.65; }
 .modal code {
-  background: rgba(124,58,189,0.15); border: 1px solid var(--border-violet);
+  background: rgba(21,200,122,0.12); border: 1px solid var(--border-green);
   border-radius: 4px; padding: 2px 6px; font-size: 12px; color: #C4B5FD;
 }
 .modal-close {
@@ -113,9 +113,9 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   transition: all var(--ease); border: none; text-decoration: none;
 }
 .btn-primary {
-  background: var(--violet); color: #fff;
+  background: var(--green); color: #fff;
 }
-.btn-primary:hover { background: var(--violet-mid); box-shadow: 0 0 0 3px rgba(124,58,189,0.25); }
+.btn-primary:hover { background: var(--green); box-shadow: 0 0 0 3px rgba(21,200,122,0.22); }
 .btn-primary:active { transform: scale(0.98); }
 .btn-primary:disabled { opacity: 0.4; pointer-events: none; }
 .btn-primary .arrow { transition: transform 0.2s ease; }
@@ -129,9 +129,9 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 
 .btn-outline-violet {
   background: transparent; color: #C4B5FD;
-  border: 1px solid var(--border-violet);
+  border: 1px solid var(--border-green);
 }
-.btn-outline-violet:hover { background: rgba(124,58,189,0.12); border-color: var(--violet); }
+.btn-outline-violet:hover { background: rgba(21,200,122,0.1); border-color: var(--green); }
 
 /* ── Input ── */
 .input-field {
@@ -143,8 +143,8 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .input-field::placeholder { color: var(--text-dim); }
 .input-field:focus {
-  outline: none; border-color: var(--violet);
-  box-shadow: 0 0 0 3px rgba(124,58,189,0.15);
+  outline: none; border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(21,200,122,0.12);
 }
 
 /* ── Chip/pill ── */
@@ -152,8 +152,8 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   display: inline-flex; align-items: center; gap: 5px;
   padding: 3px 10px; border-radius: 20px;
   font-size: 11px; font-weight: 500;
-  background: rgba(124,58,189,0.15); color: #C4B5FD;
-  border: 1px solid rgba(124,58,189,0.25);
+  background: rgba(21,200,122,0.12); color: #C4B5FD;
+  border: 1px solid rgba(21,200,122,0.22);
 }
 
 /* ════════════════════════════════════════════════
@@ -171,7 +171,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   position: absolute; top: -200px; left: 50%;
   transform: translateX(-50%);
   width: 600px; height: 500px;
-  background: radial-gradient(ellipse, rgba(124,58,189,0.12) 0%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(21,200,122,0.1) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -233,7 +233,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .ac-stage {
   font-size: 10px; font-weight: 600; padding: 2px 7px;
   border-radius: 4px; white-space: nowrap;
-  background: rgba(124,58,189,0.2); color: #C4B5FD;
+  background: rgba(21,200,122,0.18); color: #C4B5FD;
 }
 
 /* Lead pills row */
@@ -250,8 +250,8 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .context-textarea::placeholder { color: var(--text-dim); }
 .context-textarea:focus {
-  outline: none; border-color: var(--violet);
-  box-shadow: 0 0 0 3px rgba(124,58,189,0.12);
+  outline: none; border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(21,200,122,0.1);
 }
 
 .context-footer {
@@ -276,8 +276,8 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .loading-logo-text { font-size: 16px; font-weight: 400; color: var(--text-muted); letter-spacing: -0.01em; }
 .spinner {
   width: 40px; height: 40px;
-  border: 2px solid rgba(124,58,189,0.15);
-  border-top-color: var(--violet);
+  border: 2px solid rgba(21,200,122,0.12);
+  border-top-color: var(--green);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -314,16 +314,16 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .round-dots { display: flex; gap: 5px; align-items: center; }
 .round-dot {
   width: 6px; height: 6px; border-radius: 50%;
-  background: rgba(124,58,189,0.2);
+  background: rgba(21,200,122,0.18);
   transition: background 0.3s, transform 0.3s;
 }
-.round-dot.active { background: var(--violet); transform: scale(1.3); }
-.round-dot.done { background: rgba(124,58,189,0.5); }
+.round-dot.active { background: var(--green); transform: scale(1.3); }
+.round-dot.done { background: rgba(21,200,122,0.5); }
 
 .q-stage-badge {
   font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
   padding: 3px 9px; border-radius: 4px;
-  background: rgba(124,58,189,0.1); color: var(--violet);
+  background: rgba(21,200,122,0.08); color: var(--green);
   text-transform: uppercase;
 }
 
@@ -348,11 +348,11 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   transition: box-shadow var(--ease), transform var(--ease);
 }
 .question-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
-.question-card:focus-within { box-shadow: 0 0 0 2px var(--violet), 0 4px 12px rgba(124,58,189,0.1); }
+.question-card:focus-within { box-shadow: 0 0 0 2px var(--green), 0 4px 12px rgba(21,200,122,0.08); }
 .question-card.error { box-shadow: 0 0 0 2px #EF4444; }
 
 .q-num {
-  font-size: 11px; font-weight: 600; color: var(--violet);
+  font-size: 11px; font-weight: 600; color: var(--green);
   margin-bottom: 8px; letter-spacing: 0.05em;
 }
 .q-text { font-size: 14px; font-weight: 500; color: var(--light-text); line-height: 1.5; margin-bottom: 10px; }
@@ -366,8 +366,8 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   transition: border-color var(--ease), box-shadow var(--ease);
 }
 .q-textarea:focus {
-  outline: none; border-color: var(--violet); background: #fff;
-  box-shadow: 0 0 0 3px rgba(124,58,189,0.1);
+  outline: none; border-color: var(--green); background: #fff;
+  box-shadow: 0 0 0 3px rgba(21,200,122,0.08);
 }
 .q-textarea::placeholder { color: rgba(0,0,0,0.25); }
 
@@ -379,12 +379,12 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   cursor: pointer; font-size: 13.5px; color: var(--light-text);
   background: var(--light-bg); transition: all var(--ease);
 }
-.choice-label:hover { border-color: var(--violet); background: var(--violet-light); }
-.choice-label input[type=radio] { accent-color: var(--violet); width: 15px; height: 15px; flex-shrink: 0; }
+.choice-label:hover { border-color: var(--green); background: var(--green-light); }
+.choice-label input[type=radio] { accent-color: var(--green); width: 15px; height: 15px; flex-shrink: 0; }
 
 .q-actions { margin-top: 28px; display: flex; align-items: center; gap: 14px; }
-.q-actions .btn-primary { background: var(--violet); color: #fff; }
-.q-actions .btn-primary:hover { background: var(--violet-dark); }
+.q-actions .btn-primary { background: var(--green); color: #fff; }
+.q-actions .btn-primary:hover { background: var(--green-dark); }
 
 .autosave { font-size: 11px; color: var(--light-muted); opacity: 0; transition: opacity 0.3s; }
 .autosave.visible { opacity: 1; }
@@ -401,7 +401,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   content: "";
   position: absolute; bottom: -100px; right: -100px;
   width: 500px; height: 500px;
-  background: radial-gradient(ellipse, rgba(124,58,189,0.08) 0%, transparent 65%);
+  background: radial-gradient(ellipse, rgba(21,200,122,0.07) 0%, transparent 65%);
   pointer-events: none;
 }
 
@@ -417,7 +417,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .roi-header { margin-bottom: 36px; }
 .roi-check {
   width: 44px; height: 44px; border-radius: 50%;
-  background: rgba(124,58,189,0.15); border: 1px solid var(--border-violet);
+  background: rgba(21,200,122,0.12); border: 1px solid var(--border-green);
   display: flex; align-items: center; justify-content: center;
   font-size: 20px; margin-bottom: 16px;
 }
@@ -454,7 +454,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   transition: height 1.4s cubic-bezier(0.22,1,0.36,1);
 }
 .bar-now  { background: rgba(255,255,255,0.08); height: 0; }
-.bar-after { background: linear-gradient(180deg, #A855F7, var(--violet)); height: 0; }
+.bar-after { background: linear-gradient(180deg, #0A8F54, var(--green)); height: 0; }
 .bar-val {
   font-size: 28px; font-weight: 300; color: var(--text);
   letter-spacing: -0.02em; margin-top: 12px;
@@ -478,7 +478,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   font-size: 14px; font-weight: 500; color: var(--text);
   transition: background var(--ease), border-color var(--ease);
 }
-.prompt-toggle:hover { background: var(--bg-card-hover); border-color: var(--border-violet); }
+.prompt-toggle:hover { background: var(--bg-card-hover); border-color: var(--border-green); }
 .prompt-toggle-icon { transition: transform 0.25s ease; font-size: 12px; color: var(--text-muted); }
 .prompt-toggle.open .prompt-toggle-icon { transform: rotate(180deg); }
 
@@ -498,7 +498,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .prompt-text::-webkit-scrollbar { width: 4px; }
 .prompt-text::-webkit-scrollbar-track { background: transparent; }
-.prompt-text::-webkit-scrollbar-thumb { background: var(--border-violet); border-radius: 2px; }
+.prompt-text::-webkit-scrollbar-thumb { background: var(--border-green); border-radius: 2px; }
 .prompt-copy {
   display: flex; justify-content: flex-end;
   padding: 10px 16px; border-top: 1px solid var(--border);
@@ -506,13 +506,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 
 /* assumptions */
 .assumptions-box {
-  background: rgba(124,58,189,0.07); border: 1px solid rgba(124,58,189,0.2);
+  background: rgba(21,200,122,0.06); border: 1px solid rgba(21,200,122,0.18);
   border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 16px;
 }
-.assumptions-label { font-size: 11px; font-weight: 600; color: var(--violet); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px; }
+.assumptions-label { font-size: 11px; font-weight: 600; color: var(--green); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px; }
 .assumptions-list { list-style: none; }
 .assumptions-list li { font-size: 13px; color: var(--text-muted); padding-left: 14px; position: relative; margin-bottom: 4px; line-height: 1.5; }
-.assumptions-list li::before { content: "→"; position: absolute; left: 0; color: var(--violet); font-size: 10px; }
+.assumptions-list li::before { content: "→"; position: absolute; left: 0; color: var(--green); font-size: 10px; }
 
 .roi-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 
@@ -550,15 +550,14 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 <!-- ════ SCREEN 1: CONTEXT ════ -->
 <div id="screen-context" class="screen active">
   <div style="flex:1; display:flex; justify-content:center; align-items:center; padding:40px 24px; position:relative;">
-    <div style="position:absolute;top:-150px;left:50%;transform:translateX(-50%);width:700px;height:600px;background:radial-gradient(ellipse,rgba(124,58,189,0.1) 0%,transparent 70%);pointer-events:none;"></div>
+    <div style="position:absolute;top:-150px;left:50%;transform:translateX(-50%);width:700px;height:600px;background:radial-gradient(ellipse,rgba(21,200,122,0.08) 0%,transparent 70%);pointer-events:none;"></div>
     <div class="context-card">
       <div class="context-header">
         <a class="logo-mark" href="/">
-          <svg class="logo-icon" viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0"  y="28" width="9" height="20" rx="2" fill="#7C3ABD" opacity="0.9"/>
-            <rect x="11" y="18" width="9" height="30" rx="2" fill="#7C3ABD" opacity="0.75"/>
-            <rect x="22" y="8"  width="9" height="40" rx="2" fill="#7C3ABD" opacity="0.6"/>
-            <rect x="33" y="0"  width="7" height="48" rx="2" fill="#7C3ABD" opacity="0.4"/>
+          <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="36" height="36" rx="8" fill="#15C87A"/>
+            <polyline points="3,18 8,18 11,12 14,24 17,8 20,28 23,18 33,18"
+              stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
           </svg>
           <span class="logo-text">automatisierbar</span>
         </a>
@@ -599,11 +598,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 <!-- ════ SCREEN 2: LOADING ════ -->
 <div id="screen-loading" class="screen" style="justify-content:center;align-items:center;gap:20px;">
   <div class="loading-logo-wrap">
-    <svg width="24" height="29" viewBox="0 0 40 48" fill="none">
-      <rect x="0"  y="28" width="9" height="20" rx="2" fill="#7C3ABD" opacity="0.9"/>
-      <rect x="11" y="18" width="9" height="30" rx="2" fill="#7C3ABD" opacity="0.75"/>
-      <rect x="22" y="8"  width="9" height="40" rx="2" fill="#7C3ABD" opacity="0.6"/>
-      <rect x="33" y="0"  width="7" height="48" rx="2" fill="#7C3ABD" opacity="0.4"/>
+    <svg width="24" height="24" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="36" height="36" rx="8" fill="#15C87A"/>
+      <polyline points="3,18 8,18 11,12 14,24 17,8 20,28 23,18 33,18"
+        stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
     </svg>
     <span class="loading-logo-text">automatisierbar</span>
   </div>
@@ -618,11 +616,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 <div id="screen-questions" class="screen">
   <div class="q-topbar">
     <div class="q-topbar-logo">
-      <svg width="20" height="24" viewBox="0 0 40 48" fill="none">
-        <rect x="0"  y="28" width="9" height="20" rx="2" fill="#7C3ABD" opacity="0.9"/>
-        <rect x="11" y="18" width="9" height="30" rx="2" fill="#7C3ABD" opacity="0.75"/>
-        <rect x="22" y="8"  width="9" height="40" rx="2" fill="#7C3ABD" opacity="0.6"/>
-        <rect x="33" y="0"  width="7" height="48" rx="2" fill="#7C3ABD" opacity="0.4"/>
+      <svg width="20" height="20" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="36" height="36" rx="8" fill="#15C87A"/>
+        <polyline points="3,18 8,18 11,12 14,24 17,8 20,28 23,18 33,18"
+          stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
       </svg>
       <span class="q-topbar-logo-text">automatisierbar</span>
     </div>
@@ -643,7 +640,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
     </div>
     <div id="questions-container"></div>
     <div class="q-actions">
-      <button id="submit-btn" class="btn btn-primary" style="background:var(--violet);color:#fff;">
+      <button id="submit-btn" class="btn btn-primary" style="background:var(--green);color:#fff;">
         Weiter <span class="arrow">→</span>
       </button>
       <span id="autosave-indicator" class="autosave">Gespeichert</span>
@@ -656,11 +653,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   <div class="roi-wrap">
     <div class="roi-topbar">
       <a class="logo-mark" href="/">
-        <svg class="logo-icon" viewBox="0 0 40 48" fill="none">
-          <rect x="0"  y="28" width="9" height="20" rx="2" fill="#7C3ABD" opacity="0.9"/>
-          <rect x="11" y="18" width="9" height="30" rx="2" fill="#7C3ABD" opacity="0.75"/>
-          <rect x="22" y="8"  width="9" height="40" rx="2" fill="#7C3ABD" opacity="0.6"/>
-          <rect x="33" y="0"  width="7" height="48" rx="2" fill="#7C3ABD" opacity="0.4"/>
+        <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="36" height="36" rx="8" fill="#15C87A"/>
+          <polyline points="3,18 8,18 11,12 14,24 17,8 20,28 23,18 33,18"
+            stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
         </svg>
         <span class="logo-text">automatisierbar</span>
       </a>
