@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>automatisierbar · Automatisierungsanalyse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 /* ── Variables ────────────────────────────────────────────────── */
 :root {
@@ -16,17 +19,32 @@
   --mid:          #4A6358;
   --off-white:    #F4FCF8;
   --white:        #FFFFFF;
-  --radius:       4px;
-  --transition:   0.35s ease;
+  --radius:       6px;
+  --transition:   0.25s ease;
 }
 
 /* ── Reset ────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background: var(--violet-deep); color: var(--white); }
+html, body { height: 100%; font-family: 'Inter', Helvetica, Arial, sans-serif; background: var(--violet-deep); color: var(--white); }
 
 /* ── Screens ──────────────────────────────────────────────────── */
-.screen { display: none; min-height: 100vh; }
-.screen.active { display: flex; flex-direction: column; }
+.screen {
+  min-height: 100vh;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity 0.32s ease, transform 0.32s ease;
+}
+.screen.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  position: relative;
+}
 
 /* ── Dot grid background ──────────────────────────────────────── */
 .dot-bg {
@@ -40,38 +58,66 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 .corners span::before, .corners span::after {
   content: "";
   position: absolute;
-  width: 10px; height: 10px;
-  border-color: rgba(124,58,189,0.55);
+  width: 12px; height: 12px;
+  border-color: rgba(124,58,189,0.45);
   border-style: solid;
 }
-.corners::before   { top: 18px; left: 18px;  border-width: 1.5px 0 0 1.5px; }
-.corners::after    { top: 18px; right: 18px; border-width: 1.5px 1.5px 0 0; }
-.corners span::before { bottom: 18px; left: 18px;  border-width: 0 0 1.5px 1.5px; }
-.corners span::after  { bottom: 18px; right: 18px; border-width: 0 1.5px 1.5px 0; }
+.corners::before   { top: 20px; left: 20px;  border-width: 1.5px 0 0 1.5px; }
+.corners::after    { top: 20px; right: 20px; border-width: 1.5px 1.5px 0 0; }
+.corners span::before { bottom: 20px; left: 20px;  border-width: 0 0 1.5px 1.5px; }
+.corners span::after  { bottom: 20px; right: 20px; border-width: 0 1.5px 1.5px 0; }
 
 /* ── Phase bar ─────────────────────────────────────────────────── */
-.phase-bar { display: flex; align-items: center; gap: 0; }
+.phase-bar { display: flex; align-items: center; gap: 0; overflow-x: auto; }
+.phase-bar::-webkit-scrollbar { display: none; }
 .phase-bar .phase {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 7px;
   letter-spacing: 0.08em;
   padding: 3px 10px;
   border: 1px solid var(--violet);
   color: var(--violet);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .phase-bar .phase.active {
   background: var(--violet);
   color: var(--white);
 }
 .phase-bar .arrow {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 9px;
   color: var(--violet);
   padding: 0 4px;
+  flex-shrink: 0;
 }
 
+/* ── Toast ─────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: #C0392B;
+  color: white;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 9999;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.success { background: var(--violet-dark); }
+
 /* ════════════════════════════════════════════════════════════════
-   SCREEN 1: CONTEXT INPUT (dark violet)
+   SCREEN 1: CONTEXT INPUT
    ════════════════════════════════════════════════════════════════ */
 #screen-context {
   background: var(--violet-deep);
@@ -89,118 +135,154 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 }
 
 .logo-mark {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 7.5px;
   letter-spacing: 0.15em;
-  color: rgba(237,232,255,0.55);
-  margin-bottom: 8px;
+  color: rgba(237,232,255,0.45);
+  margin-bottom: 10px;
 }
 
 .brand-name {
-  font-size: 28px;
-  font-weight: 400;
-  color: var(--violet);
-  letter-spacing: -0.01em;
-  margin-bottom: 6px;
+  font-size: 30px;
+  font-weight: 300;
+  color: var(--violet-light);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
 }
 
 .doc-title {
-  font-size: 22px;
-  font-weight: 300;
-  color: var(--off-white);
+  font-size: 20px;
+  font-weight: 400;
+  color: rgba(244,252,248,0.85);
   margin-bottom: 4px;
 }
 
 .doc-subtitle {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 7.5px;
   letter-spacing: 0.12em;
-  color: rgba(124,58,189,0.9);
+  color: rgba(124,58,189,0.75);
   margin-bottom: 28px;
 }
 
 .phase-row { margin-bottom: 32px; }
 
 .field-label {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 7.5px;
   letter-spacing: 0.12em;
-  color: var(--violet);
+  color: rgba(124,58,189,0.8);
   margin-bottom: 8px;
   display: block;
 }
 
 .context-textarea {
   width: 100%;
-  min-height: 160px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(124,58,189,0.4);
+  min-height: 168px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(124,58,189,0.3);
   border-left: 3px solid var(--violet);
   border-radius: var(--radius);
   padding: 14px 16px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--off-white);
   resize: vertical;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
   font-family: inherit;
 }
-.context-textarea::placeholder { color: rgba(244,252,248,0.3); }
-.context-textarea:focus { outline: none; border-color: var(--violet); background: rgba(255,255,255,0.09); }
+.context-textarea::placeholder { color: rgba(244,252,248,0.25); }
+.context-textarea:focus {
+  outline: none;
+  border-color: var(--violet);
+  background: rgba(255,255,255,0.08);
+  box-shadow: 0 0 0 3px rgba(124,58,189,0.12);
+}
 
 .btn-primary {
   margin-top: 20px;
   padding: 13px 28px;
-  background: var(--violet);
+  background: linear-gradient(135deg, var(--violet), var(--violet-dark));
   color: var(--white);
   border: none;
   border-radius: var(--radius);
   font-size: 14px;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: background var(--transition), transform 0.1s;
-  letter-spacing: 0.02em;
+  transition: background var(--transition), transform 0.1s, box-shadow var(--transition);
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.btn-primary:hover  { background: var(--violet-dark); }
+.btn-primary .arrow { transition: transform 0.2s ease; }
+.btn-primary:hover { background: linear-gradient(135deg, #8B47CC, var(--violet)); box-shadow: 0 4px 16px rgba(124,58,189,0.35); }
+.btn-primary:hover .arrow { transform: translateX(3px); }
 .btn-primary:active { transform: scale(0.98); }
-.btn-primary:disabled { opacity: 0.5; cursor: default; }
+.btn-primary:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
 
 .context-hint {
-  margin-top: 12px;
-  font-size: 11px;
-  color: rgba(244,252,248,0.35);
-  line-height: 1.5;
+  margin-top: 14px;
+  font-size: 12px;
+  color: rgba(244,252,248,0.3);
+  line-height: 1.6;
 }
 
 /* ════════════════════════════════════════════════════════════════
-   SCREEN 2: LOADING (dark violet)
+   SCREEN 2: LOADING
    ════════════════════════════════════════════════════════════════ */
 #screen-loading {
   background: var(--violet-deep);
   justify-content: center;
   align-items: center;
-  gap: 24px;
+  gap: 28px;
   flex-direction: column;
 }
 
+.loading-logo {
+  font-size: 18px;
+  font-weight: 300;
+  color: rgba(237,232,255,0.3);
+  letter-spacing: -0.01em;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
 .spinner {
-  width: 40px; height: 40px;
-  border: 2.5px solid rgba(124,58,189,0.25);
+  width: 44px; height: 44px;
+  border: 2.5px solid rgba(124,58,189,0.18);
   border-top-color: var(--violet);
   border-radius: 50%;
-  animation: spin 0.9s linear infinite;
+  animation: spin 0.85s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-#loading-text {
-  font-family: Courier, monospace;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: rgba(237,232,255,0.65);
+.loading-label {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(237,232,255,0.5);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.loading-label .dots span {
+  animation: dotblink 1.4s infinite;
+  opacity: 0;
+}
+.loading-label .dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-label .dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dotblink {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
 }
 
 /* ════════════════════════════════════════════════════════════════
-   SCREEN 3: QUESTIONS (light bg)
+   SCREEN 3: QUESTIONS
    ════════════════════════════════════════════════════════════════ */
 #screen-questions {
   background: var(--off-white);
@@ -209,8 +291,9 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 }
 
 .q-topbar {
-  background: var(--white);
-  border-bottom: 1px solid rgba(124,58,189,0.12);
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(124,58,189,0.1);
   padding: 12px 32px;
   display: flex;
   align-items: center;
@@ -224,7 +307,8 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 .q-topbar-logo {
   font-size: 16px;
   color: var(--violet);
-  font-weight: 400;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .q-topbar-meta {
@@ -233,16 +317,27 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   gap: 16px;
 }
 
-#round-indicator {
-  font-family: Courier, monospace;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: var(--mid);
-  text-transform: uppercase;
+.round-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.round-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(124,58,189,0.2);
+  transition: background 0.3s ease, transform 0.3s ease;
+}
+.round-dot.active {
+  background: var(--violet);
+  transform: scale(1.2);
+}
+.round-dot.done {
+  background: rgba(124,58,189,0.45);
 }
 
 .q-body {
-  max-width: 680px;
+  max-width: 700px;
   width: 100%;
   margin: 0 auto;
   padding: 40px 32px 80px;
@@ -252,34 +347,44 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   margin-bottom: 32px;
 }
 .q-intro h2 {
-  font-size: 20px;
-  font-weight: 500;
+  font-size: 22px;
+  font-weight: 600;
   color: var(--dark);
   margin-bottom: 6px;
+  letter-spacing: -0.02em;
 }
 .q-intro p {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--mid);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .question-card {
   background: var(--white);
-  border: 1px solid rgba(124,58,189,0.1);
+  border: 1px solid rgba(124,58,189,0.08);
   border-left: 3px solid var(--violet);
   border-radius: var(--radius);
   padding: 20px 20px 20px 24px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   display: flex;
   gap: 16px;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), transform 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
-.question-card:focus-within { border-left-color: var(--violet-dark); }
+.question-card:hover {
+  box-shadow: 0 4px 14px rgba(124,58,189,0.1);
+  transform: translateY(-1px);
+}
+.question-card:focus-within {
+  border-left-color: var(--violet-dark);
+  box-shadow: 0 4px 14px rgba(124,58,189,0.12);
+}
+.question-card.error { border-left-color: #C0392B; box-shadow: 0 0 0 2px rgba(192,57,43,0.12); }
 
 .q-num {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 11px;
-  color: var(--violet);
+  color: rgba(124,58,189,0.6);
   min-width: 24px;
   padding-top: 2px;
   flex-shrink: 0;
@@ -291,14 +396,14 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   font-size: 14px;
   font-weight: 500;
   color: var(--dark);
-  line-height: 1.45;
+  line-height: 1.5;
   margin-bottom: 10px;
 }
 
 .q-textarea {
   width: 100%;
   min-height: 72px;
-  border: 1px solid rgba(124,58,189,0.2);
+  border: 1px solid rgba(124,58,189,0.18);
   border-radius: var(--radius);
   padding: 10px 12px;
   font-size: 13.5px;
@@ -306,19 +411,25 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   color: var(--dark);
   resize: vertical;
   background: var(--off-white);
-  transition: border-color var(--transition);
-  line-height: 1.5;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  line-height: 1.55;
 }
-.q-textarea:focus { outline: none; border-color: var(--violet); background: var(--white); }
-.q-textarea::placeholder { color: rgba(74,99,88,0.4); }
+.q-textarea:focus {
+  outline: none;
+  border-color: var(--violet);
+  background: var(--white);
+  box-shadow: 0 0 0 3px rgba(124,58,189,0.1);
+}
+.q-textarea::placeholder { color: rgba(74,99,88,0.35); }
 
 .choice-options { display: flex; flex-direction: column; gap: 8px; }
 .choice-label {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid rgba(124,58,189,0.2);
+  padding: 10px 14px;
+  min-height: 44px;
+  border: 1px solid rgba(124,58,189,0.15);
   border-radius: var(--radius);
   cursor: pointer;
   font-size: 13.5px;
@@ -327,7 +438,7 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   background: var(--off-white);
 }
 .choice-label:hover { border-color: var(--violet); background: var(--violet-light); }
-.choice-label input[type=radio] { accent-color: var(--violet); }
+.choice-label input[type=radio] { accent-color: var(--violet); width: 15px; height: 15px; flex-shrink: 0; }
 .choice-label.selected { border-color: var(--violet); background: var(--violet-light); }
 
 .q-actions {
@@ -338,7 +449,7 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 }
 
 .autosave-indicator {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 9px;
   letter-spacing: 0.08em;
   color: var(--mid);
@@ -348,7 +459,7 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 .autosave-indicator.visible { opacity: 1; }
 
 /* ════════════════════════════════════════════════════════════════
-   SCREEN 4: ROI / COMPLETE (dark violet)
+   SCREEN 4: ROI / COMPLETE
    ════════════════════════════════════════════════════════════════ */
 #screen-roi {
   background: var(--violet-deep);
@@ -369,21 +480,22 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   margin-bottom: 40px;
 }
 .roi-check {
-  font-size: 28px;
+  font-size: 32px;
   color: var(--violet-light);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .roi-title {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 300;
   color: var(--off-white);
+  letter-spacing: -0.02em;
   margin-bottom: 4px;
 }
 #roi-process-name {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 10px;
   letter-spacing: 0.1em;
-  color: rgba(124,58,189,0.9);
+  color: rgba(124,58,189,0.8);
   text-transform: uppercase;
 }
 
@@ -406,42 +518,43 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 }
 
 .bar-label-top {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 9px;
   letter-spacing: 0.1em;
-  color: rgba(237,232,255,0.5);
+  color: rgba(237,232,255,0.4);
   margin-bottom: 8px;
   text-align: center;
 }
 
 .bar {
   width: 100%;
-  border-radius: 3px 3px 0 0;
+  border-radius: 4px 4px 0 0;
   transition: height 1.4s cubic-bezier(0.22,1,0.36,1);
 }
-.bar-now   { background: rgba(124,58,189,0.35); height: 0; }
-.bar-after { background: var(--violet); height: 0; }
+.bar-now   { background: rgba(124,58,189,0.28); height: 0; }
+.bar-after { background: linear-gradient(180deg, #9F5FD9, var(--violet)); height: 0; }
 
 .bar-value {
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 300;
   color: var(--off-white);
   margin-top: 12px;
   text-align: center;
-  min-height: 38px;
+  min-height: 40px;
+  letter-spacing: -0.02em;
 }
 .bar-unit {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 9px;
   letter-spacing: 0.1em;
-  color: var(--mid);
+  color: rgba(237,232,255,0.35);
   text-align: center;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .roi-divider {
   height: 1px;
-  background: rgba(124,58,189,0.25);
+  background: rgba(124,58,189,0.2);
   margin: 28px 0;
 }
 
@@ -449,83 +562,84 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .roi-stat-label {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 9px;
   letter-spacing: 0.1em;
-  color: rgba(237,232,255,0.45);
+  color: rgba(237,232,255,0.38);
   text-transform: uppercase;
 }
 .roi-stat-value {
   font-size: 20px;
   font-weight: 300;
   color: var(--off-white);
+  letter-spacing: -0.01em;
 }
 .roi-stat-value.accent { color: var(--violet-light); }
 
 .assumptions-box {
   margin-top: 20px;
   padding: 14px 16px;
-  background: rgba(124,58,189,0.12);
-  border-left: 2px solid var(--violet);
+  background: rgba(124,58,189,0.1);
+  border-left: 2px solid rgba(124,58,189,0.5);
   border-radius: var(--radius);
 }
 .assumptions-box .label {
-  font-family: Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 8px;
   letter-spacing: 0.1em;
-  color: var(--violet);
-  margin-bottom: 6px;
+  color: rgba(124,58,189,0.75);
+  margin-bottom: 8px;
 }
-.assumptions-box ul {
-  list-style: none;
-  padding: 0;
-}
+.assumptions-box ul { list-style: none; padding: 0; }
 .assumptions-box li {
   font-size: 12px;
-  color: rgba(237,232,255,0.65);
-  line-height: 1.5;
-  padding-left: 12px;
+  color: rgba(237,232,255,0.6);
+  line-height: 1.55;
+  padding-left: 14px;
   position: relative;
+  margin-bottom: 4px;
 }
 .assumptions-box li::before {
   content: "→";
   position: absolute;
   left: 0;
-  color: var(--violet);
+  color: rgba(124,58,189,0.7);
   font-size: 10px;
 }
 
 .roi-actions {
   margin-top: 32px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .btn-outline {
-  padding: 11px 22px;
-  border: 1px solid rgba(124,58,189,0.6);
+  padding: 11px 20px;
+  min-height: 44px;
+  border: 1px solid rgba(124,58,189,0.5);
   color: var(--violet-light);
   background: transparent;
   border-radius: var(--radius);
   font-size: 13px;
+  font-weight: 400;
   font-family: inherit;
   cursor: pointer;
   text-decoration: none;
   transition: all var(--transition);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 .btn-outline:hover { background: rgba(124,58,189,0.15); border-color: var(--violet); }
 
 /* ── Misc ──────────────────────────────────────────────────────── */
 .divider-line {
   height: 1px;
-  background: rgba(124,58,189,0.25);
+  background: rgba(124,58,189,0.2);
   margin: 24px 0;
 }
 
@@ -535,11 +649,15 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   .q-body { padding: 24px 16px 60px; }
   .q-topbar { padding: 10px 16px; }
   .roi-bars { height: 160px; }
-  .bar-value { font-size: 22px; }
+  .bar-value { font-size: 24px; }
+  .btn-primary, .btn-outline { min-height: 48px; }
 }
 </style>
 </head>
 <body>
+
+<!-- ════ TOAST ════ -->
+<div id="toast" class="toast"></div>
 
 <!-- ════ SCREEN 1: CONTEXT ════ -->
 <div id="screen-context" class="screen dot-bg active">
@@ -568,15 +686,19 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
     <textarea id="context-input" class="context-textarea" rows="6"
       placeholder="Beschreibe die aktuelle Situation: welche Aufgaben wiederholen sich, welche Tools sind im Einsatz, was kostet am meisten Zeit...&#10;&#10;Beispiel: Bei Kundenanfragen wollen fast alle die gleichen Dokumente — es ist sehr zeitraubend, allen separat eine E-Mail zu schreiben. Mieten muss man kontrollieren und sauber verbuchen, dabei Rechnungen hinterlegen."></textarea>
 
-    <button id="start-btn" class="btn-primary">Analyse starten →</button>
+    <button id="start-btn" class="btn-primary">Analyse starten <span class="arrow">→</span></button>
     <p class="context-hint">Claude analysiert die Situation und generiert einen massgeschneiderten Fragebogen. Ziel: alle Informationen für den Automations-Build in möglichst wenigen Runden.</p>
   </div>
 </div>
 
 <!-- ════ SCREEN 2: LOADING ════ -->
-<div id="screen-loading" class="screen">
+<div id="screen-loading" class="screen" style="background: var(--violet-deep); justify-content: center; align-items: center; gap: 24px;">
+  <div class="loading-logo">automatisierbar</div>
   <div class="spinner"></div>
-  <div id="loading-text">Analysiere die Situation…</div>
+  <div class="loading-label">
+    <span id="loading-text">Analysiere die Situation</span>
+    <span class="dots"><span>.</span><span>.</span><span>.</span></span>
+  </div>
 </div>
 
 <!-- ════ SCREEN 3: QUESTIONS ════ -->
@@ -584,7 +706,11 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
   <div class="q-topbar">
     <div class="q-topbar-logo">automatisierbar</div>
     <div class="q-topbar-meta">
-      <span id="round-indicator">Runde 1</span>
+      <div class="round-dots" id="round-dots">
+        <div class="round-dot active"></div>
+        <div class="round-dot"></div>
+        <div class="round-dot"></div>
+      </div>
       <div class="phase-bar" style="transform: scale(0.85); transform-origin: right;">
         <div class="phase active" id="phase-tag">INTERVIEW</div>
         <div class="arrow">→</div>
@@ -606,14 +732,14 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
     <div id="questions-container"></div>
 
     <div class="q-actions">
-      <button id="submit-btn" class="btn-primary">Weiter →</button>
+      <button id="submit-btn" class="btn-primary">Weiter <span class="arrow">→</span></button>
       <span id="autosave-indicator" class="autosave-indicator">// gespeichert</span>
     </div>
   </div>
 </div>
 
 <!-- ════ SCREEN 4: ROI ════ -->
-<div id="screen-roi" class="screen dot-bg">
+<div id="screen-roi" class="screen dot-bg" style="background: var(--violet-deep); justify-content: center; align-items: center; padding: 48px 32px; position: relative;">
   <div class="corners"><span></span></div>
   <div class="roi-inner">
     <div class="roi-header">
@@ -664,10 +790,11 @@ html, body { height: 100%; font-family: Helvetica, Arial, sans-serif; background
 
     <div class="roi-actions">
       <a id="pdf-btn" href="#" class="btn-outline" target="_blank">PDF herunterladen ↓</a>
+      <button id="share-btn" class="btn-outline">Link kopieren ↗</button>
       <button onclick="App.restart()" class="btn-outline">Neue Analyse →</button>
     </div>
 
-    <p style="margin-top:20px; font-family: Courier, monospace; font-size: 9px; letter-spacing: 0.08em; color: rgba(237,232,255,0.3);">
+    <p style="margin-top: 24px; font-family: 'Courier New', Courier, monospace; font-size: 9px; letter-spacing: 0.08em; color: rgba(237,232,255,0.25);">
       // automatisierbar.ch · wir starten die Entwicklung
     </p>
   </div>
@@ -689,6 +816,7 @@ const App = {
     }
     document.getElementById("start-btn").addEventListener("click", () => this.startSession());
     document.getElementById("submit-btn").addEventListener("click", () => this.submitAnswers());
+    document.getElementById("share-btn").addEventListener("click", () => this.copyShareLink());
   },
 
   // ── Start ─────────────────────────────────────────────────────
@@ -697,7 +825,7 @@ const App = {
     if (!context) { this.shake("context-input"); return; }
 
     this.context = context;
-    this.showLoading("Analysiere die Situation…");
+    this.showLoading("Analysiere die Situation");
 
     try {
       const resp = await fetch("/api/session/start", {
@@ -714,7 +842,8 @@ const App = {
       this.ls("set", "context", context);
       this.showQuestions(data.questions, data.round, data.status);
     } catch (e) {
-      this.showContext(e.message);
+      this.showToast(e.message);
+      this.showScreen("screen-context");
     }
   },
 
@@ -725,14 +854,16 @@ const App = {
     if (empty) {
       const cards = document.querySelectorAll(".question-card");
       cards.forEach(c => {
-        const a = c.querySelector("textarea");
-        if (a && !a.value.trim()) c.classList.add("error");
+        const ta = c.querySelector("textarea");
+        const radio = c.querySelector("input[type=radio]:checked");
+        if ((ta && !ta.value.trim()) || (!ta && !radio)) c.classList.add("error");
       });
       document.querySelector(".question-card.error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      this.showToast("Bitte alle Fragen beantworten.");
       return;
     }
 
-    this.showLoading("Verarbeite Antworten…");
+    this.showLoading("Verarbeite Antworten");
 
     try {
       const resp = await fetch(`/api/session/${this.sessionId}/answers`, {
@@ -757,7 +888,7 @@ const App = {
         this.showQuestions(data.questions, data.round, data.status, data.assumptions);
       }
     } catch (e) {
-      alert("Fehler: " + e.message);
+      this.showToast(e.message);
       this.showScreen("screen-questions");
     }
   },
@@ -769,7 +900,7 @@ const App = {
     cards.forEach(card => {
       const qid   = card.dataset.qid;
       const qtext = card.dataset.qtext;
-      const ta = card.querySelector("textarea");
+      const ta    = card.querySelector("textarea");
       const radio = card.querySelector("input[type=radio]:checked");
       const answer = (ta ? ta.value : (radio ? radio.value : "")).trim();
       answers.push({ question_id: qid, question: qtext, answer });
@@ -786,13 +917,21 @@ const App = {
       },
       needs_technical_detail: {
         title: "Technische Implementierung",
-        sub:   "Fast geschafft — diese Fragen liefern alle Details, die für den Build benötigt werden.",
+        sub:   "Fast geschafft — diese Details liefern alles, was für den Build benötigt wird.",
       },
     };
     const intro = intros[status] || { title: `Runde ${round}`, sub: "Beantworte alle Fragen so konkret wie möglich." };
     document.getElementById("q-intro-title").textContent = intro.title;
     document.getElementById("q-intro-subtitle").textContent = intro.sub;
-    document.getElementById("round-indicator").textContent = `// RUNDE ${round}`;
+
+    // Round dots
+    const dots = document.getElementById("round-dots");
+    const dotEls = dots.querySelectorAll(".round-dot");
+    dotEls.forEach((d, i) => {
+      d.classList.remove("active", "done");
+      if (i < round - 1) d.classList.add("done");
+      else if (i === round - 1) d.classList.add("active");
+    });
 
     // Phase tag
     const phaseMap = { needs_process_selection: "INTERVIEW", needs_technical_detail: "MAPPING" };
@@ -801,12 +940,11 @@ const App = {
     const container = document.getElementById("questions-container");
     container.innerHTML = "";
 
-    // Assumptions notice
     if (assumptions && assumptions.length) {
       const box = document.createElement("div");
       box.className = "assumptions-box";
       box.style.marginBottom = "20px";
-      box.innerHTML = `<div class="label">// MVP-ANNAHMEN DER LETZTEN RUNDE</div><ul>${assumptions.map(a => `<li>${a}</li>`).join("")}</ul>`;
+      box.innerHTML = `<div class="label">// ANNAHMEN DER LETZTEN RUNDE</div><ul>${assumptions.map(a => `<li>${this.esc(a)}</li>`).join("")}</ul>`;
       container.appendChild(box);
     }
 
@@ -826,7 +964,9 @@ const App = {
           </label>`
         ).join("")}</div>`;
       } else {
-        inputHtml = `<textarea class="q-textarea" placeholder="Antwort…" rows="3" oninput="App.autoSave(this,'${q.id}',${round})" onchange="document.getElementById('autosave-indicator').classList.add('visible'); setTimeout(()=>document.getElementById('autosave-indicator').classList.remove('visible'), 2000)">${saved}</textarea>`;
+        inputHtml = `<textarea class="q-textarea" placeholder="Antwort…" rows="3"
+          oninput="App.autoSave(this,'${q.id}',${round})"
+          onchange="App.flashSave()">${this.esc(saved)}</textarea>`;
       }
 
       card.innerHTML = `
@@ -846,29 +986,26 @@ const App = {
 
   // ── Render ROI screen ──────────────────────────────────────────
   showROI(roi, assumptions) {
-    const process     = roi.process || "Automatisierungsprojekt";
-    const hoursNow    = Number(roi.hours_per_week_now)    || 5;
-    const minsAfter   = Number(roi.minutes_per_week_after) || Math.round((roi.hours_per_week_after || 0.25) * 60);
-    const chfSavings  = Number(roi.chf_monthly_savings)   || 0;
-    const buildTime   = roi.build_time_days || "2–3 Tage";
-    const complexity  = { easy: "Einfach ✓", medium: "Mittel", complex: "Komplex" }[roi.complexity] || "–";
+    const process    = roi.process || "Automatisierungsprojekt";
+    const hoursNow   = Number(roi.hours_per_week_now)    || 5;
+    const minsAfter  = Number(roi.minutes_per_week_after) || Math.round((roi.hours_per_week_after || 0.25) * 60);
+    const chfSavings = Number(roi.chf_monthly_savings)   || 0;
+    const buildTime  = roi.build_time_days || "2–3 Tage";
+    const complexity = { easy: "Einfach ✓", medium: "Mittel", complex: "Komplex" }[roi.complexity] || "–";
 
     document.getElementById("roi-process-name").textContent = `// ${process.toUpperCase()}`;
-    document.getElementById("roi-build").textContent       = buildTime;
-    document.getElementById("roi-complexity").textContent  = complexity;
+    document.getElementById("roi-build").textContent        = buildTime;
+    document.getElementById("roi-complexity").textContent   = complexity;
 
-    // Assumptions
     if (assumptions && assumptions.length) {
       document.getElementById("assumptions-section").style.display = "block";
       document.getElementById("assumptions-list").innerHTML = assumptions.map(a => `<li>${this.esc(a)}</li>`).join("");
     }
 
-    // PDF button
     document.getElementById("pdf-btn").href = `/api/session/${this.sessionId}/pdf`;
 
     this.showScreen("screen-roi");
 
-    // Animate bars after paint
     requestAnimationFrame(() => {
       const MAX_H = Math.min(window.innerHeight * 0.3, 180);
       const nowBar   = document.getElementById("bar-now");
@@ -880,10 +1017,9 @@ const App = {
         setTimeout(() => { afterBar.style.height = (MAX_H * ratio) + "px"; }, 300);
       }, 200);
 
-      // Counters
-      setTimeout(() => this.counter("val-now",   0, hoursNow,   " Std",     1500), 300);
-      setTimeout(() => this.counter("val-after",  0, minsAfter,  " Min",     1500), 600);
-      setTimeout(() => this.counter("roi-chf",    0, chfSavings, "",         2000), 900);
+      setTimeout(() => this.counter("val-now",  0, hoursNow,   " Std", 1500), 300);
+      setTimeout(() => this.counter("val-after", 0, minsAfter,  " Min", 1500), 600);
+      setTimeout(() => this.counter("roi-chf",   0, chfSavings, "",     2000), 900);
     });
   },
 
@@ -904,14 +1040,14 @@ const App = {
   // ── Resume ─────────────────────────────────────────────────────
   async resumeSession(sid) {
     this.sessionId = sid;
-    this.showLoading("Lade Session…");
+    this.showLoading("Lade Session");
     try {
       const resp = await fetch(`/api/session/${sid}`);
       if (!resp.ok) { this.showScreen("screen-context"); return; }
       const state = await resp.json();
-      this.context     = state.context || this.ls("get", "context") || "";
+      this.context      = state.context || this.ls("get", "context") || "";
       this.currentRound = state.round || 1;
-      this.allQA       = state.all_qa || [];
+      this.allQA        = state.all_qa || [];
 
       if (state.status === "complete" && state.roi) {
         this.showROI(state.roi, []);
@@ -925,39 +1061,67 @@ const App = {
     }
   },
 
+  // ── Copy share link ────────────────────────────────────────────
+  copyShareLink() {
+    navigator.clipboard.writeText(location.href).then(() => {
+      this.showToast("Link kopiert!", "success");
+    }).catch(() => {
+      this.showToast("Konnte Link nicht kopieren.");
+    });
+  },
+
   // ── Helpers ────────────────────────────────────────────────────
   showScreen(id) {
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById(id).classList.add("active");
     window.scrollTo(0, 0);
   },
-  showContext(err) {
-    if (err) console.error(err);
-    this.showScreen("screen-context");
-  },
   showLoading(text) {
     document.getElementById("loading-text").textContent = text;
     this.showScreen("screen-loading");
+  },
+  showToast(msg, type = "error") {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = `toast ${type}`;
+    requestAnimationFrame(() => {
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 3200);
+    });
+  },
+  flashSave() {
+    const el = document.getElementById("autosave-indicator");
+    el.classList.add("visible");
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => el.classList.remove("visible"), 2000);
   },
   autoSave(el, qid, round) {
     this.ls("set", `a_${this.sessionId}_${round}_${qid}`, el.value);
   },
   restart() {
-    this.sessionId   = null;
+    this.sessionId    = null;
     this.currentRound = 0;
-    this.context     = "";
-    this.allQA       = [];
+    this.context      = "";
+    this.allQA        = [];
     history.pushState({}, "", "/");
     document.getElementById("context-input").value = "";
+    document.getElementById("assumptions-section").style.display = "none";
+    document.getElementById("bar-now").style.height  = "0";
+    document.getElementById("bar-after").style.height = "0";
     this.showScreen("screen-context");
   },
   shake(id) {
     const el = document.getElementById(id);
-    el.style.borderColor = "#e55";
-    setTimeout(() => { el.style.borderColor = ""; }, 1200);
+    el.style.borderColor = "#C0392B";
+    el.style.boxShadow = "0 0 0 3px rgba(192,57,43,0.15)";
+    setTimeout(() => { el.style.borderColor = ""; el.style.boxShadow = ""; }, 1400);
   },
   esc(s) {
-    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    return String(s)
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
   },
   ls(op, key, val) {
     try {
