@@ -208,18 +208,43 @@ def _extract_lead(page: dict) -> dict:
     }
 
 
+def _active_stage_filter() -> dict:
+    """OR-filter matching Pipeline Stage against ALLOWED_STAGES, trying both
+    `status` and `select` property types since we don't know which the DB uses."""
+    return {
+        "or": [
+            *[{"property": "Pipeline Stage", "status": {"equals": s}} for s in ALLOWED_STAGES],
+            *[{"property": "Pipeline Stage", "select": {"equals": s}} for s in ALLOWED_STAGES],
+        ]
+    }
+
+
+def _query_active_leads() -> list:
+    """Try server-side filter first (fast). On Notion 400 (wrong property type),
+    fall back to status-only, then select-only."""
+    try:
+        return _query_db_all(_leads_db(), filter_body=_active_stage_filter(), max_pages=3)
+    except requests.HTTPError:
+        pass
+    for prop_type in ("status", "select"):
+        try:
+            f = {"or": [{"property": "Pipeline Stage", prop_type: {"equals": s}} for s in ALLOWED_STAGES]}
+            return _query_db_all(_leads_db(), filter_body=f, max_pages=3)
+        except requests.HTTPError:
+            continue
+    return []
+
+
 def search_leads(query: str) -> list:
     if not available():
         return []
     try:
-        pages = _query_db_all(_leads_db())
+        pages = _query_active_leads()
         q = query.lower()
         results = []
         for page in pages:
             lead = _extract_lead(page)
             if not lead["name"]:
-                continue
-            if lead["pipeline_stage"] not in ALLOWED_STAGES:
                 continue
             if q not in lead["name"].lower() and q not in (lead["firma"] or "").lower():
                 continue
