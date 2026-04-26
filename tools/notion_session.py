@@ -40,10 +40,13 @@ def _notion_headers() -> dict:
     }
 
 
-def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100) -> dict:
+def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100,
+              start_cursor: str = None) -> dict:
     body: dict = {"page_size": page_size}
     if filter_body:
         body["filter"] = filter_body
+    if start_cursor:
+        body["start_cursor"] = start_cursor
     r = requests.post(
         f"https://api.notion.com/v1/databases/{database_id}/query",
         headers=_notion_headers(),
@@ -51,6 +54,21 @@ def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100) 
     )
     r.raise_for_status()
     return r.json()
+
+
+def _query_db_all(database_id: str, filter_body: dict = None, max_pages: int = 20) -> list:
+    """Paginate through all results — Notion caps at 100 per request."""
+    all_results = []
+    cursor = None
+    for _ in range(max_pages):
+        r = _query_db(database_id, filter_body=filter_body, page_size=100, start_cursor=cursor)
+        all_results.extend(r.get("results", []))
+        if not r.get("has_more"):
+            break
+        cursor = r.get("next_cursor")
+        if not cursor:
+            break
+    return all_results
 
 
 def _db() -> str:
@@ -194,17 +212,19 @@ def search_leads(query: str) -> list:
     if not available():
         return []
     try:
-        r = _query_db(_leads_db(), page_size=100)
+        pages = _query_db_all(_leads_db())
         q = query.lower()
         results = []
-        for page in r["results"]:
+        for page in pages:
             lead = _extract_lead(page)
             if not lead["name"]:
+                continue
+            if lead["pipeline_stage"] not in ALLOWED_STAGES:
                 continue
             if q not in lead["name"].lower() and q not in (lead["firma"] or "").lower():
                 continue
             results.append(lead)
-            if len(results) >= 6:
+            if len(results) >= 8:
                 break
         return results
     except Exception as e:
