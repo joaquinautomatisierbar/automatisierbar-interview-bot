@@ -167,13 +167,9 @@ def start_session():
 
     try:
         from claude_client import evaluate_context
-        from notion_session import create_session, update_session, link_session_to_lead, available as notion_available
+        from notion_session import create_session, update_session, available as notion_available
 
-        session_id = create_session(context)
-
-        # Link to lead page if provided
-        if lead_page_id:
-            link_session_to_lead(lead_page_id, session_id)
+        session_id = create_session(context, lead_page_id=lead_page_id)
 
         result = evaluate_context(context)
         questions = result.get("questions", [])

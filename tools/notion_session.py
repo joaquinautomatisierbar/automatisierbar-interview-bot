@@ -97,23 +97,41 @@ def _rt(text: str) -> list:
 
 
 def _find_page(session_id: str):
+    """Find a session by Session ID. Looks in Leads DB first (primary store).
+    Falls back to Sessions DB if NOTION_DATABASE_ID is set (lead-less sessions)."""
+    # Primary: Leads DB
     try:
         r = _query_db(
-            _db(),
+            _leads_db(),
             filter_body={"property": "Session ID", "rich_text": {"equals": session_id}},
             page_size=1,
         )
-        page = r["results"][0] if r["results"] else None
-        return page, _client()
-    except Exception:
-        return None, None
+        if r.get("results"):
+            return r["results"][0], _client()
+    except Exception as e:
+        print(f"[notion] _find_page leads lookup failed: {e}")
+
+    # Fallback: Sessions DB
+    if os.environ.get("NOTION_DATABASE_ID"):
+        try:
+            r = _query_db(
+                _db(),
+                filter_body={"property": "Session ID", "rich_text": {"equals": session_id}},
+                page_size=1,
+            )
+            if r.get("results"):
+                return r["results"][0], _client()
+        except Exception as e:
+            print(f"[notion] _find_page sessions lookup failed: {e}")
+
+    return None, None
 
 
 # ---------------------------------------------------------------------------
-# Sessions DB
+# Session storage (lead page primary, Sessions DB fallback)
 # ---------------------------------------------------------------------------
 
-def create_session(context: str) -> str:
+def create_session(context: str, lead_page_id: Optional[str] = None) -> str:
     session_id = str(uuid.uuid4())
     state = {
         "session_id": session_id,
@@ -123,8 +141,27 @@ def create_session(context: str) -> str:
         "all_qa": [],
         "current_questions": [],
         "roi": None,
-        "lead_page_id": None,
+        "lead_page_id": lead_page_id,
     }
+
+    # Primary path: store on the lead page (requires `State` rich_text property)
+    if lead_page_id:
+        try:
+            n = _client()
+            n.pages.update(
+                page_id=lead_page_id,
+                properties={
+                    "Session ID": {"rich_text": [{"text": {"content": session_id}}]},
+                    "State": {"rich_text": _pack(state)},
+                },
+            )
+            return session_id
+        except Exception as e:
+            raise RuntimeError(f"Failed to write session to lead page (does the Leads DB have a 'State' rich_text property?): {e}") from e
+
+    # Fallback: create page in Sessions DB
+    if not os.environ.get("NOTION_DATABASE_ID"):
+        raise RuntimeError("Cannot create lead-less session: NOTION_DATABASE_ID env var not set")
     try:
         n = _client()
         n.pages.create(
@@ -136,9 +173,9 @@ def create_session(context: str) -> str:
                 "State": {"rich_text": _pack(state)},
             },
         )
+        return session_id
     except Exception as e:
-        print(f"[notion] create_session failed: {e}")
-    return session_id
+        raise RuntimeError(f"Failed to create session in Sessions DB: {e}") from e
 
 
 def get_session(session_id: str) -> Optional[dict]:
@@ -154,20 +191,22 @@ def update_session(session_id: str, updates: dict) -> None:
         return
     state = _unpack(page["properties"].get("State", {}).get("rich_text", [])) or {}
     state.update(updates)
+
+    # Only update properties that exist on this page (Lead pages don't have Status)
+    props_update: dict = {"State": {"rich_text": _pack(state)}}
+    if "Status" in page.get("properties", {}):
+        props_update["Status"] = {"select": {"name": state.get("status", "active")}}
+
     try:
-        n.pages.update(
-            page_id=page["id"],
-            properties={
-                "State": {"rich_text": _pack(state)},
-                "Status": {"select": {"name": state.get("status", "active")}},
-            },
-        )
+        n.pages.update(page_id=page["id"], properties=props_update)
     except Exception as e:
         print(f"[notion] update_session failed: {e}")
 
 
 def available() -> bool:
-    return bool(os.environ.get("NOTION_API_KEY") and os.environ.get("NOTION_DATABASE_ID"))
+    """Notion is available if we have an API key. Sessions DB no longer required —
+    sessions are stored on lead pages by default."""
+    return bool(os.environ.get("NOTION_API_KEY"))
 
 
 # ---------------------------------------------------------------------------
@@ -258,18 +297,9 @@ def search_leads(query: str) -> list:
 
 
 def link_session_to_lead(lead_page_id: str, session_id: str) -> None:
-    if not available() or not lead_page_id:
-        return
-    try:
-        n = _client()
-        n.pages.update(
-            page_id=lead_page_id,
-            properties={
-                "Session ID": {"rich_text": [{"text": {"content": session_id}}]},
-            },
-        )
-    except Exception as e:
-        print(f"[notion] link_session_to_lead failed: {e}")
+    """No-op — create_session now writes Session ID to the lead page directly
+    when lead_page_id is provided. Kept for backwards compatibility."""
+    return
 
 
 def write_qa_to_page(lead_page_id: str, round_num: int, qa_list: list) -> None:
