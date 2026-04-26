@@ -95,9 +95,13 @@ def _lead_props(page: dict) -> dict:
 # 1) Top-20 lead ranking
 # ---------------------------------------------------------------------------
 
+_LEADS_DB_HARDCODED = "31cbebb0-c2f9-8075-b996-000b1747664a"  # Interview Datenbank
+
+
 def _leads_db_id() -> str:
-    # Same fallback as notion_session.py — Interview Datenbank
-    return os.environ.get("NOTION_DATABASE_ID") or "31cbebb0-c2f9-8075-b996-000b1747664a"
+    # NOTION_DATABASE_ID is the Sessions DB on Render — do NOT use it here.
+    # Use NOTION_LEADS_DB_ID if set, otherwise the hardcoded Interview Datenbank.
+    return os.environ.get("NOTION_LEADS_DB_ID") or _LEADS_DB_HARDCODED
 
 
 def top20_leads() -> list[dict]:
