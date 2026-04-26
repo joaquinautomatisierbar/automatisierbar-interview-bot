@@ -94,6 +94,36 @@ def index():
 # Temporary debug endpoint — remove after diagnosing autocomplete issue
 # ---------------------------------------------------------------------------
 
+@app.route("/api/setup/add-state-property", methods=["GET"])
+def setup_add_state_property():
+    """One-time setup: adds a `State` rich_text property to the Leads DB.
+    Idempotent — if the property exists, returns early."""
+    try:
+        import requests as _req
+        from notion_session import _leads_db, _notion_headers
+        db_id = _leads_db()
+        headers = _notion_headers()
+
+        # Check existing schema first
+        r = _req.get(f"https://api.notion.com/v1/databases/{db_id}", headers=headers)
+        r.raise_for_status()
+        schema = r.json()
+        existing_props = list(schema.get("properties", {}).keys())
+        if "State" in existing_props:
+            return jsonify({"status": "already exists", "properties": existing_props})
+
+        # Add the State property
+        patch = _req.patch(
+            f"https://api.notion.com/v1/databases/{db_id}",
+            headers=headers,
+            json={"properties": {"State": {"rich_text": {}}}},
+        )
+        patch.raise_for_status()
+        return jsonify({"status": "added", "db_id": db_id, "properties": list(patch.json().get("properties", {}).keys())})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/debug/session/<session_id>", methods=["GET"])
 def debug_session(session_id):
     try:
