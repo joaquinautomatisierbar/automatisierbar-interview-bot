@@ -14,11 +14,13 @@ from typing import Optional
 import requests
 
 CHUNK = 1999
-_LEADS_DB_ID_FALLBACK = "31cbebb0-c2f9-8075-b996-000b1747664a"
+_LEADS_DB_ID_FALLBACK = "31cbebb0-c2f9-8047-9e9f-fc59851f8a34"  # Interview Datenbank
 
 
 def _leads_db() -> str:
-    return os.environ.get("NOTION_DATABASE_ID") or _LEADS_DB_ID_FALLBACK
+    # NOTION_DATABASE_ID is the Sessions DB — never the Leads DB.
+    # Allow override via NOTION_LEADS_DB_ID, otherwise use the hardcoded Leads DB.
+    return os.environ.get("NOTION_LEADS_DB_ID") or _LEADS_DB_ID_FALLBACK
 ALLOWED_STAGES = {
     "Workflow Interview", "Process Mapping", "Prototype Building",
     "Prototype Testing", "Pilot Client", "Paying Client",

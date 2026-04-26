@@ -95,7 +95,7 @@ def _lead_props(page: dict) -> dict:
 # 1) Top-20 lead ranking
 # ---------------------------------------------------------------------------
 
-_LEADS_DB_HARDCODED = "31cbebb0-c2f9-8075-b996-000b1747664a"  # Interview Datenbank
+_LEADS_DB_HARDCODED = "31cbebb0-c2f9-8047-9e9f-fc59851f8a34"  # Interview Datenbank
 
 
 def _leads_db_id() -> str:
