@@ -203,8 +203,6 @@ def search_leads(query: str) -> list:
                 continue
             if q not in lead["name"].lower() and q not in (lead["firma"] or "").lower():
                 continue
-            if lead["pipeline_stage"] and lead["pipeline_stage"] not in ALLOWED_STAGES:
-                continue
             results.append(lead)
             if len(results) >= 6:
                 break

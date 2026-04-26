@@ -1,5 +1,9 @@
 # Workflow: LinkedIn Engagement Bot
 
+> **Architektur-Update (Phase 2)**: Der Bot läuft **vollständig in n8n** ohne Render-Abhängigkeit. Die Render-Endpoints unter `/api/linkedin/*` existieren noch (Phase-1-Smoke-Tests, optional als Backup), werden aber vom Telegram-Bot nicht benutzt. Voice-Prompt ist im n8n-Code-Node embedded; Repo-Datei [`prompts/linkedin_voice.md`](../prompts/linkedin_voice.md) bleibt Master-Quelle für Reviews.
+>
+> **Importierbarer Workflow**: [`workflows/linkedin_engagement_bot.n8n.json`](linkedin_engagement_bot.n8n.json) — in n8n Cloud per "Import from File" laden.
+
 ## Objective
 
 A Telegram bot that turns a LinkedIn post (text, forwarded message, or screenshot) into three substantive comment variants in Joaquin's voice — so the daily LinkedIn engagement ritual takes ~5 min instead of 15 min, and every interaction is logged to Notion for later review.

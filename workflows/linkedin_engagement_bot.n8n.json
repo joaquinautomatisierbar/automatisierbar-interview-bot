@@ -1,0 +1,436 @@
+{
+  "name": "automatisierbar — LinkedIn Engagement Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message", "callback_query"],
+        "additionalFields": {}
+      },
+      "id": "trigger-001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 400],
+      "webhookId": "linkedin-bot-webhook"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.callback_query }}",
+                    "rightValue": "",
+                    "operator": { "type": "object", "operation": "exists", "singleValue": true }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "callback"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.photo }}",
+                    "rightValue": "",
+                    "operator": { "type": "array", "operation": "exists", "singleValue": true }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "photo"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text }}",
+                    "rightValue": "/start",
+                    "operator": { "type": "string", "operation": "startsWith" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "start"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text }}",
+                    "rightValue": "/leads",
+                    "operator": { "type": "string", "operation": "startsWith" }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "leads"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message?.text }}",
+                    "rightValue": "",
+                    "operator": { "type": "string", "operation": "exists", "singleValue": true }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "none" }
+      },
+      "id": "switch-001",
+      "name": "Route Update",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.callback_query?.message?.chat?.id || $json.message.chat.id }}",
+        "text": "Hi. Schick mir einen LinkedIn-Post — als Text, Forward oder Screenshot.\nIch gebe dir 3 Kommentar-Varianten in deiner Stimme zurück:\n  • Erfahrung (mit konkretem Case)\n  • Sicht (eigene Linse)\n  • Frage (an den Author)\n\nBefehle:\n  /leads – Top-20 Notion-Leads für LinkedIn-Outreach\n  /start – diese Hilfe",
+        "additionalFields": {}
+      },
+      "id": "welcome-001",
+      "name": "Send Welcome",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [700, 100]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": "31cbebb0-c2f9-8047-9e9f-fc59851f8a34",
+        "returnAll": false,
+        "limit": 100,
+        "filters": { "conditions": [] },
+        "options": {}
+      },
+      "id": "leads-query-001",
+      "name": "Notion: Query Leads",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [700, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const PRIORITY = ['Recht','Treuhand','Immobilien','Handwerk','Beratung'];\nconst EXCLUDE = new Set(['Pilot Client','Paying Client']);\n\nfunction getProp(p, key, type) {\n  const v = p?.properties?.[key];\n  if (!v) return '';\n  if (type === 'title') return (v.title?.[0]?.plain_text) || '';\n  if (type === 'rich_text') return (v.rich_text?.[0]?.plain_text) || '';\n  if (type === 'select') return (v.select?.name) || '';\n  if (type === 'status_or_select') return (v.status?.name) || (v.select?.name) || '';\n  return '';\n}\n\nfunction urlencode(s) { return encodeURIComponent(s); }\n\nconst raw = items.map(i => i.json);\nconst leads = raw.map(p => ({\n  name: getProp(p, 'Name', 'title'),\n  firma: getProp(p, 'Firma', 'rich_text'),\n  branche: getProp(p, 'Branche', 'select'),\n  groesse: getProp(p, 'Größe', 'select'),\n  top_problem: getProp(p, 'Top Problem', 'rich_text'),\n  pipeline_stage: getProp(p, 'Pipeline Stage', 'status_or_select'),\n})).filter(l => l.firma && l.name && !EXCLUDE.has(l.pipeline_stage));\n\nleads.sort((a,b) => {\n  const ra = PRIORITY.indexOf(a.branche); const rb = PRIORITY.indexOf(b.branche);\n  const sa = ra === -1 ? PRIORITY.length : ra;\n  const sb = rb === -1 ? PRIORITY.length : rb;\n  if (sa !== sb) return sa - sb;\n  const ta = a.top_problem.trim() ? 0 : 1;\n  const tb = b.top_problem.trim() ? 0 : 1;\n  if (ta !== tb) return ta - tb;\n  return a.firma.toLowerCase().localeCompare(b.firma.toLowerCase());\n});\n\nconst top = leads.slice(0, 20);\nconst lines = ['*Top ' + top.length + ' LinkedIn-Targets*\\n'];\ntop.forEach((l, i) => {\n  const url = 'https://www.linkedin.com/search/results/people/?keywords=' + urlencode('Inhaber ' + l.firma) + '&origin=SWITCH_SEARCH_VERTICAL';\n  const branche = l.branche || '—';\n  const problem = l.top_problem.length > 80 ? l.top_problem.slice(0,80) + '…' : l.top_problem;\n  const pline = problem.trim() ? '\\n  _' + problem + '_' : '';\n  lines.push((i+1) + '. *' + l.firma + '* (' + branche + ') — [LinkedIn-Suche](' + url + ')' + pline);\n});\n\nreturn [{ json: { markdown: lines.join('\\n'), count: top.length } }];"
+      },
+      "id": "leads-format-001",
+      "name": "Format Top 20",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 240]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.markdown }}",
+        "additionalFields": { "parse_mode": "Markdown", "disable_web_page_preview": true }
+      },
+      "id": "leads-send-001",
+      "name": "Send Leads List",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1180, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $input.first().json.message;\nlet text = (m?.text || '').trim();\nif (text.startsWith('/k ')) text = text.slice(3).trim();\nelse if (text === '/k') text = '';\nif (!text || text.length < 30) {\n  return [{ json: { __short: true, chat_id: m.chat.id } }];\n}\nreturn [{ json: { post_text: text, chat_id: m.chat.id, source: 'text' } }];"
+      },
+      "id": "text-extract-001",
+      "name": "Extract Post Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 560]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "fileId": "={{ $json.message.photo[$json.message.photo.length - 1].file_id }}",
+        "additionalFields": { "download": true }
+      },
+      "id": "photo-getfile-001",
+      "name": "Telegram: Get Photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [700, 720]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst bin = item.binary?.data;\nif (!bin) {\n  return [{ json: { __error: 'no binary data' } }];\n}\nconst chat_id = $('Telegram Trigger').item.json.message.chat.id;\nreturn [{ json: { image_b64: bin.data, media_type: bin.mimeType || 'image/jpeg', chat_id, source: 'photo' } }];"
+      },
+      "id": "photo-tobase64-001",
+      "name": "Photo to Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 720]
+    },
+    {
+      "parameters": {
+        "jsCode": "const VOICE_PROMPT_LINES = [\n  '# LinkedIn Voice — automatisierbar.ch',\n  '',\n  '## Rolle',\n  '',\n  'Du schreibst LinkedIn-Kommentare im Namen von Joaquin, dem Gründer von automatisierbar.ch. Joaquin baut Backoffice-Automatisierung für Schweizer KMUs (5–50 MA), Fokus Recht & Immobilien, Stack n8n + Claude + custom tools. Er ist Gründer/Builder, noch jung, baut ehrlich und schnell.',\n  '',\n  'Sprache: Deutsch (Schweiz, aber Hochdeutsch — nicht Schwyzerdütsch). DU-Form. Niemals \"Sie\".',\n  '',\n  '## Aufgabe',\n  '',\n  'Für jeden eingehenden LinkedIn-Post generierst du DREI Kommentar-Varianten in dieser exakten Reihenfolge:',\n  '',\n  '1. Erfahrung — Konkrete Erfahrung aus Joaquins Arbeit (siehe \"Verfügbare Cases\" unten)',\n  '2. Sicht — Differenzierende, eigenständige Sichtweise auf das Thema des Posts',\n  '3. Frage — Eine echte Frage an den Author, die er nicht trivial beantworten kann',\n  '',\n  'Pro Variante: 3–5 Sätze. Substantiv-Verb-Klarheit. Kurze Sätze. Pause. Pointe.',\n  '',\n  '## Verfügbare Cases (NUR diese — nichts erfinden)',\n  '',\n  'Du darfst dich AUSSCHLIESSLICH auf diese drei Cases beziehen. Keine anderen. Keine erfundenen Zahlen. Keine ausgedachten Klienten.',\n  '',\n  '### Case 1 — Bieri Rechtsanwälte (Zürich, Anwaltskanzlei, 2–5 MA)',\n  '- Problem: 8-stufiger manueller Dokumenten-Workflow nach jedem Mandantenfall, ~1.5–2 h/Tag',\n  '- Lösung: Outlook-as-proxy + n8n-Pipeline (weil Winjur keine API hat)',\n  '- Resultat: MVP fertig, Präsentation diese Woche',\n  '- Status (immer ehrlich nennen wenn relevant): \"MVP, noch nicht live in Produktion\"',\n  '',\n  '### Case 2 — Exclusive Homes Gränacher (Gipf-Oberfrick, Immobilien)',\n  '- Problem: Manueller Verkaufsdoku-Versand auf Kundenanfragen per E-Mail',\n  '- Lösung: Gmail-Trigger + n8n + Auto-Versand',\n  \"- Resultat (Schätzung aus Diagnose-Phase, nicht aus Live-Betrieb): 15 h/Woche → 15 Min, CHF 5'074/Monat Einsparung\",\n  '- Status (immer ehrlich nennen wenn relevant): \"im Aufbau, Schätzung aus Diagnose\"',\n  '',\n  '### Case 3 — Eigene Interview-App (Workflow Interview Bot)',\n  '- Problem: 3–4 E-Mails Pingpong pro Lead vor Diagnose',\n  '- Lösung: Flask + Claude API + Notion, adaptive Fragen',\n  '- Resultat: 3 Tage Pingpong → 15 Min Self-Service',\n  '- Status: live, Joaquin nutzt sie selbst',\n  '',\n  '## Variante 1: Erfahrung — Regeln',\n  '- Wähle den topisch passendsten Case. Wenn KEINER passt: gib die Variante explizit als leer aus (text=null, skip_reason=\"kein passender Case verfügbar\").',\n  '- Bei Bezug: Status (MVP / im Aufbau / live) klar erwähnen wenn die Zahlen genannt werden. Niemals als \"fertig\" oder \"live\" verkaufen was im Aufbau ist.',\n  '- Keine zusätzlichen Zahlen erfinden. Wenn du keine konkrete Zahl hast → keine erfinden, sondern qualitativ formulieren.',\n  '- Einleitungs-Pattern (variieren): \"Bei einem Anwaltskanzlei-Mandanten haben wir gerade …\", \"Aus einem laufenden Mandat in der Immobilienbranche: …\", \"Beim eigenen Bot habe ich …\"',\n  '- Endet idealerweise mit einer Einschränkung oder einem Hedge: \"Heisst nicht dass es immer geht — aber bei strukturierten, repetitiven Backoffice-Prozessen oft ja.\"',\n  '',\n  '## Variante 2: Sicht — Regeln',\n  '- Eine eigenständige Beobachtung, die der Original-Post NICHT schon gesagt hat.',\n  '- Reframing erlaubt: \"von der anderen Seite anschauen\".',\n  '- Kein Case-Bezug nötig. Kein Pitch.',\n  '- Anti-Pattern: nicht zustimmen + bisschen umformulieren. Du bringst eine ECHTE neue Linse oder gar keine.',\n  '',\n  '## Variante 3: Frage — Regeln',\n  '- Eine Frage, die der Author nicht in einem Satz mit \"ja\" oder \"nein\" beantworten kann.',\n  '- Sie muss zeigen dass du den Post wirklich gelesen hast.',\n  '- Keine rhetorischen Fragen. Keine Quiz-Fragen. Keine Fragen zu denen du selbst die Antwort schon im Kommentar verrätst.',\n  '',\n  '## Harte Regeln (für ALLE Varianten)',\n  '1. Niemals Fakten, Zahlen, Klienten oder Resultate erfinden. Nur die 3 Cases oben sind verfügbar.',\n  '2. Keine Buzzwords: synergistisch, ganzheitlich, End-to-End, unternehmenskritisch, skalierbar (Buzzword-Sinn), Mehrwert, lösungsorientiert, Synergie, Ökosystem.',\n  '3. Keine Floskeln: \"Toller Beitrag\", \"Sehr spannend\", \"Genau meine Erfahrung\", \"100%\", \"Absolut!\", \"Sehr gut auf den Punkt gebracht\", \"Wichtiger Beitrag\".',\n  '4. Keine Emojis, ausser der Original-Post hat welche und ein einzelnes Echo passt natürlich.',\n  '5. Keine Hashtags.',\n  '6. Kein Selbstpitch, keine Erwähnung von \"automatisierbar.ch\", keine Calls-to-Action.',\n  '7. Konkrete Zahlen statt Adjektive — wenn Zahlen verfügbar sind.',\n  '8. Kurze Sätze. Pause. Pointe. Keine Schachtelsätze.',\n  '9. 3–5 Sätze pro Variante. Lieber knapper als länger.',\n  '10. Du-Form, niemals Sie. Auch wenn der Original-Post Sie verwendet.',\n  '11. Wenn der Post auf Englisch ist: kommentiere auf Englisch im selben Voice-Profil.',\n  '',\n  '## Output-Format',\n  '',\n  'Antworte AUSSCHLIESSLICH als gültiges JSON, kein Markdown, kein Vor- oder Nachtext:',\n  '',\n  'JSON-Schema:',\n  '{',\n  '  \"post_summary\": \"Kurze 1-Zeilen-Zusammenfassung des Original-Posts\",',\n  '  \"post_branche\": \"Recht | Treuhand | Immobilien | Handwerk | Beratung | Tech | Andere\",',\n  '  \"comments\": [',\n  '    { \"variant\": \"Erfahrung\", \"text\": \"... oder null wenn kein passender Case\", \"skip_reason\": null },',\n  '    { \"variant\": \"Sicht\", \"text\": \"...\" },',\n  '    { \"variant\": \"Frage\", \"text\": \"...\" }',\n  '  ]',\n  '}',\n  '',\n  'Wenn du eine Variante skipst: text=null UND skip_reason=\"...\". Niemals einen schwachen Kommentar zurückgeben nur um das Slot zu füllen.'\n];\n\nconst voicePrompt = VOICE_PROMPT_LINES.join('\\n');\nconst input = $input.first().json;\n\nlet content;\nif (input.source === 'photo') {\n  content = [\n    { type: 'image', source: { type: 'base64', media_type: input.media_type, data: input.image_b64 } },\n    { type: 'text', text: 'Im Bild ist ein LinkedIn-Post (Screenshot). Lies den Post-Text vollständig aus dem Bild aus, ignoriere UI-Elemente, und generiere dann die drei Kommentar-Varianten gemäss System-Prompt.' }\n  ];\n} else {\n  content = 'LINKEDIN-POST (Text):\\n\\n' + input.post_text;\n}\n\nconst payload = {\n  model: 'claude-opus-4-7',\n  max_tokens: 1500,\n  system: [{ type: 'text', text: voicePrompt, cache_control: { type: 'ephemeral' } }],\n  messages: [{ role: 'user', content }]\n};\n\nreturn [{ json: { payload, chat_id: input.chat_id, source: input.source } }];"
+      },
+      "id": "build-payload-001",
+      "name": "Build Anthropic Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 640]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "anthropic-call-001",
+      "name": "Anthropic: Generate Comments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst text = resp?.content?.[0]?.text || '';\nconst m = text.match(/\\{[\\s\\S]*\\}/);\nif (!m) {\n  throw new Error('No JSON found in Claude response: ' + text.slice(0, 200));\n}\nconst parsed = JSON.parse(m[0]);\n\nconst chat_id = $('Build Anthropic Payload').item.json.chat_id;\nconst now = Date.now();\n\n// Save state via $getWorkflowStaticData\nconst data = $getWorkflowStaticData('global');\n// Cleanup entries older than 24h\nfor (const k in data) {\n  if (data[k]?.ts && (now - data[k].ts) > 86_400_000) delete data[k];\n}\n// We don't yet know the message_id of the keyboard message — use chat_id + timestamp\nconst stateKey = chat_id + ':' + now;\ndata[stateKey] = {\n  ts: now,\n  summary: parsed.post_summary || '',\n  branche: parsed.post_branche || 'Andere',\n  variants: {\n    Erfahrung: parsed.comments?.find(c => c.variant === 'Erfahrung')?.text || null,\n    Sicht: parsed.comments?.find(c => c.variant === 'Sicht')?.text || null,\n    Frage: parsed.comments?.find(c => c.variant === 'Frage')?.text || null\n  }\n};\n\nfunction esc(s) {\n  // MarkdownV2 escape\n  return (s || '').replace(/([_*\\[\\]()~`>#+\\-=|{}.!\\\\])/g, '\\\\$1');\n}\n\nconst getVariant = (name) => parsed.comments?.find(c => c.variant === name) || {};\n\nfunction format(label, idx, v) {\n  if (!v.text) {\n    return '⏭ *' + esc(label) + ' übersprungen* — _' + esc(v.skip_reason || 'kein passender Case') + '_';\n  }\n  return '*🟢 Variante ' + idx + ' — ' + esc(label) + '*\\n\\n```\\n' + v.text + '\\n```';\n}\n\nreturn [\n  { json: { chat_id, msg: format('Erfahrung', 1, getVariant('Erfahrung')), stateKey, summary: parsed.post_summary, branche: parsed.post_branche } },\n  { json: { chat_id, msg: format('Sicht', 2, getVariant('Sicht')), stateKey, summary: parsed.post_summary, branche: parsed.post_branche } },\n  { json: { chat_id, msg: format('Frage', 3, getVariant('Frage')), stateKey, summary: parsed.post_summary, branche: parsed.post_branche } }\n];"
+      },
+      "id": "parse-state-001",
+      "name": "Parse + Save State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 640]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.msg }}",
+        "additionalFields": { "parse_mode": "MarkdownV2" }
+      },
+      "id": "send-variant-001",
+      "name": "Send Variant",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1900, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Run after all 3 variants are sent. Build the keyboard message using state from first variant.\nconst all = $input.all();\nconst first = all[0].json;\nconst stateKey = first.stateKey;\nconst chat_id = first.chat_id;\n\nconst keyboard = {\n  inline_keyboard: [\n    [\n      { text: '✅ Erfahrung', callback_data: 'log:Erfahrung:' + stateKey },\n      { text: '✅ Sicht', callback_data: 'log:Sicht:' + stateKey }\n    ],\n    [\n      { text: '✅ Frage', callback_data: 'log:Frage:' + stateKey },\n      { text: '⏭ keine', callback_data: 'log:none:' + stateKey }\n    ]\n  ]\n};\n\nreturn [{ json: { chat_id, text: 'Welche hast du verwendet?', reply_markup: keyboard } }];"
+      },
+      "id": "build-keyboard-001",
+      "name": "Build Selection Keyboard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2140, 640]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "reply_markup": "={{ JSON.stringify($json.reply_markup) }}"
+        }
+      },
+      "id": "send-keyboard-001",
+      "name": "Send Selection Keyboard",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2380, 640]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cb = $input.first().json.callback_query;\nif (!cb) throw new Error('No callback_query');\nconst data = cb.data || '';\nconst parts = data.split(':');\nif (parts[0] !== 'log' || parts.length < 3) throw new Error('Bad callback_data: ' + data);\nconst variant = parts[1];\nconst stateKey = parts.slice(2).join(':');\n\nconst store = $getWorkflowStaticData('global');\nconst state = store[stateKey];\n\nconst chat_id = cb.message?.chat?.id;\nconst message_id = cb.message?.message_id;\nconst callback_query_id = cb.id;\n\nif (!state) {\n  return [{ json: {\n    __no_state: true,\n    chat_id, message_id, callback_query_id,\n    answerText: 'State weg (älter als 24h)'\n  } }];\n}\n\nconst comment_text = (variant === 'none') ? '' : (state.variants?.[variant] || '');\nconst typ = 'Comment';\nconst notion_typ = (variant === 'none') ? 'keine' : variant;\n\nreturn [{ json: {\n  chat_id, message_id, callback_query_id,\n  notion_typ,\n  notion_branche: state.branche || 'Andere',\n  notion_summary: state.summary || '',\n  notion_comment: comment_text,\n  notion_title: 'Comment · ' + new Date().toISOString().slice(0,10) + ' · ' + (state.summary || '').slice(0,60),\n  answerText: variant === 'none' ? 'Notiert ✅' : 'Geloggt ✅'\n} }];"
+      },
+      "id": "parse-callback-001",
+      "name": "Parse Callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 880]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": "34ebebb0-c2f9-81ad-94fa-cfc5840e1879",
+        "title": "={{ $json.notion_title }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Datum|date", "date": "={{ $now.toISO() }}" },
+            { "key": "Typ|select", "selectValue": "Comment" },
+            { "key": "Author-Branche|select", "selectValue": "={{ $json.notion_branche }}" },
+            { "key": "Variante|select", "selectValue": "={{ $json.notion_typ }}" },
+            { "key": "Outcome|select", "selectValue": "offen" },
+            { "key": "Post-Summary|rich_text", "richText": false, "textContent": "={{ $json.notion_summary }}" },
+            { "key": "Kommentar|rich_text", "richText": false, "textContent": "={{ $json.notion_comment }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notion-log-001",
+      "name": "Notion: Log Activity",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [940, 880]
+    },
+    {
+      "parameters": {
+        "operation": "answerQuery",
+        "queryId": "={{ $('Parse Callback').item.json.callback_query_id }}",
+        "additionalFields": { "text": "={{ $('Parse Callback').item.json.answerText }}" }
+      },
+      "id": "answer-callback-001",
+      "name": "Answer Callback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1180, 880]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "messageType": "inlineMessage",
+        "chatId": "={{ $('Parse Callback').item.json.chat_id }}",
+        "messageId": "={{ $('Parse Callback').item.json.message_id }}",
+        "text": "={{ '✓ ' + $('Parse Callback').item.json.answerText }}",
+        "additionalFields": {}
+      },
+      "id": "edit-message-001",
+      "name": "Edit Keyboard Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1420, 880]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "Schick mir einen Post (mind. 30 Zeichen) oder ein Screenshot.",
+        "additionalFields": {}
+      },
+      "id": "send-tooshort-001",
+      "name": "Send Too Short",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [940, 560]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.__short }}",
+                    "rightValue": "",
+                    "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "short"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "switch-short-001",
+      "name": "Short or Continue",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [940, 560]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [{ "node": "Route Update", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route Update": {
+      "main": [
+        [{ "node": "Parse Callback", "type": "main", "index": 0 }],
+        [{ "node": "Telegram: Get Photo", "type": "main", "index": 0 }],
+        [{ "node": "Send Welcome", "type": "main", "index": 0 }],
+        [{ "node": "Notion: Query Leads", "type": "main", "index": 0 }],
+        [{ "node": "Extract Post Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Notion: Query Leads": {
+      "main": [[{ "node": "Format Top 20", "type": "main", "index": 0 }]]
+    },
+    "Format Top 20": {
+      "main": [[{ "node": "Send Leads List", "type": "main", "index": 0 }]]
+    },
+    "Telegram: Get Photo": {
+      "main": [[{ "node": "Photo to Base64", "type": "main", "index": 0 }]]
+    },
+    "Photo to Base64": {
+      "main": [[{ "node": "Build Anthropic Payload", "type": "main", "index": 0 }]]
+    },
+    "Extract Post Text": {
+      "main": [[{ "node": "Short or Continue", "type": "main", "index": 0 }]]
+    },
+    "Short or Continue": {
+      "main": [
+        [{ "node": "Send Too Short", "type": "main", "index": 0 }],
+        [{ "node": "Build Anthropic Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Anthropic Payload": {
+      "main": [[{ "node": "Anthropic: Generate Comments", "type": "main", "index": 0 }]]
+    },
+    "Anthropic: Generate Comments": {
+      "main": [[{ "node": "Parse + Save State", "type": "main", "index": 0 }]]
+    },
+    "Parse + Save State": {
+      "main": [[{ "node": "Send Variant", "type": "main", "index": 0 }]]
+    },
+    "Send Variant": {
+      "main": [[{ "node": "Build Selection Keyboard", "type": "main", "index": 0 }]]
+    },
+    "Build Selection Keyboard": {
+      "main": [[{ "node": "Send Selection Keyboard", "type": "main", "index": 0 }]]
+    },
+    "Parse Callback": {
+      "main": [[{ "node": "Notion: Log Activity", "type": "main", "index": 0 }]]
+    },
+    "Notion: Log Activity": {
+      "main": [[{ "node": "Answer Callback", "type": "main", "index": 0 }]]
+    },
+    "Answer Callback": {
+      "main": [[{ "node": "Edit Keyboard Message", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "versionId": "1.0.0",
+  "meta": { "templateCredsSetupCompleted": false }
+}

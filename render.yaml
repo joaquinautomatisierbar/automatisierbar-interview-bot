@@ -17,3 +17,5 @@ services:
         sync: false
       - key: NOTION_LINKEDIN_DB_ID
         sync: false
+      - key: NOTION_LEADS_DB_ID
+        sync: false
