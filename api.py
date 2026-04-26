@@ -12,7 +12,12 @@ Endpoints:
   GET  /api/session/<id>/pdf         — generate build-spec PDF, return binary
   GET  /api/session/<id>/prompt      — generate Claude Code prompt, return JSON
 
-Auth for /generate-pdf: X-API-Key header (PDF_API_KEY env var)
+  POST /api/linkedin/comments        — generate 3 comment variants from text or image
+  GET  /api/linkedin/leads-top20     — return top 20 leads ranked for LinkedIn engagement
+  POST /api/linkedin/log             — log a comment/post/DM/connection to Notion
+  POST /api/linkedin/setup-db        — one-time: create the LinkedIn Activity DB
+
+Auth for /generate-pdf and all /api/linkedin/*: X-API-Key header (PDF_API_KEY env var)
 """
 
 import io
@@ -353,6 +358,94 @@ def session_prompt(session_id):
 
     except Exception as e:
         app.logger.error("session_prompt error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn Engagement Bot
+# ---------------------------------------------------------------------------
+
+@app.route("/api/linkedin/comments", methods=["POST"])
+def linkedin_comments():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        from linkedin_comment_gen import generate_from_text, generate_from_image
+        if data.get("image_b64"):
+            result = generate_from_image(
+                data["image_b64"],
+                data.get("media_type", "image/jpeg"),
+            )
+        else:
+            post_text = (data.get("post_text") or "").strip()
+            if not post_text:
+                return jsonify({"error": "post_text or image_b64 required"}), 400
+            result = generate_from_text(post_text)
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error("linkedin_comments error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/linkedin/leads-top20", methods=["GET"])
+def linkedin_leads_top20():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        from notion_linkedin import top20_leads, format_top20_markdown
+        leads = top20_leads()
+        return jsonify({
+            "count": len(leads),
+            "markdown": format_top20_markdown(leads),
+            "leads": leads,
+        })
+    except Exception as e:
+        app.logger.error("linkedin_leads_top20 error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/linkedin/log", methods=["POST"])
+def linkedin_log():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    try:
+        from notion_linkedin import log_activity
+        page = log_activity(
+            typ=data.get("typ", "Comment"),
+            post_summary=data.get("post_summary", ""),
+            branche=data.get("branche", "Andere"),
+            variant=data.get("variant", "keine"),
+            comment_text=data.get("comment_text", ""),
+            post_source=data.get("post_source", ""),
+            outcome=data.get("outcome", "offen"),
+        )
+        return jsonify({"ok": True, "page_id": page.get("id")})
+    except Exception as e:
+        app.logger.error("linkedin_log error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/linkedin/setup-db", methods=["POST"])
+def linkedin_setup_db():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    parent = (data.get("parent_page_id") or "").replace("-", "")
+    if len(parent) != 32:
+        return jsonify({"error": "parent_page_id must be a 32-char Notion page ID"}), 400
+    formatted = f"{parent[0:8]}-{parent[8:12]}-{parent[12:16]}-{parent[16:20]}-{parent[20:32]}"
+    try:
+        from notion_linkedin import create_activity_db
+        db_id = create_activity_db(formatted)
+        return jsonify({
+            "ok": True,
+            "database_id": db_id,
+            "next_step": f"Set NOTION_LINKEDIN_DB_ID={db_id} in Render env vars",
+        })
+    except Exception as e:
+        app.logger.error("linkedin_setup_db error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
