@@ -257,7 +257,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.first();\nconst bin = item.binary?.data;\nif (!bin) {\n  return [{ json: { __error: 'no binary data' } }];\n}\nconst chat_id = $('Telegram Trigger').item.json.message.chat.id;\nreturn [{ json: { image_b64: bin.data, media_type: bin.mimeType || 'image/jpeg', chat_id, source: 'photo' } }];"
+        "jsCode": "const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst base64 = buffer.toString('base64');\nconst bin = $input.first().binary?.data || {};\nconst chat_id = $('Telegram Trigger').item.json.message.chat.id;\nreturn [{ json: { image_b64: base64, media_type: bin.mimeType || 'image/jpeg', chat_id, source: 'photo' } }];"
       },
       "id": "photo-tobase64-001",
       "name": "Photo to Base64",
