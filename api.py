@@ -94,6 +94,30 @@ def index():
 # Temporary debug endpoint — remove after diagnosing autocomplete issue
 # ---------------------------------------------------------------------------
 
+@app.route("/api/debug/session/<session_id>", methods=["GET"])
+def debug_session(session_id):
+    try:
+        from notion_session import _query_db, _db
+        sessions_db = _db()
+        r = _query_db(
+            sessions_db,
+            filter_body={"property": "Session ID", "rich_text": {"equals": session_id}},
+            page_size=5,
+        )
+        results = r.get("results", [])
+        out = {"sessions_db": sessions_db, "matches": len(results), "ids": [p["id"] for p in results]}
+        if not results:
+            sample = _query_db(sessions_db, page_size=3)
+            out["sample_props"] = [list(p.get("properties", {}).keys()) for p in sample.get("results", [])]
+            out["sample_session_ids"] = []
+            for p in sample.get("results", []):
+                rt = p.get("properties", {}).get("Session ID", {}).get("rich_text", [])
+                out["sample_session_ids"].append(rt[0]["plain_text"] if rt else "(empty)")
+        return jsonify(out)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/debug/leads", methods=["GET"])
 def debug_leads():
     try:

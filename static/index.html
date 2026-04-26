@@ -1047,7 +1047,11 @@ const App = {
     this.showLoading("Lade Session");
     try {
       const r = await fetch(`/api/session/${sid}`);
-      if (!r.ok) { this.showScreen("screen-context"); return; }
+      if (!r.ok) {
+        this.showScreen("screen-context");
+        this.showToast(`Session nicht gefunden (${r.status}). ID prüfen.`);
+        return;
+      }
       const s = await r.json();
       this.context      = s.context || "";
       this.currentRound = s.round || 1;
