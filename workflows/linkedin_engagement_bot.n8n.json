@@ -243,9 +243,8 @@
         "resource": "file",
         "operation": "get",
         "fileId": "={{ $json.message.photo[$json.message.photo.length - 1].file_id }}",
-        "additionalFields": {
-          "download": true
-        }
+        "download": true,
+        "additionalFields": {}
       },
       "id": "photo-getfile-001",
       "name": "Telegram: Get Photo",
