@@ -4,6 +4,24 @@
 >
 > **Importierbarer Workflow**: [`workflows/linkedin_engagement_bot.n8n.json`](linkedin_engagement_bot.n8n.json) — in n8n Cloud per "Import from File" laden.
 
+## ‼️ Universal-Regel für ALLE n8n-Workflows mit Telegram-Nodes
+
+n8n hängt standardmässig **"This message was sent automatically with n8n"** an jede ausgehende Telegram-Message an. Das wirkt unprofessionell und outet automatisierte Kommunikation.
+
+**Fix immer setzen** auf jedem Telegram-Send-Node (Resource: `message`, Operations: `sendMessage`, `editMessageText`, `sendPhoto`, `sendDocument`, etc.):
+
+```json
+"additionalFields": {
+  "appendAttribution": false
+}
+```
+
+In der UI: Node öffnen → "Add Field" → "Append n8n attribution" → auf **off** setzen.
+
+Auch im Repo-JSON für jeden importierbaren Workflow voreingestellt lassen. Beim Bauen neuer Workflows: **vor dem ersten Test** abschalten — sonst bekommen erste Test-User schon den Attribution-Footer und wundern sich.
+
+(Telegram-Operationen die kein User-facing Message senden — z.B. `answerCallbackQuery`, `getFile` — brauchen das nicht.)
+
 ## Objective
 
 A Telegram bot that turns a LinkedIn post (text, forwarded message, or screenshot) into three substantive comment variants in Joaquin's voice — so the daily LinkedIn engagement ritual takes ~5 min instead of 15 min, and every interaction is logged to Notion for later review.

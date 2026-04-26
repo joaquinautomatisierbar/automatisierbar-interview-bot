@@ -155,7 +155,9 @@
       "parameters": {
         "chatId": "={{ $json.callback_query?.message?.chat?.id || $json.message.chat.id }}",
         "text": "Hi. Schick mir einen LinkedIn-Post — als Text, Forward oder Screenshot.\nIch gebe dir 3 Kommentar-Varianten in deiner Stimme zurück:\n  • Erfahrung (mit konkretem Case)\n  • Sicht (eigene Linse)\n  • Frage (an den Author)\n\nBefehle:\n  /leads – Top-20 Notion-Leads für LinkedIn-Outreach\n  /start – diese Hilfe",
-        "additionalFields": {},
+        "additionalFields": {
+          "appendAttribution": false
+        },
         "resource": "message",
         "operation": "sendMessage"
       },
@@ -208,7 +210,8 @@
         "text": "={{ $json.markdown }}",
         "additionalFields": {
           "parse_mode": "Markdown",
-          "disable_web_page_preview": true
+          "disable_web_page_preview": true,
+          "appendAttribution": false
         },
         "resource": "message",
         "operation": "sendMessage"
@@ -332,7 +335,8 @@
         "chatId": "={{ $json.chat_id }}",
         "text": "={{ $json.msg }}",
         "additionalFields": {
-          "parse_mode": "MarkdownV2"
+          "parse_mode": "MarkdownV2",
+          "appendAttribution": false
         },
         "resource": "message",
         "operation": "sendMessage"
@@ -364,7 +368,8 @@
         "chatId": "={{ $json.chat_id }}",
         "text": "={{ $json.text }}",
         "additionalFields": {
-          "reply_markup": "={{ JSON.stringify($json.reply_markup) }}"
+          "reply_markup": "={{ JSON.stringify($json.reply_markup) }}",
+          "appendAttribution": false
         },
         "resource": "message",
         "operation": "sendMessage"
@@ -468,7 +473,9 @@
         "chatId": "={{ $('Parse Callback').item.json.chat_id }}",
         "messageId": "={{ $('Parse Callback').item.json.message_id }}",
         "text": "={{ '✓ ' + $('Parse Callback').item.json.answerText }}",
-        "additionalFields": {}
+        "additionalFields": {
+          "appendAttribution": false
+        }
       },
       "id": "edit-message-001",
       "name": "Edit Keyboard Message",
@@ -483,7 +490,9 @@
       "parameters": {
         "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
         "text": "Schick mir einen Post (mind. 30 Zeichen) oder ein Screenshot.",
-        "additionalFields": {},
+        "additionalFields": {
+          "appendAttribution": false
+        },
         "resource": "message",
         "operation": "sendMessage"
       },
