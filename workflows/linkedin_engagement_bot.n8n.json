@@ -3,14 +3,20 @@
   "nodes": [
     {
       "parameters": {
-        "updates": ["message", "callback_query"],
+        "updates": [
+          "message",
+          "callback_query"
+        ],
         "additionalFields": {}
       },
       "id": "trigger-001",
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [240, 400],
+      "position": [
+        240,
+        400
+      ],
       "webhookId": "linkedin-bot-webhook"
     },
     {
@@ -19,13 +25,21 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
                 "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.callback_query }}",
                     "rightValue": "",
-                    "operator": { "type": "object", "operation": "exists", "singleValue": true }
+                    "operator": {
+                      "type": "object",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
                   }
                 ]
               },
@@ -34,13 +48,21 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
                 "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.message?.photo }}",
                     "rightValue": "",
-                    "operator": { "type": "array", "operation": "exists", "singleValue": true }
+                    "operator": {
+                      "type": "array",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
                   }
                 ]
               },
@@ -49,13 +71,20 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
                 "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.message?.text }}",
                     "rightValue": "/start",
-                    "operator": { "type": "string", "operation": "startsWith" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    }
                   }
                 ]
               },
@@ -64,13 +93,20 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
                 "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.message?.text }}",
                     "rightValue": "/leads",
-                    "operator": { "type": "string", "operation": "startsWith" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    }
                   }
                 ]
               },
@@ -79,13 +115,21 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
                 "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.message?.text }}",
                     "rightValue": "",
-                    "operator": { "type": "string", "operation": "exists", "singleValue": true }
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
                   }
                 ]
               },
@@ -94,25 +138,35 @@
             }
           ]
         },
-        "options": { "fallbackOutput": "none" }
+        "options": {
+          "fallbackOutput": "none"
+        }
       },
       "id": "switch-001",
       "name": "Route Update",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [460, 400]
+      "position": [
+        460,
+        400
+      ]
     },
     {
       "parameters": {
         "chatId": "={{ $json.callback_query?.message?.chat?.id || $json.message.chat.id }}",
         "text": "Hi. Schick mir einen LinkedIn-Post — als Text, Forward oder Screenshot.\nIch gebe dir 3 Kommentar-Varianten in deiner Stimme zurück:\n  • Erfahrung (mit konkretem Case)\n  • Sicht (eigene Linse)\n  • Frage (an den Author)\n\nBefehle:\n  /leads – Top-20 Notion-Leads für LinkedIn-Outreach\n  /start – diese Hilfe",
-        "additionalFields": {}
+        "additionalFields": {},
+        "resource": "message",
+        "operation": "sendMessage"
       },
       "id": "welcome-001",
       "name": "Send Welcome",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [700, 100]
+      "position": [
+        700,
+        100
+      ]
     },
     {
       "parameters": {
@@ -121,14 +175,19 @@
         "databaseId": "31cbebb0-c2f9-8047-9e9f-fc59851f8a34",
         "returnAll": false,
         "limit": 100,
-        "filters": { "conditions": [] },
+        "filters": {
+          "conditions": []
+        },
         "options": {}
       },
       "id": "leads-query-001",
       "name": "Notion: Query Leads",
       "type": "n8n-nodes-base.notion",
       "typeVersion": 2.2,
-      "position": [700, 240]
+      "position": [
+        700,
+        240
+      ]
     },
     {
       "parameters": {
@@ -138,19 +197,30 @@
       "name": "Format Top 20",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [940, 240]
+      "position": [
+        940,
+        240
+      ]
     },
     {
       "parameters": {
         "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
         "text": "={{ $json.markdown }}",
-        "additionalFields": { "parse_mode": "Markdown", "disable_web_page_preview": true }
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "disable_web_page_preview": true
+        },
+        "resource": "message",
+        "operation": "sendMessage"
       },
       "id": "leads-send-001",
       "name": "Send Leads List",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1180, 240]
+      "position": [
+        1180,
+        240
+      ]
     },
     {
       "parameters": {
@@ -160,20 +230,28 @@
       "name": "Extract Post Text",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 560]
+      "position": [
+        700,
+        560
+      ]
     },
     {
       "parameters": {
         "resource": "file",
         "operation": "get",
         "fileId": "={{ $json.message.photo[$json.message.photo.length - 1].file_id }}",
-        "additionalFields": { "download": true }
+        "additionalFields": {
+          "download": true
+        }
       },
       "id": "photo-getfile-001",
       "name": "Telegram: Get Photo",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [700, 720]
+      "position": [
+        700,
+        720
+      ]
     },
     {
       "parameters": {
@@ -183,7 +261,10 @@
       "name": "Photo to Base64",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [940, 720]
+      "position": [
+        940,
+        720
+      ]
     },
     {
       "parameters": {
@@ -193,7 +274,10 @@
       "name": "Build Anthropic Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1180, 640]
+      "position": [
+        1180,
+        640
+      ]
     },
     {
       "parameters": {
@@ -204,20 +288,31 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "anthropic-version", "value": "2023-06-01" },
-            { "name": "content-type", "value": "application/json" }
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.payload) }}",
-        "options": { "timeout": 60000 }
+        "options": {
+          "timeout": 60000
+        }
       },
       "id": "anthropic-call-001",
       "name": "Anthropic: Generate Comments",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1420, 640]
+      "position": [
+        1420,
+        640
+      ]
     },
     {
       "parameters": {
@@ -227,19 +322,29 @@
       "name": "Parse + Save State",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1660, 640]
+      "position": [
+        1660,
+        640
+      ]
     },
     {
       "parameters": {
         "chatId": "={{ $json.chat_id }}",
         "text": "={{ $json.msg }}",
-        "additionalFields": { "parse_mode": "MarkdownV2" }
+        "additionalFields": {
+          "parse_mode": "MarkdownV2"
+        },
+        "resource": "message",
+        "operation": "sendMessage"
       },
       "id": "send-variant-001",
       "name": "Send Variant",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1900, 640]
+      "position": [
+        1900,
+        640
+      ]
     },
     {
       "parameters": {
@@ -249,7 +354,10 @@
       "name": "Build Selection Keyboard",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2140, 640]
+      "position": [
+        2140,
+        640
+      ]
     },
     {
       "parameters": {
@@ -257,13 +365,18 @@
         "text": "={{ $json.text }}",
         "additionalFields": {
           "reply_markup": "={{ JSON.stringify($json.reply_markup) }}"
-        }
+        },
+        "resource": "message",
+        "operation": "sendMessage"
       },
       "id": "send-keyboard-001",
       "name": "Send Selection Keyboard",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [2380, 640]
+      "position": [
+        2380,
+        640
+      ]
     },
     {
       "parameters": {
@@ -273,7 +386,10 @@
       "name": "Parse Callback",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 880]
+      "position": [
+        700,
+        880
+      ]
     },
     {
       "parameters": {
@@ -283,13 +399,36 @@
         "title": "={{ $json.notion_title }}",
         "propertiesUi": {
           "propertyValues": [
-            { "key": "Datum|date", "date": "={{ $now.toISO() }}" },
-            { "key": "Typ|select", "selectValue": "Comment" },
-            { "key": "Author-Branche|select", "selectValue": "={{ $json.notion_branche }}" },
-            { "key": "Variante|select", "selectValue": "={{ $json.notion_typ }}" },
-            { "key": "Outcome|select", "selectValue": "offen" },
-            { "key": "Post-Summary|rich_text", "richText": false, "textContent": "={{ $json.notion_summary }}" },
-            { "key": "Kommentar|rich_text", "richText": false, "textContent": "={{ $json.notion_comment }}" }
+            {
+              "key": "Datum|date",
+              "date": "={{ $now.toISO() }}"
+            },
+            {
+              "key": "Typ|select",
+              "selectValue": "Comment"
+            },
+            {
+              "key": "Author-Branche|select",
+              "selectValue": "={{ $json.notion_branche }}"
+            },
+            {
+              "key": "Variante|select",
+              "selectValue": "={{ $json.notion_typ }}"
+            },
+            {
+              "key": "Outcome|select",
+              "selectValue": "offen"
+            },
+            {
+              "key": "Post-Summary|rich_text",
+              "richText": false,
+              "textContent": "={{ $json.notion_summary }}"
+            },
+            {
+              "key": "Kommentar|rich_text",
+              "richText": false,
+              "textContent": "={{ $json.notion_comment }}"
+            }
           ]
         },
         "options": {}
@@ -298,24 +437,34 @@
       "name": "Notion: Log Activity",
       "type": "n8n-nodes-base.notion",
       "typeVersion": 2.2,
-      "position": [940, 880]
+      "position": [
+        940,
+        880
+      ]
     },
     {
       "parameters": {
         "operation": "answerQuery",
         "queryId": "={{ $('Parse Callback').item.json.callback_query_id }}",
-        "additionalFields": { "text": "={{ $('Parse Callback').item.json.answerText }}" }
+        "additionalFields": {
+          "text": "={{ $('Parse Callback').item.json.answerText }}"
+        },
+        "resource": "callback"
       },
       "id": "answer-callback-001",
       "name": "Answer Callback",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1180, 880]
+      "position": [
+        1180,
+        880
+      ]
     },
     {
       "parameters": {
+        "resource": "message",
         "operation": "editMessageText",
-        "messageType": "inlineMessage",
+        "messageType": "message",
         "chatId": "={{ $('Parse Callback').item.json.chat_id }}",
         "messageId": "={{ $('Parse Callback').item.json.message_id }}",
         "text": "={{ '✓ ' + $('Parse Callback').item.json.answerText }}",
@@ -325,19 +474,27 @@
       "name": "Edit Keyboard Message",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1420, 880]
+      "position": [
+        1420,
+        880
+      ]
     },
     {
       "parameters": {
         "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
         "text": "Schick mir einen Post (mind. 30 Zeichen) oder ein Screenshot.",
-        "additionalFields": {}
+        "additionalFields": {},
+        "resource": "message",
+        "operation": "sendMessage"
       },
       "id": "send-tooshort-001",
       "name": "Send Too Short",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [940, 560]
+      "position": [
+        940,
+        560
+      ]
     },
     {
       "parameters": {
@@ -345,13 +502,21 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
                 "combinator": "and",
                 "conditions": [
                   {
                     "leftValue": "={{ $json.__short }}",
                     "rightValue": "",
-                    "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
                   }
                 ]
               },
@@ -360,78 +525,239 @@
             }
           ]
         },
-        "options": { "fallbackOutput": "extra" }
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "id": "switch-short-001",
       "name": "Short or Continue",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [940, 560]
+      "position": [
+        940,
+        560
+      ]
     }
   ],
   "connections": {
     "Telegram Trigger": {
       "main": [
-        [{ "node": "Route Update", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Route Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Route Update": {
       "main": [
-        [{ "node": "Parse Callback", "type": "main", "index": 0 }],
-        [{ "node": "Telegram: Get Photo", "type": "main", "index": 0 }],
-        [{ "node": "Send Welcome", "type": "main", "index": 0 }],
-        [{ "node": "Notion: Query Leads", "type": "main", "index": 0 }],
-        [{ "node": "Extract Post Text", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Parse Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram: Get Photo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Welcome",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notion: Query Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Post Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Notion: Query Leads": {
-      "main": [[{ "node": "Format Top 20", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Format Top 20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Format Top 20": {
-      "main": [[{ "node": "Send Leads List", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Send Leads List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Telegram: Get Photo": {
-      "main": [[{ "node": "Photo to Base64", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Photo to Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Photo to Base64": {
-      "main": [[{ "node": "Build Anthropic Payload", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Anthropic Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Extract Post Text": {
-      "main": [[{ "node": "Short or Continue", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Short or Continue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Short or Continue": {
       "main": [
-        [{ "node": "Send Too Short", "type": "main", "index": 0 }],
-        [{ "node": "Build Anthropic Payload", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Send Too Short",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Anthropic Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Anthropic Payload": {
-      "main": [[{ "node": "Anthropic: Generate Comments", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Anthropic: Generate Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Anthropic: Generate Comments": {
-      "main": [[{ "node": "Parse + Save State", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Parse + Save State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse + Save State": {
-      "main": [[{ "node": "Send Variant", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Send Variant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Send Variant": {
-      "main": [[{ "node": "Build Selection Keyboard", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Build Selection Keyboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Build Selection Keyboard": {
-      "main": [[{ "node": "Send Selection Keyboard", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Send Selection Keyboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Parse Callback": {
-      "main": [[{ "node": "Notion: Log Activity", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Notion: Log Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Notion: Log Activity": {
-      "main": [[{ "node": "Answer Callback", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Answer Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Answer Callback": {
-      "main": [[{ "node": "Edit Keyboard Message", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Edit Keyboard Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "active": false,
   "versionId": "1.0.0",
-  "meta": { "templateCredsSetupCompleted": false }
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
 }
