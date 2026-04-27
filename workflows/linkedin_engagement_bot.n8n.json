@@ -180,7 +180,8 @@
         "filters": {
           "conditions": []
         },
-        "options": {}
+        "options": {},
+        "simple": false
       },
       "id": "leads-query-001",
       "name": "Notion: Query Leads",
