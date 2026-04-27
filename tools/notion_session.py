@@ -40,6 +40,32 @@ def _notion_headers() -> dict:
     }
 
 
+_state_prop_ensured: dict = {}  # db_id -> True once schema is confirmed
+
+
+def _ensure_state_property(database_id: str) -> None:
+    """Idempotently ensure the database has a `State` rich_text property.
+    Cached per db_id for the lifetime of the process."""
+    if _state_prop_ensured.get(database_id):
+        return
+    try:
+        r = requests.get(
+            f"https://api.notion.com/v1/databases/{database_id}",
+            headers=_notion_headers(),
+        )
+        r.raise_for_status()
+        if "State" not in r.json().get("properties", {}):
+            patch = requests.patch(
+                f"https://api.notion.com/v1/databases/{database_id}",
+                headers=_notion_headers(),
+                json={"properties": {"State": {"rich_text": {}}}},
+            )
+            patch.raise_for_status()
+        _state_prop_ensured[database_id] = True
+    except Exception as e:
+        print(f"[notion] _ensure_state_property failed: {e}")
+
+
 def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100,
               start_cursor: str = None) -> dict:
     body: dict = {"page_size": page_size}
@@ -144,8 +170,9 @@ def create_session(context: str, lead_page_id: Optional[str] = None) -> str:
         "lead_page_id": lead_page_id,
     }
 
-    # Primary path: store on the lead page (requires `State` rich_text property)
+    # Primary path: store on the lead page (auto-provisions State property if missing)
     if lead_page_id:
+        _ensure_state_property(_leads_db())
         try:
             n = _client()
             n.pages.update(
@@ -157,7 +184,7 @@ def create_session(context: str, lead_page_id: Optional[str] = None) -> str:
             )
             return session_id
         except Exception as e:
-            raise RuntimeError(f"Failed to write session to lead page (does the Leads DB have a 'State' rich_text property?): {e}") from e
+            raise RuntimeError(f"Failed to write session to lead page: {e}") from e
 
     # Fallback: create page in Sessions DB
     if not os.environ.get("NOTION_DATABASE_ID"):
