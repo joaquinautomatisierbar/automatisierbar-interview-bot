@@ -27,11 +27,6 @@ ALLOWED_STAGES = {
 }
 
 
-def _client():
-    from notion_client import Client
-    return Client(auth=os.environ["NOTION_API_KEY"])
-
-
 def _notion_headers() -> dict:
     return {
         "Authorization": f"Bearer {os.environ['NOTION_API_KEY']}",
@@ -66,6 +61,39 @@ def _ensure_state_property(database_id: str) -> None:
         _state_prop_ensured[database_id] = True
     except Exception as e:
         print(f"[notion] _ensure_state_property failed: {e}")
+
+
+def _update_page(page_id: str, properties: dict) -> dict:
+    r = requests.patch(
+        f"https://api.notion.com/v1/pages/{page_id}",
+        headers=_notion_headers(),
+        json={"properties": properties},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def _create_page(database_id: str, properties: dict) -> dict:
+    r = requests.post(
+        "https://api.notion.com/v1/pages",
+        headers=_notion_headers(),
+        json={"parent": {"database_id": database_id}, "properties": properties},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def _append_blocks(block_id: str, children: list) -> dict:
+    r = requests.patch(
+        f"https://api.notion.com/v1/blocks/{block_id}/children",
+        headers=_notion_headers(),
+        json={"children": children},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
 
 
 def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100,
@@ -127,8 +155,8 @@ def _rt(text: str) -> list:
 
 def _find_page(session_id: str):
     """Find a session by Session ID. Looks in Leads DB first (primary store).
-    Falls back to Sessions DB if NOTION_DATABASE_ID is set (lead-less sessions)."""
-    # Primary: Leads DB
+    Falls back to Sessions DB if NOTION_DATABASE_ID is set (lead-less sessions).
+    Returns (page_dict_or_None, None) — second tuple slot kept for legacy callsites."""
     try:
         r = _query_db(
             _leads_db(),
@@ -136,11 +164,10 @@ def _find_page(session_id: str):
             page_size=1,
         )
         if r.get("results"):
-            return r["results"][0], _client()
+            return r["results"][0], None
     except Exception as e:
         print(f"[notion] _find_page leads lookup failed: {e}")
 
-    # Fallback: Sessions DB
     if os.environ.get("NOTION_DATABASE_ID"):
         try:
             r = _query_db(
@@ -149,7 +176,7 @@ def _find_page(session_id: str):
                 page_size=1,
             )
             if r.get("results"):
-                return r["results"][0], _client()
+                return r["results"][0], None
         except Exception as e:
             print(f"[notion] _find_page sessions lookup failed: {e}")
 
@@ -177,14 +204,10 @@ def create_session(context: str, lead_page_id: Optional[str] = None) -> str:
     if lead_page_id:
         _ensure_state_property(_leads_db())
         try:
-            n = _client()
-            n.pages.update(
-                page_id=lead_page_id,
-                properties={
-                    "Session ID": {"rich_text": [{"text": {"content": session_id}}]},
-                    "State": {"rich_text": _pack(state)},
-                },
-            )
+            _update_page(lead_page_id, {
+                "Session ID": {"rich_text": [{"text": {"content": session_id}}]},
+                "State": {"rich_text": _pack(state)},
+            })
             return session_id
         except Exception as e:
             raise RuntimeError(f"Failed to write session to lead page: {e}") from e
@@ -193,16 +216,12 @@ def create_session(context: str, lead_page_id: Optional[str] = None) -> str:
     if not os.environ.get("NOTION_DATABASE_ID"):
         raise RuntimeError("Cannot create lead-less session: NOTION_DATABASE_ID env var not set")
     try:
-        n = _client()
-        n.pages.create(
-            parent={"database_id": _db()},
-            properties={
-                "Name": {"title": [{"text": {"content": f"Interview {session_id[:8]}"}}]},
-                "Session ID": {"rich_text": [{"text": {"content": session_id}}]},
-                "Status": {"select": {"name": "active"}},
-                "State": {"rich_text": _pack(state)},
-            },
-        )
+        _create_page(_db(), {
+            "Name": {"title": [{"text": {"content": f"Interview {session_id[:8]}"}}]},
+            "Session ID": {"rich_text": [{"text": {"content": session_id}}]},
+            "Status": {"select": {"name": "active"}},
+            "State": {"rich_text": _pack(state)},
+        })
         return session_id
     except Exception as e:
         raise RuntimeError(f"Failed to create session in Sessions DB: {e}") from e
@@ -216,8 +235,8 @@ def get_session(session_id: str) -> Optional[dict]:
 
 
 def update_session(session_id: str, updates: dict) -> None:
-    page, n = _find_page(session_id)
-    if not page or not n:
+    page, _ = _find_page(session_id)
+    if not page:
         return
     state = _unpack(page["properties"].get("State", {}).get("rich_text", [])) or {}
     state.update(updates)
@@ -228,9 +247,9 @@ def update_session(session_id: str, updates: dict) -> None:
         props_update["Status"] = {"select": {"name": state.get("status", "active")}}
 
     try:
-        n.pages.update(page_id=page["id"], properties=props_update)
+        _update_page(page["id"], props_update)
     except Exception as e:
-        print(f"[notion] update_session failed: {e}")
+        raise RuntimeError(f"Failed to persist session state to Notion: {e}") from e
 
 
 def available() -> bool:
@@ -353,7 +372,6 @@ def write_qa_to_page(lead_page_id: str, round_num: int, qa_list: list) -> None:
     if not available() or not lead_page_id:
         return
     try:
-        n = _client()
         blocks = [
             {
                 "object": "block",
@@ -373,7 +391,7 @@ def write_qa_to_page(lead_page_id: str, round_num: int, qa_list: list) -> None:
                 "paragraph": {"rich_text": _rt(f"💬 {a}")},
             })
             blocks.append({"object": "block", "type": "divider", "divider": {}})
-        n.blocks.children.append(block_id=lead_page_id, children=blocks)
+        _append_blocks(lead_page_id, blocks)
     except Exception as e:
         print(f"[notion] write_qa_to_page failed: {e}")
 
@@ -382,7 +400,6 @@ def write_roi_to_page(lead_page_id: str, roi: dict, assumptions: list) -> None:
     if not available() or not lead_page_id:
         return
     try:
-        n = _client()
         lines = [
             f"Prozess: {roi.get('process', '')}",
             f"Jetzt: {roi.get('hours_per_week_now', '')} Std/Woche  →  {roi.get('minutes_per_week_after', '')} Min/Woche",
@@ -404,6 +421,6 @@ def write_roi_to_page(lead_page_id: str, roi: dict, assumptions: list) -> None:
                     "object": "block", "type": "bulleted_list_item",
                     "bulleted_list_item": {"rich_text": _rt(a)},
                 })
-        n.blocks.children.append(block_id=lead_page_id, children=blocks)
+        _append_blocks(lead_page_id, blocks)
     except Exception as e:
         print(f"[notion] write_roi_to_page failed: {e}")

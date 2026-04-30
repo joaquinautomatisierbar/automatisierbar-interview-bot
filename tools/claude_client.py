@@ -7,8 +7,8 @@ from typing import Any
 
 import anthropic
 
-MODEL = "claude-opus-4-7"
-MODEL_FAST = "claude-sonnet-4-6"  # for prompt generation — under 30s gunicorn timeout
+MODEL = "claude-opus-4-7"       # reserved (not currently used at runtime — Render's 30s gunicorn timeout would kill it)
+MODEL_FAST = "claude-sonnet-4-6"  # used for all interactive endpoints (round eval, prompt, spec)
 
 # ---------------------------------------------------------------------------
 # System prompts (cached)
@@ -136,7 +136,7 @@ def _format_qa(all_qa: list) -> str:
 def evaluate_context(context: str) -> dict[str, Any]:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = client.messages.create(
-        model=MODEL,
+        model=MODEL_FAST,
         max_tokens=2000,
         system=[{
             "type": "text",
@@ -159,7 +159,7 @@ def evaluate_answers(context: str, all_qa: list) -> dict[str, Any]:
         f"BISHER GESAMMELTE ANTWORTEN:\n{qa_text}"
     )
     message = client.messages.create(
-        model=MODEL,
+        model=MODEL_FAST,
         max_tokens=2000,
         system=[{
             "type": "text",
@@ -175,7 +175,7 @@ def generate_spec_summary(context: str, all_qa: list) -> str:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     qa_text = _format_qa(all_qa)
     message = client.messages.create(
-        model=MODEL,
+        model=MODEL_FAST,
         max_tokens=3000,
         messages=[{
             "role": "user",
