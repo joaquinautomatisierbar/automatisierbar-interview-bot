@@ -146,6 +146,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   outline: none; border-color: var(--green);
   box-shadow: 0 0 0 3px rgba(21,200,122,0.12);
 }
+.input-field.error { border-color: #EF4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
 
 /* ── Chip/pill ── */
 .chip {
@@ -764,8 +765,16 @@ const App = {
   },
   closeModal() { document.getElementById("sessions-modal").classList.remove("open"); },
   loadSessionFromModal() {
-    const sid = document.getElementById("session-id-input").value.trim();
-    if (!sid) return;
+    const input = document.getElementById("session-id-input");
+    const sid = input.value.trim();
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!sid || !uuidRe.test(sid)) {
+      input.classList.add("error");
+      input.focus();
+      this.showToast("Ungültige Session-ID — bitte UUID prüfen.");
+      return;
+    }
+    input.classList.remove("error");
     this.closeModal();
     this.resumeSession(sid);
   },
@@ -778,13 +787,17 @@ const App = {
   },
 
   async fetchLeads(q) {
+    if (this._acAbort) this._acAbort.abort();
+    this._acAbort = new AbortController();
     try {
-      const r = await fetch(`/api/leads/search?q=${encodeURIComponent(q)}`);
+      const r = await fetch(`/api/leads/search?q=${encodeURIComponent(q)}`, {signal: this._acAbort.signal});
       const leads = await r.json();
       this._acItems = leads;
       this._acIndex = -1;
       this.renderAC(leads);
-    } catch { this.closeAC(); }
+    } catch (e) {
+      if (e.name !== "AbortError") this.closeAC();
+    }
   },
 
   renderAC(leads) {

@@ -52,6 +52,7 @@ def _ensure_state_property(database_id: str) -> None:
         r = requests.get(
             f"https://api.notion.com/v1/databases/{database_id}",
             headers=_notion_headers(),
+            timeout=10,
         )
         r.raise_for_status()
         if "State" not in r.json().get("properties", {}):
@@ -59,6 +60,7 @@ def _ensure_state_property(database_id: str) -> None:
                 f"https://api.notion.com/v1/databases/{database_id}",
                 headers=_notion_headers(),
                 json={"properties": {"State": {"rich_text": {}}}},
+                timeout=10,
             )
             patch.raise_for_status()
         _state_prop_ensured[database_id] = True
@@ -77,6 +79,7 @@ def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100,
         f"https://api.notion.com/v1/databases/{database_id}/query",
         headers=_notion_headers(),
         json=body,
+        timeout=15,
     )
     r.raise_for_status()
     return r.json()
@@ -282,6 +285,7 @@ def get_lead_by_page_id(page_id: str) -> Optional[dict]:
         r = requests.get(
             f"https://api.notion.com/v1/pages/{page_id}",
             headers=_notion_headers(),
+            timeout=10,
         )
         r.raise_for_status()
         return _extract_lead(r.json())

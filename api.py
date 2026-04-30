@@ -23,6 +23,7 @@ Auth for /generate-pdf and all /api/linkedin/*: X-API-Key header (PDF_API_KEY en
 import io
 import os
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -33,6 +34,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "tools"))
 app = Flask(__name__, static_folder="static")
 
 PDF_API_KEY = os.environ.get("PDF_API_KEY", "")
+
+MAX_CONTEXT_CHARS = 8000  # Notion rich_text safe upper bound for State JSON
+MAX_ANSWER_CHARS = 4000   # per-answer cap; 8 answers × 4000 = 32k headroom
+SESSION_ID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+def _valid_session_id(sid: str) -> bool:
+    return bool(sid and SESSION_ID_RE.match(sid))
 
 
 def _auth_ok() -> bool:
@@ -91,80 +100,6 @@ def index():
 # ---------------------------------------------------------------------------
 # Leads search
 # ---------------------------------------------------------------------------
-# Temporary debug endpoint — remove after diagnosing autocomplete issue
-# ---------------------------------------------------------------------------
-
-@app.route("/api/setup/add-state-property", methods=["GET"])
-def setup_add_state_property():
-    """One-time setup: adds a `State` rich_text property to the Leads DB.
-    Idempotent — if the property exists, returns early."""
-    try:
-        import requests as _req
-        from notion_session import _leads_db, _notion_headers
-        db_id = _leads_db()
-        headers = _notion_headers()
-
-        # Check existing schema first
-        r = _req.get(f"https://api.notion.com/v1/databases/{db_id}", headers=headers)
-        r.raise_for_status()
-        schema = r.json()
-        existing_props = list(schema.get("properties", {}).keys())
-        if "State" in existing_props:
-            return jsonify({"status": "already exists", "properties": existing_props})
-
-        # Add the State property
-        patch = _req.patch(
-            f"https://api.notion.com/v1/databases/{db_id}",
-            headers=headers,
-            json={"properties": {"State": {"rich_text": {}}}},
-        )
-        patch.raise_for_status()
-        return jsonify({"status": "added", "db_id": db_id, "properties": list(patch.json().get("properties", {}).keys())})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/debug/session/<session_id>", methods=["GET"])
-def debug_session(session_id):
-    try:
-        from notion_session import _query_db, _db
-        sessions_db = _db()
-        r = _query_db(
-            sessions_db,
-            filter_body={"property": "Session ID", "rich_text": {"equals": session_id}},
-            page_size=5,
-        )
-        results = r.get("results", [])
-        out = {"sessions_db": sessions_db, "matches": len(results), "ids": [p["id"] for p in results]}
-        if not results:
-            sample = _query_db(sessions_db, page_size=3)
-            out["sample_props"] = [list(p.get("properties", {}).keys()) for p in sample.get("results", [])]
-            out["sample_session_ids"] = []
-            for p in sample.get("results", []):
-                rt = p.get("properties", {}).get("Session ID", {}).get("rich_text", [])
-                out["sample_session_ids"].append(rt[0]["plain_text"] if rt else "(empty)")
-        return jsonify(out)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/debug/leads", methods=["GET"])
-def debug_leads():
-    try:
-        from notion_session import _query_db, _leads_db, _extract_lead
-        db_id = _leads_db()
-        r = _query_db(db_id, page_size=5)
-        pages = r.get("results", [])
-        out = []
-        for p in pages:
-            try:
-                lead = _extract_lead(p)
-                out.append({"ok": True, "lead": lead})
-            except Exception as e:
-                out.append({"ok": False, "error": str(e), "props": list(p.get("properties", {}).keys())})
-        return jsonify({"db_id": db_id, "total": len(pages), "pages": out})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 # ---------------------------------------------------------------------------
 
@@ -192,6 +127,8 @@ def start_session():
     context = (data.get("context") or "").strip()
     if not context:
         return jsonify({"error": "context required"}), 400
+    if len(context) > MAX_CONTEXT_CHARS:
+        return jsonify({"error": f"context too long (max {MAX_CONTEXT_CHARS} chars)"}), 400
 
     lead_page_id = (data.get("lead_page_id") or "").strip() or None
 
@@ -225,6 +162,8 @@ def start_session():
 
 @app.route("/api/session/<session_id>", methods=["GET"])
 def get_session(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
     try:
         from notion_session import get_session as _get, available as notion_available
         if not notion_available():
@@ -243,9 +182,19 @@ def get_session(session_id):
 
 @app.route("/api/session/<session_id>/answers", methods=["POST"])
 def submit_answers(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
     data = request.get_json(silent=True) or {}
     round_num = data.get("round", 1)
     answers = data.get("answers", [])
+
+    if not isinstance(answers, list) or len(answers) > 20:
+        return jsonify({"error": "answers must be a list of ≤20 items"}), 400
+    for a in answers:
+        if not isinstance(a, dict):
+            return jsonify({"error": "each answer must be an object"}), 400
+        if len(str(a.get("answer", ""))) > MAX_ANSWER_CHARS:
+            return jsonify({"error": f"answer too long (max {MAX_ANSWER_CHARS} chars)"}), 400
 
     if not answers:
         return jsonify({"error": "answers required"}), 400
@@ -324,6 +273,8 @@ def submit_answers(session_id):
 
 @app.route("/api/session/<session_id>/pdf", methods=["GET"])
 def session_pdf(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
     try:
         from claude_client import generate_spec_summary
         from notion_session import get_session as _get, available as notion_available
@@ -376,6 +327,8 @@ def session_pdf(session_id):
 
 @app.route("/api/session/<session_id>/prompt", methods=["GET"])
 def session_prompt(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
     try:
         from claude_client import generate_claude_code_prompt
         from notion_session import get_session as _get, available as notion_available
