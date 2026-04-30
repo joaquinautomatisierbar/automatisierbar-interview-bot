@@ -3,7 +3,7 @@ services:
     name: automatisierbar-pdf-api
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn api:app
+    startCommand: gunicorn api:app --timeout 120
     envVars:
       - key: PDF_API_KEY
         generateValue: true
