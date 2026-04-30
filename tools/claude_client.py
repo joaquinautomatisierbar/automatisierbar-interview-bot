@@ -8,6 +8,7 @@ from typing import Any
 import anthropic
 
 MODEL = "claude-opus-4-7"
+MODEL_FAST = "claude-sonnet-4-6"  # for prompt generation — under 30s gunicorn timeout
 
 # ---------------------------------------------------------------------------
 # System prompts (cached)
@@ -225,8 +226,8 @@ def generate_claude_code_prompt(
         )
 
     message = client.messages.create(
-        model=MODEL,
-        max_tokens=3000,
+        model=MODEL_FAST,
+        max_tokens=2500,
         messages=[{
             "role": "user",
             "content": (
