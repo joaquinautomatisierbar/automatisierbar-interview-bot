@@ -274,6 +274,22 @@ def _extract_lead(page: dict) -> dict:
     }
 
 
+def get_lead_by_page_id(page_id: str) -> Optional[dict]:
+    """Fetch a single lead page by ID and extract its fields. Reuses _extract_lead."""
+    if not available() or not page_id:
+        return None
+    try:
+        r = requests.get(
+            f"https://api.notion.com/v1/pages/{page_id}",
+            headers=_notion_headers(),
+        )
+        r.raise_for_status()
+        return _extract_lead(r.json())
+    except Exception as e:
+        print(f"[notion] get_lead_by_page_id failed: {e}")
+        return None
+
+
 def _active_stage_filter() -> dict:
     """OR-filter matching Pipeline Stage against ALLOWED_STAGES, trying both
     `status` and `select` property types since we don't know which the DB uses."""

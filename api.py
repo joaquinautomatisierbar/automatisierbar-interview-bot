@@ -393,15 +393,13 @@ def session_prompt(session_id):
                 roi = state.get("roi", {}) or {}
                 lead_page_id = state.get("lead_page_id")
 
-        # Get lead info if linked
         lead_info = None
         if lead_page_id:
             try:
-                from notion_session import search_leads
-                # We don't have a get_lead by page_id directly; pass None
-                pass
-            except Exception:
-                pass
+                from notion_session import get_lead_by_page_id
+                lead_info = get_lead_by_page_id(lead_page_id)
+            except Exception as e:
+                app.logger.error("get_lead_by_page_id failed: %s", e)
 
         prompt_text = generate_claude_code_prompt(context, all_qa, roi, lead_info)
         return jsonify({"prompt": prompt_text})

@@ -205,10 +205,12 @@ def generate_claude_code_prompt(
     lead_section = ""
     if lead_info:
         parts = []
-        if lead_info.get("name"):   parts.append(f"Contact: {lead_info['name']}")
-        if lead_info.get("firma"):  parts.append(f"Company: {lead_info['firma']}")
-        if lead_info.get("branche"): parts.append(f"Industry: {lead_info['branche']}")
-        if lead_info.get("groesse"): parts.append(f"Size: {lead_info['groesse']}")
+        if lead_info.get("name"):            parts.append(f"Contact: {lead_info['name']}")
+        if lead_info.get("firma"):           parts.append(f"Company: {lead_info['firma']}")
+        if lead_info.get("branche"):         parts.append(f"Industry: {lead_info['branche']}")
+        if lead_info.get("groesse"):         parts.append(f"Size: {lead_info['groesse']}")
+        if lead_info.get("problem_cluster"): parts.append(f"Problem cluster: {lead_info['problem_cluster']}")
+        if lead_info.get("top_problem"):     parts.append(f"Top problem (from CRM): {lead_info['top_problem']}")
         lead_section = "\n".join(parts)
 
     roi_section = ""
@@ -228,24 +230,38 @@ def generate_claude_code_prompt(
         messages=[{
             "role": "user",
             "content": (
-                "Based on the following automation requirements, write a complete Claude Code prompt "
-                "that a developer can paste directly to start building the n8n workflow.\n\n"
-                "Write in English. Structure the prompt with these exact sections:\n"
-                "# Automation Build Spec — [Process Name]\n"
-                "## Client Context\n## Goal\n## Trigger\n## Services & Auth\n"
-                "## Input Data Schema (with example field values)\n"
-                "## Business Logic (with concrete thresholds and rules)\n"
-                "## Output & Actions\n## Error Handling\n## Volume & Timing\n"
-                "## MVP Assumptions\n## Build Instructions\n\n"
-                "End with this exact line:\n"
-                "'Build this as an n8n workflow. Start with a working MVP. "
-                "Flag any credentials or config the client needs to provide.'\n\n"
-                f"CLIENT INFO:\n{lead_section}\n\n"
-                f"ORIGINAL CONTEXT:\n{context}\n\n"
-                f"COLLECTED Q&A:\n{qa_text}\n\n"
-                f"ROI ESTIMATE:\n{roi_section}\n\n"
-                "Be concrete and specific — no vague descriptions. "
-                "A developer must be able to build this without asking any further questions."
+                "You are writing a Claude Code prompt that a developer will paste into Claude Code. "
+                "Claude Code will then build the n8n workflow end-to-end without asking the developer any questions.\n\n"
+                "Write in English. Use ONLY the data provided below. Use exact tool names, field names, "
+                "thresholds, and Tagesangaben from the Q&A — never abstract them.\n\n"
+                "STRUCTURE — exactly these sections:\n"
+                "# Automation Build Spec — <ConcreteProcessName>\n"
+                "## Client\n  one paragraph: company, industry, size, the problem this solves\n"
+                "## Goal\n  one sentence with measurable outcome (e.g. 'Cut Mahnungsversand from 3h/week to 15min/week')\n"
+                "## Trigger\n  exact n8n trigger node + config (e.g. 'Schedule Trigger, daily 08:00 Europe/Zurich')\n"
+                "## Services & Auth\n  list every external service: n8n node name → credential type → required scopes\n"
+                "## Input Data Schema\n  JSON example with the user's actual field names and example values\n"
+                "## Business Logic\n  numbered IF/THEN rules with concrete thresholds from the Q&A\n"
+                "## Output & Actions\n  for each output: target system, payload mapping, recipient\n"
+                "## Error Handling\n  retry policy + failure notification target (concrete addresses/channels)\n"
+                "## Volume & Timing\n  records/day from Q&A, peak burst, latency tolerance\n"
+                "## MVP Assumptions\n  list every assumption explicitly. If a fact wasn't in the Q&A, "
+                "PICK A SENSIBLE DEFAULT and label it '(MVP default — confirm with client)'.\n"
+                "## Build Instructions\n  numbered steps a developer follows: 1) Create credential X, 2) Add node Y with config Z, "
+                "3) Wire to node W, ... End with a test plan: 3 sample payloads (happy path, edge case, failure).\n\n"
+                "HARD RULES:\n"
+                "- NEVER write 'To be defined', 'TBD', 'not specified', 'request from client', or any placeholder. "
+                "  If data is missing, pick a concrete MVP default (Gmail OAuth2, Google Sheets, daily 08:00, "
+                "  retry 3× exponential backoff, notify the contact's email) and mark '(MVP default — confirm with client)'.\n"
+                "- Use exact n8n node names: 'Schedule Trigger', 'HTTP Request', 'Gmail', 'Google Sheets', 'IF', 'Set', etc.\n"
+                "- Reference the user's actual field names from the Q&A (e.g. 'Rechnungsnummer', 'Fälligkeitsdatum'), not generic 'field_1'.\n"
+                "- Max ~200 lines total. Be tight, not verbose.\n\n"
+                "End with this exact line (and nothing after it):\n"
+                "'Build this as an n8n workflow. Start with a working MVP. Flag any credentials or config the client needs to provide.'\n\n"
+                f"=== CLIENT INFO ===\n{lead_section or '(no lead linked — use generic placeholder values from MVP defaults)'}\n\n"
+                f"=== ORIGINAL CONTEXT ===\n{context}\n\n"
+                f"=== COLLECTED Q&A ===\n{qa_text}\n\n"
+                f"=== ROI ESTIMATE ===\n{roi_section or '(not yet calculated)'}"
             ),
         }],
     )
