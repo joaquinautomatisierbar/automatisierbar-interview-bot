@@ -490,6 +490,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .prompt-body.open { display: block; }
 .prompt-loading { padding: 20px; text-align: center; font-size: 13px; color: var(--text-muted); }
+.prompt-loading:not(.error)::after {
+  content: ""; display: inline-block; width: 1em;
+  text-align: left;
+  animation: dots 1.4s steps(4, end) infinite;
+}
+.prompt-loading.error { color: #EF4444; }
+@keyframes dots { 0%,20% { content: ""; } 40% { content: "·"; } 60% { content: "··"; } 80%,100% { content: "···"; } }
 .prompt-text {
   padding: 18px 20px;
   font-size: 12.5px; font-family: 'Courier New', monospace;
@@ -717,7 +724,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
         <span class="prompt-toggle-icon">▼</span>
       </button>
       <div class="prompt-body" id="prompt-body">
-        <div class="prompt-loading" id="prompt-loading">Generating prompt…</div>
+        <div class="prompt-loading" id="prompt-loading">Generiere Prompt</div>
         <pre class="prompt-text" id="prompt-text" style="display:none"></pre>
         <div class="prompt-copy" id="prompt-copy" style="display:none">
           <button class="btn btn-outline-violet" onclick="App.copyPrompt()" style="font-size:12px;padding:7px 14px;min-height:32px;">Copy prompt</button>
@@ -1041,7 +1048,8 @@ const App = {
     if (isOpen && !this.promptText) {
       // Reset loading text in case of prior error
       const ld = document.getElementById("prompt-loading");
-      ld.textContent = "Generiere Prompt…";
+      ld.classList.remove("error");
+      ld.textContent = "Generiere Prompt";
       ld.style.display = "block";
       this.loadPrompt();
     }
@@ -1061,7 +1069,9 @@ const App = {
       pre.style.display = "block";
       document.getElementById("prompt-copy").style.display = "flex";
     } catch (e) {
-      document.getElementById("prompt-loading").textContent = `Fehler beim Laden: ${e.message}`;
+      const ld = document.getElementById("prompt-loading");
+      ld.classList.add("error");
+      ld.textContent = `Fehler beim Laden: ${e.message}`;
     }
   },
 
