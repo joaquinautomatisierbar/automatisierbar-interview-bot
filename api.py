@@ -45,8 +45,12 @@ def _valid_session_id(sid: str) -> bool:
 
 
 def _auth_ok() -> bool:
+    """Fail-closed: if PDF_API_KEY isn't configured, deny all auth-required routes
+    (was previously fail-open, exposing /generate-pdf and /api/linkedin/* to the
+    public internet whenever the env var was unset)."""
     if not PDF_API_KEY:
-        return True
+        app.logger.warning("PDF_API_KEY not set — auth-required routes refused")
+        return False
     return request.headers.get("X-API-Key") == PDF_API_KEY
 
 
