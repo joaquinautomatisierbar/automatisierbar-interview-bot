@@ -1038,21 +1038,30 @@ const App = {
     const body = document.getElementById("prompt-body");
     const isOpen = body.classList.toggle("open");
     btn.classList.toggle("open", isOpen);
-    if (isOpen && !this.promptText) this.loadPrompt();
+    if (isOpen && !this.promptText) {
+      // Reset loading text in case of prior error
+      const ld = document.getElementById("prompt-loading");
+      ld.textContent = "Generiere Prompt…";
+      ld.style.display = "block";
+      this.loadPrompt();
+    }
   },
 
   async loadPrompt() {
     try {
       const r = await fetch(`/api/session/${this.sessionId}/prompt`);
-      const d = await r.json();
-      this.promptText = d.prompt || "";
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.prompt) {
+        throw new Error(d.error || `Fehler ${r.status}`);
+      }
+      this.promptText = d.prompt;
       document.getElementById("prompt-loading").style.display = "none";
       const pre = document.getElementById("prompt-text");
       pre.textContent = this.promptText;
       pre.style.display = "block";
       document.getElementById("prompt-copy").style.display = "flex";
-    } catch {
-      document.getElementById("prompt-loading").textContent = "Fehler beim Laden.";
+    } catch (e) {
+      document.getElementById("prompt-loading").textContent = `Fehler beim Laden: ${e.message}`;
     }
   },
 
@@ -1079,7 +1088,7 @@ const App = {
       this.currentRound = s.round || 1;
       this.allQA        = s.all_qa || [];
       this.leadPageId   = s.lead_page_id || null;
-      if (s.status === "complete" && s.roi) this.showROI(s.roi, []);
+      if (s.status === "complete" && s.roi) this.showROI(s.roi, s.assumptions || []);
       else if (s.current_questions?.length) this.showQuestions(s.current_questions, this.currentRound, "needs_technical_detail");
       else this.showScreen("screen-context");
     } catch { this.showScreen("screen-context"); }
