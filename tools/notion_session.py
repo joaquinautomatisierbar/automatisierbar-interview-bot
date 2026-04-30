@@ -139,10 +139,21 @@ def _db() -> str:
     return os.environ["NOTION_DATABASE_ID"]
 
 
+_NOTION_RT_MAX_SEGMENTS = 100  # Notion API limit per rich_text property
+
+
 def _pack(state: dict) -> list:
     s = json.dumps(state, ensure_ascii=False)
-    return [{"type": "text", "text": {"content": s[i:i + CHUNK]}}
-            for i in range(0, len(s), CHUNK)]
+    segments = [{"type": "text", "text": {"content": s[i:i + CHUNK]}}
+                for i in range(0, len(s), CHUNK)]
+    if len(segments) > _NOTION_RT_MAX_SEGMENTS:
+        # Should be unreachable with current input limits (8k context + 20 × 4k answers
+        # over ~5 rounds ≈ 60-80kB << 100 × 1999 = ~200kB). Surface a clear error if hit.
+        raise RuntimeError(
+            f"Session state too large for Notion rich_text ({len(segments)} segments, "
+            f"max {_NOTION_RT_MAX_SEGMENTS}). Trim earlier rounds or shorten answers."
+        )
+    return segments
 
 
 def _unpack(rich_text: list) -> Optional[dict]:

@@ -198,6 +198,8 @@ def submit_answers(session_id):
 
     if not answers:
         return jsonify({"error": "answers required"}), 400
+    if not any(str(a.get("answer", "")).strip() for a in answers):
+        return jsonify({"error": "at least one non-empty answer required"}), 400
 
     try:
         from claude_client import evaluate_answers
