@@ -570,12 +570,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
       <div class="context-subtitle">Beschreibe den Klienten und seine Situation — Claude generiert einen massgeschneiderten Fragebogen.</div>
 
       <div class="field-group">
-        <label class="field-label">Klient suchen</label>
-        <div class="autocomplete-wrap">
+        <label class="field-label" for="client-search">Klient suchen</label>
+        <div class="autocomplete-wrap" role="combobox" aria-haspopup="listbox" aria-expanded="false">
           <input type="text" id="client-search" class="input-field" placeholder="Name eingeben…" autocomplete="off"
+            aria-autocomplete="list" aria-controls="ac-dropdown"
             oninput="App.onClientSearch(this.value)"
             onkeydown="App.onClientKey(event)">
-          <div class="autocomplete-dropdown" id="ac-dropdown"></div>
+          <div class="autocomplete-dropdown" id="ac-dropdown" role="listbox" aria-label="Suchergebnisse"></div>
         </div>
       </div>
 
@@ -808,9 +809,9 @@ const App = {
 
   renderAC(leads) {
     const dd = document.getElementById("ac-dropdown");
-    if (!leads.length) { dd.classList.remove("open"); return; }
+    if (!leads.length) { this.closeAC(); return; }
     dd.innerHTML = leads.map((l, i) => `
-      <div class="ac-item" data-i="${i}" onclick="App.selectLead(${i})">
+      <div class="ac-item" role="option" data-i="${i}" onclick="App.selectLead(${i})">
         <div>
           <div class="ac-item-name">${this.esc(l.name)}${l.firma ? ` · ${this.esc(l.firma)}` : ""}</div>
           <div class="ac-item-meta">${this.esc(l.branche || "")}${l.groesse ? ` · ${this.esc(l.groesse)}` : ""}</div>
@@ -818,6 +819,7 @@ const App = {
         <span class="ac-stage">${this.esc(l.pipeline_stage || "")}</span>
       </div>`).join("");
     dd.classList.add("open");
+    document.querySelector(".autocomplete-wrap")?.setAttribute("aria-expanded", "true");
   },
 
   onClientKey(e) {
@@ -858,6 +860,7 @@ const App = {
 
   closeAC() {
     document.getElementById("ac-dropdown").classList.remove("open");
+    document.querySelector(".autocomplete-wrap")?.setAttribute("aria-expanded", "false");
   },
 
   // ── Start ──────────────────────────────────────────────────────

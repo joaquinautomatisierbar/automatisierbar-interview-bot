@@ -1,9 +1,16 @@
 """notion_session.py — Notion session persistence + lead lookup for automatisierbar survey.
 
-Renamed from notion_client.py to avoid shadowing the `notion-client` pip package.
+All Notion calls go through the REST API directly via `requests` (the
+notion-client SDK shipped on Render is missing methods we need).
 
-Sessions database: NOTION_DATABASE_ID env var (separate sessions DB)
-Leads database:    31cbebb0-c2f9-8075-b996-000b1747664a (Interview Datenbank)
+Session storage:
+- Primary: state lives on the lead's page in the Leads DB (uses `State` rich_text
+  property, auto-provisioned on first write). Session ID is also written to
+  the lead's `Session ID` property for resume.
+- Fallback: NOTION_DATABASE_ID points at a separate Sessions DB used only for
+  lead-less sessions; can be omitted if every interview starts from a lead.
+
+Leads DB ID: NOTION_LEADS_DB_ID env var, falls back to hardcoded fallback below.
 """
 
 import json
