@@ -252,6 +252,26 @@ def submit_answers(session_id):
 
         else:
             next_questions = result.get("questions", [])
+            # Guard: if Claude returns needs_more but no questions, treat as complete
+            # to avoid trapping the user in a no-op round.
+            if not next_questions:
+                fallback_roi = result.get("roi") or {}
+                fallback_assumptions = result.get("assumptions", [])
+                if notion_available():
+                    update_session(session_id, {
+                        "status": "complete",
+                        "all_qa": all_qa,
+                        "current_questions": [],
+                        "roi": fallback_roi,
+                        "assumptions": fallback_assumptions,
+                    })
+                if lead_page_id:
+                    write_roi_to_page(lead_page_id, fallback_roi, fallback_assumptions)
+                return jsonify({
+                    "status": "complete",
+                    "assumptions": fallback_assumptions,
+                    "roi": fallback_roi,
+                })
             next_round = round_num + 1
             if notion_available():
                 update_session(session_id, {

@@ -756,6 +756,12 @@ const App = {
     document.addEventListener("click", e => {
       if (!e.target.closest(".autocomplete-wrap")) this.closeAC();
     });
+    // Handle browser back/forward — re-resolve from URL state
+    window.addEventListener("popstate", () => {
+      const newSid = new URLSearchParams(location.search).get("s");
+      if (newSid && newSid !== this.sessionId) this.resumeSession(newSid);
+      else if (!newSid) this.restart();
+    });
   },
 
   // ── Modal ──────────────────────────────────────────────────────
@@ -962,7 +968,7 @@ const App = {
       let inputHtml;
       if (q.type === "choice" && q.options?.length) {
         inputHtml = `<div class="choice-options">${q.options.map(opt =>
-          `<label class="choice-label"><input type="radio" name="${q.id}" value="${this.esc(opt)}"${saved===opt?" checked":""}><span>${this.esc(opt)}</span></label>`
+          `<label class="choice-label"><input type="radio" name="${q.id}" value="${this.esc(opt)}"${saved===opt?" checked":""} onchange="App.autoSave(this,'${q.id}',${round}); App.flashSave()"><span>${this.esc(opt)}</span></label>`
         ).join("")}</div>`;
       } else {
         inputHtml = `<textarea class="q-textarea" rows="3" placeholder="Antwort…"
