@@ -20,12 +20,9 @@ Endpoints:
 Auth for /generate-pdf and all /api/linkedin/*: X-API-Key header (PDF_API_KEY env var)
 """
 
-import io
 import os
-import json
 import re
 import sys
-from pathlib import Path
 
 from flask import Flask, request, jsonify, send_file, send_from_directory
 
