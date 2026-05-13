@@ -524,6 +524,194 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 
 .roi-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 
+/* ════════════════════════════════════════════════
+   SCREEN — PROCESS MAP (guided A→Z walkthrough)
+   ════════════════════════════════════════════════ */
+#screen-process-map {
+  background: var(--light-bg);
+  color: var(--light-text);
+}
+.pm-body { max-width: 940px; width: 100%; margin: 0 auto; padding: 36px 24px 80px; }
+.pm-intro h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 6px; }
+.pm-intro p  { font-size: 14px; color: var(--light-muted); line-height: 1.6; margin-bottom: 18px; }
+.pm-table-wrap {
+  background: var(--light-card);
+  border: 1px solid var(--light-border); border-radius: var(--radius);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  overflow: hidden; margin-bottom: 14px;
+}
+.pm-row {
+  display: grid;
+  grid-template-columns: 36px 1.1fr 1.4fr 0.9fr 1.1fr 1.1fr 110px 32px;
+  gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid var(--light-border);
+  align-items: start;
+}
+.pm-row:last-child { border-bottom: none; }
+.pm-row.pm-header {
+  background: rgba(21,200,122,0.05);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--green); text-transform: uppercase;
+  padding: 9px 12px;
+}
+.pm-row .pm-step-num {
+  font-size: 13px; font-weight: 600; color: var(--green-dark);
+  align-self: center; text-align: center;
+}
+.pm-cell input, .pm-cell select, .pm-cell textarea {
+  width: 100%; border: 1px solid rgba(0,0,0,0.08); border-radius: 5px;
+  padding: 6px 8px; font-size: 12.5px; font-family: inherit;
+  background: var(--light-bg); color: var(--light-text);
+  resize: vertical;
+}
+.pm-cell textarea { min-height: 32px; line-height: 1.4; }
+.pm-cell input:focus, .pm-cell select:focus, .pm-cell textarea:focus {
+  outline: none; border-color: var(--green); background: #fff;
+  box-shadow: 0 0 0 2px rgba(21,200,122,0.1);
+}
+.pm-cell .auto-yes  { border-left: 3px solid #22c55e; }
+.pm-cell .auto-partial { border-left: 3px solid #f59e0b; }
+.pm-cell .auto-no   { border-left: 3px solid #ef4444; }
+.pm-row-delete {
+  background: none; border: none; color: var(--light-muted);
+  cursor: pointer; font-size: 16px; line-height: 1; align-self: center;
+  padding: 4px;
+}
+.pm-row-delete:hover { color: #ef4444; }
+
+.pm-add-row {
+  width: 100%; padding: 11px;
+  background: rgba(21,200,122,0.06); border: 1px dashed rgba(21,200,122,0.4);
+  color: var(--green-dark); border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  font-family: inherit; transition: all var(--ease);
+}
+.pm-add-row:hover { background: rgba(21,200,122,0.12); border-color: var(--green); }
+
+.pm-notes {
+  width: 100%; min-height: 60px; margin-top: 14px;
+  border: 1px solid rgba(0,0,0,0.08); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-size: 13px; font-family: inherit;
+  background: var(--light-card); color: var(--light-text); line-height: 1.5;
+  resize: vertical;
+}
+.pm-notes:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px rgba(21,200,122,0.1); }
+
+.pm-actions { margin-top: 22px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* ════════════════════════════════════════════════
+   SIDEBAR — Extras & Dateien (persistent right panel)
+   ════════════════════════════════════════════════ */
+.sidebar {
+  position: fixed; top: 0; right: 0;
+  width: 320px; height: 100vh;
+  background: #11171A; border-left: 1px solid var(--border);
+  padding: 22px 18px;
+  overflow-y: auto;
+  display: none; flex-direction: column; gap: 14px;
+  z-index: 50;
+}
+body.with-sidebar .sidebar { display: flex; }
+body.with-sidebar { padding-right: 320px; }
+.sidebar h4 {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--green); text-transform: uppercase;
+}
+.sidebar .sidebar-hint {
+  font-size: 11.5px; color: var(--text-muted); line-height: 1.5;
+}
+.sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+.sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+.dropzone {
+  border: 1.5px dashed var(--border-green); border-radius: 10px;
+  padding: 18px 14px; text-align: center;
+  transition: background var(--ease), border-color var(--ease);
+  cursor: pointer; background: rgba(21,200,122,0.04);
+}
+.dropzone:hover, .dropzone.drag-over { background: rgba(21,200,122,0.1); border-color: var(--green); }
+.dropzone-icon { font-size: 22px; opacity: 0.8; margin-bottom: 4px; }
+.dropzone-text { font-size: 12px; color: var(--text-muted); }
+.dropzone-text strong { color: var(--text); font-weight: 500; }
+.dropzone-types { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; }
+
+.attachments-list { display: flex; flex-direction: column; gap: 6px; }
+.attachment-item {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 10px;
+  font-size: 12px;
+}
+.attachment-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.attachment-name { font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-size { font-size: 10.5px; color: var(--text-dim); flex-shrink: 0; }
+.attachment-delete {
+  background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px;
+}
+.attachment-delete:hover { color: #ef4444; }
+.attachment-preview {
+  font-size: 10.5px; color: var(--text-muted); margin-top: 4px;
+  font-family: 'Courier New', monospace; line-height: 1.4;
+  max-height: 40px; overflow: hidden;
+}
+.attachment-warn { color: #f59e0b; font-size: 10.5px; margin-top: 3px; }
+
+.sidebar-notes {
+  width: 100%; min-height: 100px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 9px 11px;
+  font-size: 12.5px; font-family: inherit; color: var(--text);
+  resize: vertical; line-height: 1.5;
+}
+.sidebar-notes:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px rgba(21,200,122,0.1); }
+
+.sidebar-status { font-size: 10.5px; color: var(--text-dim); min-height: 14px; }
+
+/* Mobile: sidebar collapses to bottom-sheet drawer toggleable from FAB */
+.sidebar-fab {
+  display: none;
+  position: fixed; right: 16px; bottom: 16px;
+  z-index: 200;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--green); color: #fff; border: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  font-size: 22px; cursor: pointer;
+}
+.sidebar-fab .badge {
+  position: absolute; top: -4px; right: -4px;
+  background: #fff; color: var(--green-dark);
+  border-radius: 12px; min-width: 20px; height: 20px;
+  font-size: 11px; font-weight: 700; padding: 0 6px;
+  display: none; align-items: center; justify-content: center;
+}
+.sidebar-fab .badge.show { display: inline-flex; }
+
+@media (max-width: 900px) {
+  body.with-sidebar { padding-right: 0; }
+  .sidebar {
+    top: auto; bottom: 0; left: 0; right: 0;
+    width: 100%; height: 70vh; max-height: 560px;
+    border-left: none; border-top: 1px solid var(--border);
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 -8px 28px rgba(0,0,0,0.45);
+  }
+  .sidebar.open { transform: translateY(0); }
+  body.with-sidebar .sidebar-fab { display: flex; align-items: center; justify-content: center; }
+}
+
+/* ════════════════════════════════════════════════
+   "Andere…" radio escape on choice questions
+   ════════════════════════════════════════════════ */
+.choice-other-input {
+  margin-top: 8px; width: 100%;
+  border: 1px solid rgba(0,0,0,0.1); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 13px; font-family: inherit;
+  background: var(--light-bg); color: var(--light-text); line-height: 1.5;
+  display: none;
+}
+.choice-other-input.visible { display: block; }
+.choice-other-input:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px rgba(21,200,122,0.1); }
+
 /* ── Responsive ── */
 @media (max-width: 520px) {
   .context-card { padding: 24px 20px; }
@@ -533,6 +721,16 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   .bar-val { font-size: 22px; }
   #screen-roi { padding: 32px 16px; }
   .roi-card { padding: 20px; }
+  .pm-row {
+    grid-template-columns: 28px 1fr 32px;
+    grid-template-rows: auto auto auto auto auto auto;
+    gap: 6px;
+  }
+  .pm-row.pm-header { display: none; }
+  .pm-cell { grid-column: 2; }
+  .pm-cell::before { content: attr(data-label); font-size: 10px; color: var(--light-muted); display: block; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .pm-row .pm-step-num { grid-row: 1; align-self: start; padding-top: 4px; }
+  .pm-row-delete { grid-column: 3; grid-row: 1; align-self: start; }
 }
 </style>
 </head>
@@ -619,6 +817,55 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   <div class="loading-label">
     <span id="loading-text">Analysiere</span>
     <span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
+  </div>
+</div>
+
+<!-- ════ SCREEN 2.5: PROCESS MAP (guided A→Z walkthrough) ════ -->
+<div id="screen-process-map" class="screen">
+  <div class="q-topbar">
+    <div class="q-topbar-logo">
+      <svg width="20" height="20" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="36" height="36" rx="8" fill="#15C87A"/>
+        <polyline points="3,18 8,18 11,12 14,24 17,8 20,28 23,18 33,18"
+          stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span class="q-topbar-logo-text">automatisierbar</span>
+    </div>
+    <div class="q-topbar-right">
+      <div class="q-stage-badge">PROZESS-MAP</div>
+    </div>
+  </div>
+
+  <div class="pm-body">
+    <div class="pm-intro">
+      <h2>Aktueller Prozess — Schritt für Schritt</h2>
+      <p>Beschreibe wie der Prozess heute abläuft, von Anfang bis Ende. Jeder Schritt: <strong>wer</strong> macht <strong>was</strong> mit <strong>welchem Tool</strong>. Je konkreter, desto besser können wir später automatisieren.</p>
+    </div>
+
+    <div class="pm-table-wrap">
+      <div class="pm-row pm-header">
+        <div>#</div>
+        <div>Wer</div>
+        <div>Was passiert</div>
+        <div>Tool</div>
+        <div>Daten rein</div>
+        <div>Daten raus</div>
+        <div>Auto?</div>
+        <div></div>
+      </div>
+      <div id="pm-rows"></div>
+    </div>
+
+    <button class="pm-add-row" id="pm-add-row-btn">+ Schritt hinzufügen</button>
+
+    <textarea class="pm-notes" id="pm-notes" placeholder="Notizen, Sonderfälle, Ausnahmen — alles was die Tabelle nicht abbildet …"></textarea>
+
+    <div class="pm-actions">
+      <button id="pm-submit-btn" class="btn btn-primary">
+        Weiter zu den Fragen <span class="arrow">→</span>
+      </button>
+      <button id="pm-skip-btn" class="btn btn-ghost" style="font-size:13px;">Überspringen</button>
+    </div>
   </div>
 </div>
 
@@ -743,6 +990,37 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   </div>
 </div>
 
+<!-- ════ SIDEBAR: Extras & Dateien (persistent) ════ -->
+<aside class="sidebar" id="sidebar" aria-label="Extras und Dateien">
+  <div>
+    <h4>Extras &amp; Dateien</h4>
+    <p class="sidebar-hint" style="margin-top:6px;">Lade Excel, CSV, PDF oder Screenshots hoch — Claude liest sie und nutzt sie für jede Frage.</p>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Datei hochladen">
+      <div class="dropzone-icon">📎</div>
+      <div class="dropzone-text"><strong>Datei hierhin ziehen</strong> oder klicken</div>
+      <div class="dropzone-types">.xlsx · .csv · .pdf · .png · .jpg · .txt · .md (max 5 MB)</div>
+      <input type="file" id="file-input" hidden accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.txt,.md" multiple>
+    </div>
+    <div class="attachments-list" id="attachments-list"></div>
+    <div class="sidebar-status" id="sidebar-upload-status"></div>
+  </div>
+
+  <hr class="sidebar-divider">
+
+  <div class="sidebar-section">
+    <h4>Notizen</h4>
+    <textarea class="sidebar-notes" id="extras-notes" placeholder="Links, Sonderfälle, Hintergrund — alles was sonst noch wichtig ist."></textarea>
+    <div class="sidebar-status" id="sidebar-notes-status"></div>
+  </div>
+</aside>
+
+<button class="sidebar-fab" id="sidebar-fab" aria-label="Extras öffnen" title="Extras &amp; Dateien">
+  📎<span class="badge" id="sidebar-fab-badge"></span>
+</button>
+
 <script>
 const App = {
   sessionId: null,
@@ -751,9 +1029,17 @@ const App = {
   allQA: [],
   leadPageId: null,
   promptText: null,
+  // Process map + sidebar state
+  processMap: [],
+  processMapNotes: "",
+  attachments: [],
+  attachmentCount: 0,
+  pendingQuestions: null,
+  pendingStatus: null,
   _searchTimer: null,
   _acIndex: -1,
   _acItems: [],
+  _extrasTimer: null,
 
   // ── Init ──────────────────────────────────────────────────────
   async init() {
@@ -770,6 +1056,55 @@ const App = {
       if (newSid && newSid !== this.sessionId) this.resumeSession(newSid);
       else if (!newSid) this.restart();
     });
+
+    // Process-map screen
+    document.getElementById("pm-add-row-btn").addEventListener("click", () => this.addProcessRow());
+    document.getElementById("pm-submit-btn").addEventListener("click", () => this.submitProcessMap(false));
+    document.getElementById("pm-skip-btn").addEventListener("click", () => this.submitProcessMap(true));
+    document.getElementById("pm-rows").addEventListener("click", e => {
+      if (e.target.dataset.action === "delete-row") {
+        const idx = parseInt(e.target.closest(".pm-row").dataset.idx, 10);
+        this.deleteProcessRow(idx);
+      }
+    });
+    document.getElementById("pm-rows").addEventListener("change", e => {
+      if (e.target.dataset?.key === "automatable") {
+        const sel = e.target;
+        sel.className = `auto-${sel.value}`;
+      }
+    });
+    document.getElementById("pm-notes").addEventListener("input", e => {
+      this.processMapNotes = e.target.value;
+    });
+
+    // Sidebar — file dropzone
+    const dz = document.getElementById("dropzone");
+    const fi = document.getElementById("file-input");
+    dz.addEventListener("click", () => fi.click());
+    dz.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fi.click(); }
+    });
+    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag-over"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("drag-over"));
+    dz.addEventListener("drop", e => {
+      e.preventDefault();
+      dz.classList.remove("drag-over");
+      if (e.dataTransfer?.files?.length) this.uploadFiles(e.dataTransfer.files);
+    });
+    fi.addEventListener("change", e => {
+      if (e.target.files?.length) this.uploadFiles(e.target.files);
+      e.target.value = "";
+    });
+    document.getElementById("attachments-list").addEventListener("click", e => {
+      const btn = e.target.closest("[data-attach-idx]");
+      if (btn) this.deleteAttachment(parseInt(btn.dataset.attachIdx, 10));
+    });
+
+    // Sidebar — notes autosave (debounced)
+    document.getElementById("extras-notes").addEventListener("input", () => this.scheduleExtrasSave());
+
+    // Sidebar — mobile FAB
+    document.getElementById("sidebar-fab").addEventListener("click", () => this.toggleSidebar());
   },
 
   // ── Modal ──────────────────────────────────────────────────────
@@ -886,13 +1221,236 @@ const App = {
       if (!r.ok) throw new Error(d.error || "Fehler");
       this.sessionId = d.session_id;
       this.currentRound = d.round;
+      this.pendingQuestions = d.questions || [];
+      this.pendingStatus = d.status || "needs_process_selection";
       history.pushState({}, "", `?s=${this.sessionId}`);
       this.ls("set", "context", context);
-      this.showQuestions(d.questions, d.round, d.status);
+      // Sidebar becomes active now that a session exists.
+      document.body.classList.add("with-sidebar");
+      // Route through the process-map screen first; the questions are queued.
+      this.showProcessMap();
     } catch (e) {
       this.showToast(e.message);
       this.showScreen("screen-context");
     }
+  },
+
+  // ── Process map ────────────────────────────────────────────────
+  showProcessMap() {
+    if (!this.processMap.length) {
+      this.processMap = Array.from({length: 3}, (_, i) => ({
+        step: i + 1, who: "", action: "", tool: "",
+        data_in: "", data_out: "", automatable: "partial",
+      }));
+    }
+    this.renderProcessMap();
+    this.showScreen("screen-process-map");
+  },
+
+  renderProcessMap() {
+    const root = document.getElementById("pm-rows");
+    root.innerHTML = "";
+    this.processMap.forEach((step, idx) => {
+      const auto = step.automatable || "partial";
+      const row = document.createElement("div");
+      row.className = "pm-row";
+      row.dataset.idx = String(idx);
+      row.innerHTML = `
+        <div class="pm-step-num">${idx + 1}</div>
+        <div class="pm-cell" data-label="Wer"><input type="text" placeholder="Sarah" value="${this.esc(step.who || '')}" data-key="who"></div>
+        <div class="pm-cell" data-label="Was passiert"><textarea rows="1" placeholder="Empfängt PDF" data-key="action">${this.esc(step.action || '')}</textarea></div>
+        <div class="pm-cell" data-label="Tool"><input type="text" placeholder="Gmail" value="${this.esc(step.tool || '')}" data-key="tool"></div>
+        <div class="pm-cell" data-label="Daten rein"><input type="text" placeholder="Rechnung PDF" value="${this.esc(step.data_in || '')}" data-key="data_in"></div>
+        <div class="pm-cell" data-label="Daten raus"><input type="text" placeholder="Anhang gespeichert" value="${this.esc(step.data_out || '')}" data-key="data_out"></div>
+        <div class="pm-cell" data-label="Auto?">
+          <select class="auto-${auto}" data-key="automatable">
+            <option value="yes"${auto==='yes'?' selected':''}>✓ ja</option>
+            <option value="partial"${auto==='partial'?' selected':''}>~ teils</option>
+            <option value="no"${auto==='no'?' selected':''}>✗ nein</option>
+          </select>
+        </div>
+        <button class="pm-row-delete" type="button" aria-label="Schritt löschen" data-action="delete-row">×</button>
+      `;
+      root.appendChild(row);
+    });
+    document.getElementById("pm-notes").value = this.processMapNotes || "";
+  },
+
+  collectProcessMap() {
+    const rows = document.querySelectorAll("#pm-rows .pm-row");
+    return Array.from(rows).map((row, idx) => {
+      const get = key => {
+        const el = row.querySelector(`[data-key="${key}"]`);
+        return el ? el.value.trim() : "";
+      };
+      return {
+        step: idx + 1,
+        who: get("who"),
+        action: get("action"),
+        tool: get("tool"),
+        data_in: get("data_in"),
+        data_out: get("data_out"),
+        automatable: get("automatable") || "partial",
+      };
+    });
+  },
+
+  addProcessRow() {
+    this.processMap = this.collectProcessMap();
+    this.processMap.push({
+      step: this.processMap.length + 1, who: "", action: "", tool: "",
+      data_in: "", data_out: "", automatable: "partial",
+    });
+    this.renderProcessMap();
+  },
+
+  deleteProcessRow(idx) {
+    this.processMap = this.collectProcessMap();
+    this.processMap.splice(idx, 1);
+    if (!this.processMap.length) {
+      this.processMap.push({step: 1, who: "", action: "", tool: "", data_in: "", data_out: "", automatable: "partial"});
+    }
+    this.renderProcessMap();
+  },
+
+  async submitProcessMap(skip) {
+    let cleaned = [];
+    let notes = "";
+    if (!skip) {
+      this.processMap = this.collectProcessMap();
+      notes = (document.getElementById("pm-notes").value || "").trim();
+      cleaned = this.processMap.filter(s =>
+        (s.who || s.action || s.tool || s.data_in || s.data_out)
+      );
+      this.showLoading("Speichere Prozess-Map");
+      try {
+        const r = await fetch(`/api/session/${this.sessionId}/process_map`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({steps: cleaned, notes}),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Fehler");
+        this.processMap = d.steps || cleaned;
+        this.processMapNotes = d.notes || notes;
+      } catch (e) {
+        this.showToast("Speichern fehlgeschlagen: " + e.message);
+        this.showScreen("screen-process-map");
+        return;
+      }
+    }
+    if (this.pendingQuestions && this.pendingQuestions.length) {
+      const qs = this.pendingQuestions;
+      const status = this.pendingStatus;
+      this.pendingQuestions = null;
+      this.pendingStatus = null;
+      this.showQuestions(qs, this.currentRound, status);
+    } else {
+      this.showScreen("screen-questions");
+    }
+  },
+
+  // ── Sidebar — notes autosave ───────────────────────────────────
+  scheduleExtrasSave() {
+    clearTimeout(this._extrasTimer);
+    document.getElementById("sidebar-notes-status").textContent = "Speichere…";
+    this._extrasTimer = setTimeout(() => this.saveExtras(), 1500);
+  },
+
+  async saveExtras() {
+    if (!this.sessionId) return;
+    const value = document.getElementById("extras-notes").value;
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/extras`, {
+        method: "PATCH",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({extra_context: value}),
+      });
+      if (!r.ok) throw new Error();
+      const status = document.getElementById("sidebar-notes-status");
+      status.textContent = "Gespeichert ✓";
+      clearTimeout(this._extrasStatusTimer);
+      this._extrasStatusTimer = setTimeout(() => { status.textContent = ""; }, 1800);
+    } catch {
+      document.getElementById("sidebar-notes-status").textContent = "Fehler beim Speichern";
+    }
+  },
+
+  // ── Sidebar — file upload ──────────────────────────────────────
+  async uploadFiles(files) {
+    if (!this.sessionId) {
+      this.showToast("Erst Kontext eingeben — dann Dateien hochladen.");
+      return;
+    }
+    const status = document.getElementById("sidebar-upload-status");
+    for (const file of Array.from(files)) {
+      if (file.size > 5 * 1024 * 1024) {
+        this.showToast(`${file.name}: zu gross (max 5 MB)`);
+        continue;
+      }
+      status.textContent = `Verarbeite ${file.name}…`;
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const r = await fetch(`/api/session/${this.sessionId}/attachment`, {method: "POST", body: fd});
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || `Fehler ${r.status}`);
+        this.attachments.push({
+          filename: d.filename, size: d.size, kind: d.kind,
+          extracted_text: d.preview, warning: d.warning,
+        });
+        this.attachmentCount = d.count || this.attachments.length;
+        this.renderAttachments();
+        status.textContent = `${file.name} hinzugefügt ✓`;
+      } catch (e) {
+        status.textContent = `Fehler bei ${file.name}: ${e.message}`;
+      }
+    }
+    setTimeout(() => { status.textContent = ""; }, 3000);
+  },
+
+  async deleteAttachment(idx) {
+    if (!this.sessionId) return;
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/attachment/${idx}`, {method: "DELETE"});
+      if (!r.ok) throw new Error();
+      this.attachments.splice(idx, 1);
+      this.attachmentCount = this.attachments.length;
+      this.renderAttachments();
+    } catch {
+      this.showToast("Datei konnte nicht gelöscht werden.");
+    }
+  },
+
+  renderAttachments() {
+    const list = document.getElementById("attachments-list");
+    list.innerHTML = this.attachments.map((a, i) => {
+      const preview = a.extracted_text ? String(a.extracted_text).slice(0, 160) : "";
+      const more = a.extracted_text && String(a.extracted_text).length > 160 ? "…" : "";
+      return `<div class="attachment-item">
+        <div class="attachment-row">
+          <span class="attachment-name" title="${this.esc(a.filename)}">${this.esc(a.filename)}</span>
+          <span class="attachment-size">${this.fmtSize(a.size)}</span>
+          <button class="attachment-delete" type="button" data-attach-idx="${i}" aria-label="Datei löschen">×</button>
+        </div>
+        ${preview ? `<div class="attachment-preview">${this.esc(preview)}${more}</div>` : ""}
+        ${a.warning ? `<div class="attachment-warn">⚠ ${this.esc(a.warning)}</div>` : ""}
+      </div>`;
+    }).join("");
+    const badge = document.getElementById("sidebar-fab-badge");
+    badge.textContent = this.attachmentCount || "";
+    badge.classList.toggle("show", !!this.attachmentCount);
+  },
+
+  fmtSize(b) {
+    if (b == null) return "";
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b/1024).toFixed(0)} KB`;
+    return `${(b/1024/1024).toFixed(1)} MB`;
+  },
+
+  toggleSidebar() {
+    document.getElementById("sidebar").classList.toggle("open");
   },
 
   // ── Submit answers ─────────────────────────────────────────────
@@ -932,11 +1490,27 @@ const App = {
   },
 
   collectAnswers() {
-    return Array.from(document.querySelectorAll(".question-card")).map(card => ({
-      question_id: card.dataset.qid,
-      question: card.dataset.qtext,
-      answer: (card.querySelector("textarea")?.value || card.querySelector("input[type=radio]:checked")?.value || "").trim(),
-    }));
+    return Array.from(document.querySelectorAll(".question-card")).map(card => {
+      const ta = card.querySelector("textarea.q-textarea");
+      const otherTa = card.querySelector("textarea.choice-other-input");
+      const radio = card.querySelector("input[type=radio]:checked");
+      let answer = "";
+      if (ta) {
+        answer = ta.value;
+      } else if (radio) {
+        const v = radio.value;
+        if (/^Andere/i.test(v) && otherTa) {
+          answer = otherTa.value.trim() || v;
+        } else {
+          answer = v;
+        }
+      }
+      return {
+        question_id: card.dataset.qid,
+        question: card.dataset.qtext,
+        answer: answer.trim(),
+      };
+    });
   },
 
   // ── Questions screen ───────────────────────────────────────────
@@ -970,16 +1544,24 @@ const App = {
     }
 
     questions.forEach((q, i) => {
-      const saved = this.ls("get", `a_${this.sessionId}_${round}_${q.id}`) || "";
+      const savedKey = `a_${this.sessionId}_${round}_${q.id}`;
+      const saved = this.ls("get", savedKey) || "";
+      const savedOther = this.ls("get", savedKey + "__other") || "";
       const card = document.createElement("div");
       card.className = "question-card";
       card.dataset.qid = q.id; card.dataset.qtext = q.text;
 
       let inputHtml;
       if (q.type === "choice" && q.options?.length) {
-        inputHtml = `<div class="choice-options">${q.options.map(opt =>
-          `<label class="choice-label"><input type="radio" name="${q.id}" value="${this.esc(opt)}"${saved===opt?" checked":""} onchange="App.autoSave(this,'${q.id}',${round}); App.flashSave()"><span>${this.esc(opt)}</span></label>`
-        ).join("")}</div>`;
+        // Always include an "Andere…" escape so the user is never trapped in MC.
+        const opts = [...q.options];
+        if (!opts.some(o => /^Andere/i.test(o))) opts.push("Andere…");
+        const isOther = saved && /^Andere/i.test(saved);
+        inputHtml = `<div class="choice-options">${opts.map(opt =>
+          `<label class="choice-label"><input type="radio" name="${q.id}" value="${this.esc(opt)}"${saved===opt?" checked":""} onchange="App.onChoiceChange(this,'${q.id}',${round})"><span>${this.esc(opt)}</span></label>`
+        ).join("")}</div>
+        <textarea class="choice-other-input${isOther ? ' visible' : ''}" placeholder="Eigene Antwort eingeben…"
+          oninput="App.onOtherInput(this,'${q.id}',${round})">${this.esc(savedOther)}</textarea>`;
       } else {
         inputHtml = `<textarea class="q-textarea" rows="3" placeholder="Antwort…"
           oninput="App.autoSave(this,'${q.id}',${round}); App.flashSave()">${this.esc(saved)}</textarea>`;
@@ -1094,13 +1676,42 @@ const App = {
         return;
       }
       const s = await r.json();
-      this.context      = s.context || "";
-      this.currentRound = s.round || 1;
-      this.allQA        = s.all_qa || [];
-      this.leadPageId   = s.lead_page_id || null;
-      if (s.status === "complete" && s.roi) this.showROI(s.roi, s.assumptions || []);
-      else if (s.current_questions?.length) this.showQuestions(s.current_questions, this.currentRound, "needs_technical_detail");
-      else this.showScreen("screen-context");
+      this.context           = s.context || "";
+      this.currentRound      = s.round || 1;
+      this.allQA             = s.all_qa || [];
+      this.leadPageId        = s.lead_page_id || null;
+      this.processMap        = s.process_map || [];
+      this.processMapNotes   = s.process_map_notes || "";
+      this.attachments       = (s.attachments || []).map(a => ({
+        filename: a.filename,
+        size: a.size,
+        kind: a.kind,
+        // resume only stores the preview (already in extracted_text from server)
+        extracted_text: (a.extracted_text || "").slice(0, 300),
+      }));
+      this.attachmentCount   = this.attachments.length;
+      document.body.classList.add("with-sidebar");
+      const notesEl = document.getElementById("extras-notes");
+      if (notesEl) notesEl.value = s.extra_context || "";
+      this.renderAttachments();
+
+      if (s.status === "complete" && s.roi) {
+        this.showROI(s.roi, s.assumptions || []);
+      } else if ((this.allQA?.length || 0) > 0 || (this.processMap?.length || 0) > 0) {
+        // Past process-map phase — show whatever questions are queued, or fall back.
+        if (s.current_questions?.length) {
+          this.showQuestions(s.current_questions, this.currentRound, "needs_technical_detail");
+        } else {
+          this.showScreen("screen-questions");
+        }
+      } else if (s.current_questions?.length) {
+        // Mid-flow: round-1 questions exist but process-map hasn't been touched.
+        this.pendingQuestions = s.current_questions;
+        this.pendingStatus = "needs_process_selection";
+        this.showProcessMap();
+      } else {
+        this.showScreen("screen-context");
+      }
     } catch { this.showScreen("screen-context"); }
   },
 
@@ -1141,10 +1752,30 @@ const App = {
   autoSave(el, qid, round) {
     this.ls("set", `a_${this.sessionId}_${round}_${qid}`, el.value);
   },
+  onChoiceChange(radio, qid, round) {
+    this.autoSave(radio, qid, round);
+    this.flashSave();
+    const card = radio.closest(".question-card");
+    const otherTa = card?.querySelector("textarea.choice-other-input");
+    if (otherTa) {
+      const isOther = /^Andere/i.test(radio.value);
+      otherTa.classList.toggle("visible", isOther);
+      if (isOther) setTimeout(() => otherTa.focus(), 50);
+    }
+  },
+  onOtherInput(ta, qid, round) {
+    this.ls("set", `a_${this.sessionId}_${round}_${qid}__other`, ta.value);
+    this.flashSave();
+  },
   restart() {
     this.sessionId = null; this.currentRound = 0;
     this.context = ""; this.allQA = []; this.leadPageId = null; this.promptText = null;
+    this.processMap = []; this.processMapNotes = "";
+    this.attachments = []; this.attachmentCount = 0;
+    this.pendingQuestions = null; this.pendingStatus = null;
     history.pushState({}, "", "/");
+    document.body.classList.remove("with-sidebar");
+    document.getElementById("sidebar")?.classList.remove("open");
     document.getElementById("context-input").value = "";
     document.getElementById("client-search").value = "";
     document.getElementById("lead-pills").innerHTML = "";
@@ -1156,6 +1787,11 @@ const App = {
     document.getElementById("prompt-loading").style.display = "block";
     document.getElementById("prompt-text").style.display = "none";
     document.getElementById("prompt-copy").style.display = "none";
+    const notesEl = document.getElementById("extras-notes");
+    if (notesEl) notesEl.value = "";
+    document.getElementById("attachments-list").innerHTML = "";
+    const badge = document.getElementById("sidebar-fab-badge");
+    if (badge) { badge.textContent = ""; badge.classList.remove("show"); }
     this.showScreen("screen-context");
   },
   shakeField(id) {

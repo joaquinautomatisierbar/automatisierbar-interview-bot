@@ -34,6 +34,14 @@ PDF_API_KEY = os.environ.get("PDF_API_KEY", "")
 
 MAX_CONTEXT_CHARS = 8000  # Notion rich_text safe upper bound for State JSON
 MAX_ANSWER_CHARS = 4000   # per-answer cap; 8 answers × 4000 = 32k headroom
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB hard cap per uploaded file
+MAX_EXTRAS_CHARS = 8000   # sidebar notes pad cap
+MAX_PROCESS_STEPS = 30    # sane upper bound for the A→Z walkthrough
+
+# Flask-level request body cap. Slightly above per-file cap to leave room for
+# multipart overhead. Anything larger fails fast at the WSGI layer.
+app.config["MAX_CONTENT_LENGTH"] = MAX_ATTACHMENT_BYTES + 64 * 1024
+
 SESSION_ID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
@@ -181,6 +189,59 @@ def get_session(session_id):
         return jsonify({"error": str(e)}), 500
 
 
+def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
+                          process_map, process_map_notes, extra_context, attachments):
+    """Spawn a background thread that generates the Claude Code prompt and appends
+    the payoff (mermaid + table + code block) to the lead's Notion page.
+
+    Threaded because the prompt generation is a 25–40s Sonnet call — it would blow
+    past Render's gunicorn worker timeout if run inline. The user-facing /answers
+    response returns immediately; the payoff lands on the Notion page ~30–60s later.
+    Idempotent: write_payoff_to_page skips if the heading already exists, so a
+    duplicate /answers complete (e.g. user double-submits) doesn't duplicate the page.
+    """
+    import threading
+
+    def _worker():
+        try:
+            from claude_client import generate_claude_code_prompt
+            from notion_session import write_payoff_to_page, get_lead_by_page_id, update_session
+
+            lead_info = None
+            try:
+                lead_info = get_lead_by_page_id(lead_page_id)
+            except Exception as e:
+                app.logger.warning("payoff: get_lead_by_page_id failed: %s", e)
+
+            prompt_text = generate_claude_code_prompt(
+                context, all_qa, roi or {}, lead_info,
+                process_map=process_map,
+                process_map_notes=process_map_notes,
+                extra_context=extra_context,
+                attachments=attachments,
+            )
+            # Cache the prompt in session state so /prompt returns instantly when
+            # the user clicks "Claude Code Prompt" instead of re-running the 30 s LLM call.
+            try:
+                update_session(session_id, {"claude_code_prompt": prompt_text})
+            except Exception as e:
+                app.logger.warning("payoff: prompt cache write failed: %s", e)
+
+            wrote = write_payoff_to_page(
+                lead_page_id,
+                process_map=process_map or [],
+                process_map_notes=process_map_notes or "",
+                claude_code_prompt=prompt_text or "",
+            )
+            app.logger.info("payoff written for session %s (lead %s): %s",
+                            session_id, lead_page_id, wrote)
+        except Exception as e:
+            app.logger.error("payoff write failed (non-fatal) for session %s: %s",
+                             session_id, e)
+
+    threading.Thread(target=_worker, name=f"payoff-{session_id[:8]}", daemon=True).start()
+
+
 @app.route("/api/session/<session_id>/answers", methods=["POST"])
 def submit_answers(session_id):
     if not _valid_session_id(session_id):
@@ -213,6 +274,10 @@ def submit_answers(session_id):
         context = ""
         all_qa = []
         lead_page_id = None
+        process_map = []
+        process_map_notes = ""
+        extra_context = ""
+        attachments = []
 
         if notion_available():
             state = _get(session_id)
@@ -220,6 +285,10 @@ def submit_answers(session_id):
                 context = state.get("context", "")
                 all_qa = state.get("all_qa", [])
                 lead_page_id = state.get("lead_page_id")
+                process_map = state.get("process_map", []) or []
+                process_map_notes = state.get("process_map_notes", "") or ""
+                extra_context = state.get("extra_context", "") or ""
+                attachments = state.get("attachments", []) or []
 
         context = context or data.get("context", "")
         all_qa.append({"round": round_num, "qa": answers})
@@ -228,7 +297,13 @@ def submit_answers(session_id):
         if lead_page_id:
             write_qa_to_page(lead_page_id, round_num, answers)
 
-        result = evaluate_answers(context, all_qa)
+        result = evaluate_answers(
+            context, all_qa,
+            process_map=process_map,
+            process_map_notes=process_map_notes,
+            extra_context=extra_context,
+            attachments=attachments,
+        )
 
         if result.get("status") == "complete":
             roi = result.get("roi", {})
@@ -243,9 +318,16 @@ def submit_answers(session_id):
                     "assumptions": assumptions,
                 })
 
-            # Write ROI to lead page
+            # Write ROI to lead page + the end-of-interview payoff
+            # (process map + mermaid + table + Claude Code prompt as a code block).
             if lead_page_id:
                 write_roi_to_page(lead_page_id, roi, assumptions)
+                _write_payoff_safely(
+                    lead_page_id, session_id,
+                    context=context, all_qa=all_qa, roi=roi,
+                    process_map=process_map, process_map_notes=process_map_notes,
+                    extra_context=extra_context, attachments=attachments,
+                )
 
             return jsonify({
                 "status": "complete",
@@ -270,6 +352,12 @@ def submit_answers(session_id):
                     })
                 if lead_page_id:
                     write_roi_to_page(lead_page_id, fallback_roi, fallback_assumptions)
+                    _write_payoff_safely(
+                        lead_page_id, session_id,
+                        context=context, all_qa=all_qa, roi=fallback_roi,
+                        process_map=process_map, process_map_notes=process_map_notes,
+                        extra_context=extra_context, attachments=attachments,
+                    )
                 return jsonify({
                     "status": "complete",
                     "assumptions": fallback_assumptions,
@@ -305,14 +393,28 @@ def session_pdf(session_id):
 
         context = request.args.get("context", "")
         all_qa = []
+        process_map = []
+        process_map_notes = ""
+        extra_context = ""
+        attachments = []
 
         if notion_available():
             state = _get(session_id)
             if state:
                 context = state.get("context", context)
                 all_qa = state.get("all_qa", [])
+                process_map = state.get("process_map", []) or []
+                process_map_notes = state.get("process_map_notes", "") or ""
+                extra_context = state.get("extra_context", "") or ""
+                attachments = state.get("attachments", []) or []
 
-        spec_text = generate_spec_summary(context, all_qa)
+        spec_text = generate_spec_summary(
+            context, all_qa,
+            process_map=process_map,
+            process_map_notes=process_map_notes,
+            extra_context=extra_context,
+            attachments=attachments,
+        )
 
         questions = {}
         for round_data in all_qa:
@@ -354,12 +456,17 @@ def session_prompt(session_id):
         return jsonify({"error": "invalid session id"}), 400
     try:
         from claude_client import generate_claude_code_prompt
-        from notion_session import get_session as _get, available as notion_available
+        from notion_session import get_session as _get, update_session, available as notion_available
 
         context = ""
         all_qa = []
         roi = {}
         lead_page_id = None
+        process_map = []
+        process_map_notes = ""
+        extra_context = ""
+        attachments = []
+        cached_prompt = None
 
         if notion_available():
             state = _get(session_id)
@@ -368,6 +475,29 @@ def session_prompt(session_id):
                 all_qa = state.get("all_qa", [])
                 roi = state.get("roi", {}) or {}
                 lead_page_id = state.get("lead_page_id")
+                process_map = state.get("process_map", []) or []
+                process_map_notes = state.get("process_map_notes", "") or ""
+                extra_context = state.get("extra_context", "") or ""
+                attachments = state.get("attachments", []) or []
+                cached_prompt = state.get("claude_code_prompt")
+
+        # Fast path: prompt was cached by the background payoff thread (post-completion)
+        # or by a prior /prompt call. Avoids paying for a second 30 s Sonnet call.
+        if cached_prompt:
+            return jsonify({"prompt": cached_prompt, "cached": True})
+
+        # If the session is already complete, the background payoff thread is most likely
+        # still generating the prompt (races with the user clicking the toggle). Poll the
+        # cache for up to 40 s before falling back to a fresh generation. Cheaper than 2×
+        # the LLM call, still well under gunicorn's 120 s worker timeout.
+        from notion_session import get_session as _get_state
+        if state and state.get("status") == "complete":
+            import time as _t
+            for _ in range(20):  # 20 × 2 s = 40 s max
+                _t.sleep(2)
+                fresh = _get_state(session_id) or {}
+                if fresh.get("claude_code_prompt"):
+                    return jsonify({"prompt": fresh["claude_code_prompt"], "cached": True})
 
         lead_info = None
         if lead_page_id:
@@ -377,11 +507,212 @@ def session_prompt(session_id):
             except Exception as e:
                 app.logger.error("get_lead_by_page_id failed: %s", e)
 
-        prompt_text = generate_claude_code_prompt(context, all_qa, roi, lead_info)
-        return jsonify({"prompt": prompt_text})
+        prompt_text = generate_claude_code_prompt(
+            context, all_qa, roi, lead_info,
+            process_map=process_map,
+            process_map_notes=process_map_notes,
+            extra_context=extra_context,
+            attachments=attachments,
+        )
+        # Cache for subsequent calls (page reload, "copy prompt" button, second viewer).
+        if notion_available():
+            try:
+                update_session(session_id, {"claude_code_prompt": prompt_text})
+            except Exception as e:
+                app.logger.warning("prompt cache write failed: %s", e)
+
+        return jsonify({"prompt": prompt_text, "cached": False})
 
     except Exception as e:
         app.logger.error("session_prompt error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Process map (guided A→Z walkthrough — captured between context and Q&A rounds)
+# ---------------------------------------------------------------------------
+
+PROCESS_STEP_KEYS = ("step", "who", "action", "tool", "data_in", "data_out", "automatable")
+PROCESS_AUTOMATABLE_VALUES = {"yes", "partial", "no"}
+
+
+def _validate_process_step(item) -> tuple[bool, str]:
+    if not isinstance(item, dict):
+        return False, "Schritt muss ein Objekt sein"
+    # Truncate over-long fields rather than reject — the user's free text shouldn't
+    # die at a hard boundary they can't see.
+    for key in PROCESS_STEP_KEYS:
+        val = item.get(key)
+        if val is None:
+            continue
+        if not isinstance(val, (str, int)):
+            return False, f"Feld '{key}' muss Text oder Zahl sein"
+    auto = (item.get("automatable") or "").lower()
+    if auto and auto not in PROCESS_AUTOMATABLE_VALUES:
+        return False, "automatable muss yes/partial/no sein"
+    return True, ""
+
+
+@app.route("/api/session/<session_id>/process_map", methods=["GET"])
+def get_process_map(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    try:
+        from notion_session import get_session as _get, available as notion_available
+        if not notion_available():
+            return jsonify({"steps": [], "notes": ""})
+        state = _get(session_id) or {}
+        return jsonify({
+            "steps": state.get("process_map", []),
+            "notes": state.get("process_map_notes", ""),
+        })
+    except Exception as e:
+        app.logger.error("get_process_map error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/session/<session_id>/process_map", methods=["POST"])
+def post_process_map(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    data = request.get_json(silent=True) or {}
+    raw_steps = data.get("steps", [])
+    notes = (data.get("notes") or "")[:4000]
+
+    if not isinstance(raw_steps, list):
+        return jsonify({"error": "steps must be a list"}), 400
+    if len(raw_steps) > MAX_PROCESS_STEPS:
+        return jsonify({"error": f"too many steps (max {MAX_PROCESS_STEPS})"}), 400
+
+    cleaned = []
+    for i, item in enumerate(raw_steps, start=1):
+        ok, msg = _validate_process_step(item)
+        if not ok:
+            return jsonify({"error": f"Schritt {i}: {msg}"}), 400
+        # Drop fully-empty rows silently (the UI prepopulates blank rows)
+        if not any(str(item.get(k, "")).strip() for k in ("who", "action", "tool", "data_in", "data_out")):
+            continue
+        cleaned.append({
+            "step": int(item.get("step") or len(cleaned) + 1),
+            "who": str(item.get("who", ""))[:200],
+            "action": str(item.get("action", ""))[:500],
+            "tool": str(item.get("tool", ""))[:200],
+            "data_in": str(item.get("data_in", ""))[:300],
+            "data_out": str(item.get("data_out", ""))[:300],
+            "automatable": (str(item.get("automatable") or "")).lower() or "partial",
+        })
+
+    try:
+        from notion_session import update_process_map, available as notion_available
+        if not notion_available():
+            return jsonify({"error": "notion not configured"}), 503
+        if not update_process_map(session_id, cleaned, notes):
+            return jsonify({"error": "session not found"}), 404
+        return jsonify({"ok": True, "steps": cleaned, "notes": notes})
+    except Exception as e:
+        app.logger.error("post_process_map error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Sidebar: free-text extras (notes pad)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/session/<session_id>/extras", methods=["PATCH"])
+def patch_extras(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    data = request.get_json(silent=True) or {}
+    extras = (data.get("extra_context") or "")[:MAX_EXTRAS_CHARS]
+    try:
+        from notion_session import update_extras, available as notion_available
+        if not notion_available():
+            return jsonify({"error": "notion not configured"}), 503
+        if not update_extras(session_id, extras):
+            return jsonify({"error": "session not found"}), 404
+        return jsonify({"ok": True, "length": len(extras)})
+    except Exception as e:
+        app.logger.error("patch_extras error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Sidebar: file attachments (extract + persist)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/session/<session_id>/attachment", methods=["POST"])
+def upload_attachment(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "file field missing (multipart/form-data)"}), 400
+
+    filename = f.filename or "upload"
+    mime = f.mimetype or ""
+    content = f.read()
+    if not content:
+        return jsonify({"error": "leere Datei"}), 400
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        return jsonify({"error": f"Datei zu gross (max {MAX_ATTACHMENT_BYTES // (1024*1024)} MB)"}), 413
+
+    try:
+        from file_extract import extract, is_allowed
+        if not is_allowed(filename, mime):
+            return jsonify({"error": f"Dateityp nicht erlaubt: {filename}"}), 415
+        result = extract(filename, content, mime)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        app.logger.error("attachment extract error: %s", e)
+        return jsonify({"error": "Extraktion fehlgeschlagen"}), 500
+
+    attachment = {
+        "filename": filename,
+        "mime": mime,
+        "size": len(content),
+        "kind": result.get("kind", "text"),
+        "extracted_text": result["text"],
+    }
+    try:
+        from notion_session import add_attachment, available as notion_available
+        if not notion_available():
+            return jsonify({"error": "notion not configured"}), 503
+        status = add_attachment(session_id, attachment)
+        if not status.get("ok"):
+            code = 413 if status.get("reason") in ("state_full", "too_many") else 400
+            return jsonify({"error": status.get("message", "Konnte nicht hinzufügen")}), code
+        preview = attachment["extracted_text"][:300]
+        return jsonify({
+            "ok": True,
+            "filename": filename,
+            "size": attachment["size"],
+            "kind": attachment["kind"],
+            "preview": preview,
+            "warning": result.get("warning"),
+            "count": status.get("count", 1),
+        })
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        app.logger.error("attachment persist error: %s", e)
+        return jsonify({"error": "Speichern fehlgeschlagen"}), 500
+
+
+@app.route("/api/session/<session_id>/attachment/<int:idx>", methods=["DELETE"])
+def delete_attachment(session_id, idx):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    try:
+        from notion_session import remove_attachment, available as notion_available
+        if not notion_available():
+            return jsonify({"error": "notion not configured"}), 503
+        if not remove_attachment(session_id, idx):
+            return jsonify({"error": "attachment or session not found"}), 404
+        return jsonify({"ok": True})
+    except Exception as e:
+        app.logger.error("delete_attachment error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
