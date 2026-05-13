@@ -108,6 +108,23 @@ Keep it terse. Three lines per field max. The point is *why*, not exhaustive min
 
 ---
 
+## 2026-05-13 — Web interview bot V2: conditional routing + AI-judged automatability + tool autocomplete
+
+**Decision:** First V1 prod test (2026-05-13) revealed the bot was landing users directly on the process-map screen with no context-building Q&A, regardless of how vague the initial context was. Rebuilt the state machine to route conditionally on the LLM's status: `needs_technical_detail` (clear single process) → process-map first, `needs_process_selection` (vague / multi-process) → Q&A rounds first, transitioning to process-map only when the LLM emits a new `ready_for_process_map` status with `process_name` + `tools_identified`. The LLM is explicitly instructed *"Lieber eine Runde mehr Fragen als die falsche Prozesswahl"* — getting the process choice right beats rushing. Process map screen drops the user-facing "Auto?" dropdown — Claude infers per-step automatability at payoff time via a new `classify_process_map_automatability` Sonnet call (~$0.02), driving Mermaid colors + a new "Automatisierbar (Claude)" column in the Schritt-Details table. Tool input gets HTML5 datalist autocomplete with ~50 common Swiss-SME tools (Gmail / Outlook / Bexio / Banana / Sage / etc.). Sidebar gets pending-upload spinner rows so vision OCR doesn't look hung. "Andere…" with empty textarea is rejected by both frontend (toast + scroll-to-error) and backend (400). `POST /process_map` now auto-fires evaluate_answers when prior rounds exist, so path-B users get the next round of technical questions in the same response (no extra round-trip). Background payoff thread runs the classification + prompt-gen + Notion write so user-facing /answers stays fast. Verified end-to-end on a live test lead — Mermaid colored 2 auto / 1 partial correctly, Schritt-Details table shows Claude's reasoning per step.
+
+**Why:** V1 KPI was zero-followup ≥80%, but the very first browser test failed before reaching the KPI gate — Tej's exact complaint was "the bot doesn't know which process to focus on." The user-facing "Auto?" column was both UX clutter and asking the wrong person — the client doesn't know what's automatable, that's Claude's job. Tool autocomplete is straight-up lifted from the existing lead-search pattern users already know. Auto-firing evaluate_answers after path-B map submission avoids an awkward "loading" gap where the frontend would have had to manually trigger a second LLM call to get fresh questions anchored to the map. Backend defensive Andere-rejection means even direct API consumers (n8n workflows, curl, mobile apps) can't accidentally feed garbage answers. AI classification at payoff time (background thread) keeps the user-facing flow snappy and the Notion briefing rich.
+
+**Alternatives considered:**
+- Skip the "ready_for_process_map" status entirely; route to process-map after N rounds heuristically (rejected — heuristic = brittle; LLM should own the transition signal).
+- Keep the user-facing "Auto?" column but treat it as "user's wish, AI overrides if wrong" (rejected — adds confusion; the user said "the AI should decide, not me").
+- Lazy-load classification on /prompt instead of background-thread (rejected — would block the user when they click "Claude Code Prompt" or duplicate the classification call between thread + endpoint).
+- Pre-session attachment staging (drop a file before context is written) — still deferred to V3.
+- Server-side polling fallback for /prompt instead of long-poll — deferred until concurrent-completion load justifies it.
+
+**Owner:** Joaquin
+
+---
+
 ## 2026-05-10 — Web interview bot: process-map narrative + sidebar uploads + Notion payoff
 
 **Decision:** Restructured the deployed web interview bot at `automatisierbar-interview-bot.onrender.com` from a context → categorical-Q&A → ROI flow into a context → **process-map** → Q&A → ROI flow with a persistent sidebar (file uploads + free-text notes). On completion, the lead's Notion page now auto-gets a Mermaid flowchart of the captured process, a collapsible step table, and the Claude Code build prompt as a markdown code block — copy-paste from Notion straight into Claude Code with no round-trip back to the web app. New backend endpoints: `POST/GET …/process_map`, `POST/DELETE …/attachment`, `PATCH …/extras`. New file: `tools/file_extract.py` (Excel/CSV via pandas+openpyxl, PDF via PyMuPDF, images via Claude vision, text raw). KPI bucket: less-cost; metric: zero-followup rate ≥ 80% on first 3 post-redesign prod interviews.

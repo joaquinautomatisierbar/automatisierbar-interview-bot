@@ -190,7 +190,8 @@ def get_session(session_id):
 
 
 def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
-                          process_map, process_map_notes, extra_context, attachments):
+                          process_map, process_map_notes, extra_context, attachments,
+                          process_map_skipped=False):
     """Spawn a background thread that generates the Claude Code prompt and appends
     the payoff (mermaid + table + code block) to the lead's Notion page.
 
@@ -204,7 +205,7 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
 
     def _worker():
         try:
-            from claude_client import generate_claude_code_prompt
+            from claude_client import generate_claude_code_prompt, classify_process_map_automatability
             from notion_session import write_payoff_to_page, get_lead_by_page_id, update_session
 
             lead_info = None
@@ -213,10 +214,22 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
             except Exception as e:
                 app.logger.warning("payoff: get_lead_by_page_id failed: %s", e)
 
+            # Classify each step's automatability — drives mermaid colors + table reasoning.
+            classification = []
+            if process_map:
+                try:
+                    classification = classify_process_map_automatability(
+                        process_map, context=context,
+                    )
+                    update_session(session_id, {"process_map_classification": classification})
+                except Exception as e:
+                    app.logger.warning("payoff: classification failed: %s", e)
+
             prompt_text = generate_claude_code_prompt(
                 context, all_qa, roi or {}, lead_info,
                 process_map=process_map,
                 process_map_notes=process_map_notes,
+                process_map_skipped=process_map_skipped,
                 extra_context=extra_context,
                 attachments=attachments,
             )
@@ -232,6 +245,7 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
                 process_map=process_map or [],
                 process_map_notes=process_map_notes or "",
                 claude_code_prompt=prompt_text or "",
+                classification=classification,
             )
             app.logger.info("payoff written for session %s (lead %s): %s",
                             session_id, lead_page_id, wrote)
@@ -262,6 +276,13 @@ def submit_answers(session_id):
         return jsonify({"error": "answers required"}), 400
     if not any(str(a.get("answer", "")).strip() for a in answers):
         return jsonify({"error": "at least one non-empty answer required"}), 400
+    # Defense in depth — reject the literal "Andere…" placeholder. Frontend already
+    # validates, but if a third-party API client posts it directly we'd otherwise
+    # feed a useless answer to the LLM.
+    for a in answers:
+        ans = str(a.get("answer", "")).strip()
+        if ans in ("Andere…", "Andere...", "Andere"):
+            return jsonify({"error": "Bitte deine Antwort eingeben — 'Andere…' braucht Freitext."}), 400
 
     try:
         from claude_client import evaluate_answers
@@ -276,6 +297,7 @@ def submit_answers(session_id):
         lead_page_id = None
         process_map = []
         process_map_notes = ""
+        process_map_skipped = False
         extra_context = ""
         attachments = []
 
@@ -287,6 +309,7 @@ def submit_answers(session_id):
                 lead_page_id = state.get("lead_page_id")
                 process_map = state.get("process_map", []) or []
                 process_map_notes = state.get("process_map_notes", "") or ""
+                process_map_skipped = bool(state.get("process_map_skipped", False))
                 extra_context = state.get("extra_context", "") or ""
                 attachments = state.get("attachments", []) or []
 
@@ -301,6 +324,7 @@ def submit_answers(session_id):
             context, all_qa,
             process_map=process_map,
             process_map_notes=process_map_notes,
+            process_map_skipped=process_map_skipped,
             extra_context=extra_context,
             attachments=attachments,
         )
@@ -326,6 +350,7 @@ def submit_answers(session_id):
                     lead_page_id, session_id,
                     context=context, all_qa=all_qa, roi=roi,
                     process_map=process_map, process_map_notes=process_map_notes,
+                    process_map_skipped=process_map_skipped,
                     extra_context=extra_context, attachments=attachments,
                 )
 
@@ -333,6 +358,29 @@ def submit_answers(session_id):
                 "status": "complete",
                 "assumptions": assumptions,
                 "roi": roi,
+            })
+
+        elif result.get("status") == "ready_for_process_map":
+            # LLM has identified the process + main tools; transition the user to the
+            # process-map screen now. Q&A continues afterwards with the map in context.
+            process_name = (result.get("process_name") or "").strip()
+            tools_identified = result.get("tools_identified") or []
+            if not isinstance(tools_identified, list):
+                tools_identified = []
+            if notion_available():
+                update_session(session_id, {
+                    "all_qa": all_qa,
+                    "current_questions": [],
+                    "round": round_num,
+                    "process_name": process_name,
+                    "tools_identified": tools_identified,
+                })
+            return jsonify({
+                "status": "ready_for_process_map",
+                "process_name": process_name,
+                "tools_identified": tools_identified,
+                "round": round_num,
+                "assumptions": result.get("assumptions", []),
             })
 
         else:
@@ -356,6 +404,7 @@ def submit_answers(session_id):
                         lead_page_id, session_id,
                         context=context, all_qa=all_qa, roi=fallback_roi,
                         process_map=process_map, process_map_notes=process_map_notes,
+                        process_map_skipped=process_map_skipped,
                         extra_context=extra_context, attachments=attachments,
                     )
                 return jsonify({
@@ -395,6 +444,7 @@ def session_pdf(session_id):
         all_qa = []
         process_map = []
         process_map_notes = ""
+        process_map_skipped = False
         extra_context = ""
         attachments = []
 
@@ -405,6 +455,7 @@ def session_pdf(session_id):
                 all_qa = state.get("all_qa", [])
                 process_map = state.get("process_map", []) or []
                 process_map_notes = state.get("process_map_notes", "") or ""
+                process_map_skipped = bool(state.get("process_map_skipped", False))
                 extra_context = state.get("extra_context", "") or ""
                 attachments = state.get("attachments", []) or []
 
@@ -412,6 +463,7 @@ def session_pdf(session_id):
             context, all_qa,
             process_map=process_map,
             process_map_notes=process_map_notes,
+            process_map_skipped=process_map_skipped,
             extra_context=extra_context,
             attachments=attachments,
         )
@@ -464,6 +516,7 @@ def session_prompt(session_id):
         lead_page_id = None
         process_map = []
         process_map_notes = ""
+        process_map_skipped = False
         extra_context = ""
         attachments = []
         cached_prompt = None
@@ -477,6 +530,7 @@ def session_prompt(session_id):
                 lead_page_id = state.get("lead_page_id")
                 process_map = state.get("process_map", []) or []
                 process_map_notes = state.get("process_map_notes", "") or ""
+                process_map_skipped = bool(state.get("process_map_skipped", False))
                 extra_context = state.get("extra_context", "") or ""
                 attachments = state.get("attachments", []) or []
                 cached_prompt = state.get("claude_code_prompt")
@@ -511,6 +565,7 @@ def session_prompt(session_id):
             context, all_qa, roi, lead_info,
             process_map=process_map,
             process_map_notes=process_map_notes,
+            process_map_skipped=process_map_skipped,
             extra_context=extra_context,
             attachments=attachments,
         )
@@ -560,11 +615,12 @@ def get_process_map(session_id):
     try:
         from notion_session import get_session as _get, available as notion_available
         if not notion_available():
-            return jsonify({"steps": [], "notes": ""})
+            return jsonify({"steps": [], "notes": "", "skipped": False})
         state = _get(session_id) or {}
         return jsonify({
             "steps": state.get("process_map", []),
             "notes": state.get("process_map_notes", ""),
+            "skipped": bool(state.get("process_map_skipped", False)),
         })
     except Exception as e:
         app.logger.error("get_process_map error: %s", e)
@@ -578,6 +634,7 @@ def post_process_map(session_id):
     data = request.get_json(silent=True) or {}
     raw_steps = data.get("steps", [])
     notes = (data.get("notes") or "")[:4000]
+    skipped = bool(data.get("skipped", False))
 
     if not isinstance(raw_steps, list):
         return jsonify({"error": "steps must be a list"}), 400
@@ -599,16 +656,76 @@ def post_process_map(session_id):
             "tool": str(item.get("tool", ""))[:200],
             "data_in": str(item.get("data_in", ""))[:300],
             "data_out": str(item.get("data_out", ""))[:300],
-            "automatable": (str(item.get("automatable") or "")).lower() or "partial",
+            # V2: automatable is no longer collected from the user — AI infers it
+            # at payoff time. Keep the field for backwards-compat (defaults "unknown").
+            "automatable": (str(item.get("automatable") or "")).lower() or "unknown",
         })
 
     try:
-        from notion_session import update_process_map, available as notion_available
+        from notion_session import (
+            update_process_map, update_session, get_session as _get,
+            available as notion_available,
+        )
         if not notion_available():
             return jsonify({"error": "notion not configured"}), 503
         if not update_process_map(session_id, cleaned, notes):
             return jsonify({"error": "session not found"}), 404
-        return jsonify({"ok": True, "steps": cleaned, "notes": notes})
+        update_session(session_id, {"process_map_skipped": bool(skipped)})
+
+        # V2 (path B): if the user already answered identification rounds before
+        # reaching the map, fire evaluate_answers now so the next batch of questions
+        # is already in the response. Frontend shows them immediately. Path A skips
+        # this — the stashed pendingQuestions from /session/start are used instead.
+        state = _get(session_id) or {}
+        all_qa = state.get("all_qa", []) or []
+        if not all_qa:
+            return jsonify({"ok": True, "steps": cleaned, "notes": notes, "skipped": skipped, "next": None})
+
+        from claude_client import evaluate_answers
+        result = evaluate_answers(
+            state.get("context", ""), all_qa,
+            process_map=cleaned,
+            process_map_notes=notes,
+            process_map_skipped=bool(skipped),
+            extra_context=state.get("extra_context", "") or "",
+            attachments=state.get("attachments", []) or [],
+        )
+        next_round = (state.get("round") or 0) + 1
+        next_payload = {
+            "status": result.get("status"),
+            "round": next_round,
+            "questions": result.get("questions", []),
+            "assumptions": result.get("assumptions", []),
+            "roi": result.get("roi", {}),
+            "process_name": result.get("process_name", ""),
+            "tools_identified": result.get("tools_identified", []),
+        }
+        # Persist whatever the LLM returned so resume picks it up.
+        if result.get("status") == "complete":
+            update_session(session_id, {
+                "status": "complete",
+                "current_questions": [],
+                "roi": result.get("roi", {}),
+                "assumptions": result.get("assumptions", []),
+            })
+            lead_page_id = state.get("lead_page_id")
+            if lead_page_id:
+                from notion_session import write_roi_to_page
+                write_roi_to_page(lead_page_id, result.get("roi", {}), result.get("assumptions", []))
+                _write_payoff_safely(
+                    lead_page_id, session_id,
+                    context=state.get("context", ""), all_qa=all_qa, roi=result.get("roi", {}),
+                    process_map=cleaned, process_map_notes=notes,
+                    process_map_skipped=bool(skipped),
+                    extra_context=state.get("extra_context", "") or "",
+                    attachments=state.get("attachments", []) or [],
+                )
+        elif result.get("questions"):
+            update_session(session_id, {
+                "current_questions": result.get("questions", []),
+                "round": next_round,
+            })
+        return jsonify({"ok": True, "steps": cleaned, "notes": notes, "skipped": skipped, "next": next_payload})
     except Exception as e:
         app.logger.error("post_process_map error: %s", e)
         return jsonify({"error": str(e)}), 500

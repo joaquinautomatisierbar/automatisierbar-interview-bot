@@ -97,8 +97,28 @@ Der Sidebar-Block (DATEIEN, ZUSÄTZLICHE NOTIZEN) ist Teil der Antworten — wen
 Excel-Spaltenliste oder ein Screenshot-Auszug steht, behandle ihn als gegebene Information.
 Frage nicht erneut nach Spaltennamen, die in der Excel-Vorschau bereits sichtbar sind.
 
-WENN alle 7 Punkte klar sind → status: "complete"
-WENN Lücken bestehen → stelle max. 6 gezielte Fragen, nur was wirklich fehlt.
+STATUS-ENTSCHEIDUNG (kritisch):
+
+Drei mögliche Status — wähle den passenden:
+
+(A) "needs_more" — fehlt noch Information.
+    - Setze, wenn entweder der Prozess noch nicht klar gewählt ist (mehrere Prozesse genannt,
+      keiner herausgestochen), ODER wenn die technischen Details unvollständig sind.
+    - Stelle bis zu 6 gezielte Fragen.
+
+(B) "ready_for_process_map" — Prozess ist gewählt + Haupttools bekannt, ABER die Prozess-Map
+    ist noch leer (PROZESS-MAP-Block fehlt im Kontext).
+    - Setze NUR, wenn die Prozess-Map noch nicht ausgefüllt ist UND du jetzt einen klaren
+      Prozess + mindestens 2 Tools identifiziert hast.
+    - Gib `process_name` (kurzer Name des gewählten Prozesses) und `tools_identified`
+      (Array der bisher genannten Tools) zurück.
+    - Lieber eine Runde mehr Fragen als die falsche Prozesswahl: wenn du unsicher bist,
+      welcher Prozess gemeint ist, bleibe bei "needs_more" und frage konkret nach.
+
+(C) "complete" — alle 7 Punkte der Checkliste klar UND Prozess-Map ist ausgefüllt
+    (PROZESS-MAP-Block ist im Kontext mit ≥2 Schritten).
+    - Niemals "complete" setzen, solange die Prozess-Map leer ist — selbst wenn die
+      Q&A alle 7 Punkte abdeckt.
 
 WICHTIG zu Punkt 7: Die Zeitangabe MUSS vom Klienten kommen — niemals schätzen oder erfinden.
 Frage konkret: "Wie viele Stunden pro Woche verbringen Sie oder Ihr Team aktuell mit diesem Prozess?"
@@ -122,6 +142,14 @@ Bei needs_more:
   "questions": [
     {{ "id": "q1", "text": "...", "type": "text" }}
   ],
+  "assumptions": []
+}}
+
+Bei ready_for_process_map:
+{{
+  "status": "ready_for_process_map",
+  "process_name": "Mahnungsversand für überfällige Rechnungen",
+  "tools_identified": ["Bexio", "Outlook 365", "Google Sheets"],
   "assumptions": []
 }}
 
@@ -205,6 +233,7 @@ def _build_user_message(
     all_qa: list = None,
     process_map: list = None,
     process_map_notes: str = "",
+    process_map_skipped: bool = False,
     extra_context: str = "",
     attachments: list = None,
 ) -> str:
@@ -213,6 +242,14 @@ def _build_user_message(
     pm = _format_process_map(process_map or [], process_map_notes)
     if pm:
         blocks.append(pm)
+    elif process_map_skipped:
+        # User saw the process-map screen but skipped — don't re-trigger ready_for_process_map.
+        blocks.append(
+            "=== PROZESS-MAP (Ist-Zustand A→Z) ===\n"
+            "(Vom Klienten übersprungen — keine strukturierte Map vorhanden. "
+            "Nutze die Q&A und Kontext als einzige Quelle für den Ist-Zustand. "
+            "Frage NICHT erneut nach der Prozess-Map.)"
+        )
     ex = _format_extras(extra_context)
     if ex:
         blocks.append(ex)
@@ -259,6 +296,7 @@ def evaluate_answers(
     *,
     process_map: list = None,
     process_map_notes: str = "",
+    process_map_skipped: bool = False,
     extra_context: str = "",
     attachments: list = None,
 ) -> dict[str, Any]:
@@ -268,6 +306,7 @@ def evaluate_answers(
         all_qa=all_qa,
         process_map=process_map,
         process_map_notes=process_map_notes,
+        process_map_skipped=process_map_skipped,
         extra_context=extra_context,
         attachments=attachments,
     )
@@ -284,12 +323,77 @@ def evaluate_answers(
     return _parse_json(message.content[0].text)
 
 
+def classify_process_map_automatability(
+    process_map: list,
+    *,
+    context: str = "",
+) -> list[dict]:
+    """Classify each step in the process map as yes/partial/no automatable.
+    Single Sonnet call, deterministic JSON array output.
+    Returns [{step: int, automatable: "yes"|"partial"|"no", reason: str}, ...]
+    or [] if classification fails (caller falls back to "partial" for all).
+    """
+    if not process_map:
+        return []
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    pm_text = _format_process_map(process_map)
+    msg = client.messages.create(
+        model=MODEL_FAST,
+        max_tokens=1500,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Klassifiziere für jeden Prozess-Schritt unten, wie gut er sich automatisieren "
+                "lässt — als n8n-Workflow oder ähnliche Tools.\n\n"
+                "Kriterien:\n"
+                "- 'yes': Vollständig automatisierbar via API/Regel (Datentransfer, Schwellwert-Check, "
+                "  Templating, Notification).\n"
+                "- 'partial': Grossteils automatisierbar, aber Mensch wird für eine Entscheidung oder "
+                "  einen Edge-Case in der Schleife gebraucht (Review-Schritt, Sonderfälle).\n"
+                "- 'no': Nicht sinnvoll automatisierbar — kritische Entscheidung, Verhandlung, "
+                "  Kreativarbeit, sensibler Kundenkontakt.\n\n"
+                f"KONTEXT: {context[:500]}\n\n"
+                f"{pm_text}\n\n"
+                "Antworte NUR als gültiges JSON-Array (kein Markdown, kein Text davor/danach):\n"
+                '[{"step": 1, "automatable": "yes", "reason": "kurze deutsche Begründung, max. 80 Zeichen"}]\n\n'
+                "Genau ein Objekt pro Schritt, in der Reihenfolge der Prozess-Map. Die Begründung "
+                "soll dem Klienten beim Verständnis helfen, nicht technisch sein."
+            ),
+        }],
+    )
+    text = msg.content[0].text
+    m = re.search(r"\[[\s\S]*\]", text)
+    if not m:
+        return []
+    try:
+        parsed = json.loads(m.group())
+        if not isinstance(parsed, list):
+            return []
+        # Sanitize each entry — normalize automatable values to allowed set
+        out = []
+        for i, entry in enumerate(parsed, start=1):
+            if not isinstance(entry, dict):
+                continue
+            auto = str(entry.get("automatable", "partial")).lower()
+            if auto not in ("yes", "partial", "no"):
+                auto = "partial"
+            out.append({
+                "step": int(entry.get("step") or i),
+                "automatable": auto,
+                "reason": str(entry.get("reason", ""))[:200],
+            })
+        return out
+    except Exception:
+        return []
+
+
 def generate_spec_summary(
     context: str,
     all_qa: list,
     *,
     process_map: list = None,
     process_map_notes: str = "",
+    process_map_skipped: bool = False,
     extra_context: str = "",
     attachments: list = None,
 ) -> str:
@@ -299,6 +403,7 @@ def generate_spec_summary(
         all_qa=all_qa,
         process_map=process_map,
         process_map_notes=process_map_notes,
+        process_map_skipped=process_map_skipped,
         extra_context=extra_context,
         attachments=attachments,
     )
@@ -336,6 +441,7 @@ def generate_claude_code_prompt(
     *,
     process_map: list = None,
     process_map_notes: str = "",
+    process_map_skipped: bool = False,
     extra_context: str = "",
     attachments: list = None,
 ) -> str:
@@ -369,6 +475,7 @@ def generate_claude_code_prompt(
         all_qa=all_qa,
         process_map=process_map,
         process_map_notes=process_map_notes,
+        process_map_skipped=process_map_skipped,
         extra_context=extra_context,
         attachments=attachments,
     )

@@ -542,7 +542,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .pm-row {
   display: grid;
-  grid-template-columns: 36px 1.1fr 1.4fr 0.9fr 1.1fr 1.1fr 110px 32px;
+  grid-template-columns: 36px 1.1fr 1.5fr 1fr 1.2fr 1.2fr 32px;
   gap: 8px; padding: 10px 12px;
   border-bottom: 1px solid var(--light-border);
   align-items: start;
@@ -654,6 +654,15 @@ body.with-sidebar { padding-right: 320px; }
   max-height: 40px; overflow: hidden;
 }
 .attachment-warn { color: #f59e0b; font-size: 10.5px; margin-top: 3px; }
+.attachment-pending { opacity: 0.85; border-style: dashed; }
+.attachment-pending .attachment-name { color: var(--text-muted); }
+.mini-spinner {
+  display: inline-block; width: 10px; height: 10px;
+  border: 1.5px solid rgba(21,200,122,0.2);
+  border-top-color: var(--green);
+  border-radius: 50%; vertical-align: -2px;
+  animation: spin 0.7s linear infinite;
+}
 
 .sidebar-notes {
   width: 100%; min-height: 100px;
@@ -838,8 +847,9 @@ body.with-sidebar { padding-right: 320px; }
 
   <div class="pm-body">
     <div class="pm-intro">
-      <h2>Aktueller Prozess — Schritt für Schritt</h2>
-      <p>Beschreibe wie der Prozess heute abläuft, von Anfang bis Ende. Jeder Schritt: <strong>wer</strong> macht <strong>was</strong> mit <strong>welchem Tool</strong>. Je konkreter, desto besser können wir später automatisieren.</p>
+      <h2 id="pm-title">Aktueller Prozess — Schritt für Schritt</h2>
+      <p id="pm-process-name" style="display:none;font-size:13px;color:var(--green-dark);margin-bottom:4px;font-weight:500;"></p>
+      <p>Beschreibe wie der Prozess <strong>heute</strong> abläuft, von Anfang bis Ende — <em>nicht</em> wie er nachher automatisiert sein soll. Jeder Schritt: <strong>wer</strong> macht <strong>was</strong> mit <strong>welchem Tool</strong>.</p>
     </div>
 
     <div class="pm-table-wrap">
@@ -850,7 +860,6 @@ body.with-sidebar { padding-right: 320px; }
         <div>Tool</div>
         <div>Daten rein</div>
         <div>Daten raus</div>
-        <div>Auto?</div>
         <div></div>
       </div>
       <div id="pm-rows"></div>
@@ -860,6 +869,8 @@ body.with-sidebar { padding-right: 320px; }
 
     <textarea class="pm-notes" id="pm-notes" placeholder="Notizen, Sonderfälle, Ausnahmen — alles was die Tabelle nicht abbildet …"></textarea>
 
+    <p style="font-size:12px;color:var(--light-muted);margin-top:10px;">Claude erkennt automatisch, welche Schritte automatisierbar sind — du musst das nicht selbst beurteilen.</p>
+
     <div class="pm-actions">
       <button id="pm-submit-btn" class="btn btn-primary">
         Weiter zu den Fragen <span class="arrow">→</span>
@@ -867,6 +878,22 @@ body.with-sidebar { padding-right: 320px; }
       <button id="pm-skip-btn" class="btn btn-ghost" style="font-size:13px;">Überspringen</button>
     </div>
   </div>
+
+  <!-- Datalist for tool autocomplete on every Prozess-Map "Tool" input -->
+  <datalist id="common-tools">
+    <option value="Gmail"><option value="Outlook 365"><option value="Apple Mail">
+    <option value="Bexio"><option value="Banana Buchhaltung"><option value="Sage"><option value="Abacus"><option value="AbaWeb"><option value="Klara">
+    <option value="Google Sheets"><option value="Excel"><option value="Microsoft Word"><option value="Google Docs">
+    <option value="Notion"><option value="Asana"><option value="Trello"><option value="Monday"><option value="ClickUp">
+    <option value="Slack"><option value="Microsoft Teams"><option value="Zoom"><option value="Skype">
+    <option value="WhatsApp"><option value="Telegram"><option value="Signal">
+    <option value="Google Drive"><option value="OneDrive"><option value="Dropbox">
+    <option value="Calendly"><option value="Google Calendar"><option value="Outlook Kalender">
+    <option value="Twint"><option value="Crefo"><option value="Stripe"><option value="PayPal">
+    <option value="UBS E-Banking"><option value="Raiffeisen E-Banking"><option value="PostFinance"><option value="ZKB E-Banking">
+    <option value="WordPress"><option value="Shopify"><option value="HubSpot"><option value="Pipedrive"><option value="Salesforce">
+    <option value="DocuSign"><option value="Acrobat / PDF"><option value="Telefon"><option value="Papier / Post">
+  </datalist>
 </div>
 
 <!-- ════ SCREEN 3: QUESTIONS ════ -->
@@ -1032,6 +1059,8 @@ const App = {
   // Process map + sidebar state
   processMap: [],
   processMapNotes: "",
+  processName: "",        // V2: LLM-identified process name (after ready_for_process_map)
+  toolsIdentified: [],    // V2: tools the LLM heard before transitioning to map
   attachments: [],
   attachmentCount: 0,
   pendingQuestions: null,
@@ -1221,14 +1250,26 @@ const App = {
       if (!r.ok) throw new Error(d.error || "Fehler");
       this.sessionId = d.session_id;
       this.currentRound = d.round;
-      this.pendingQuestions = d.questions || [];
-      this.pendingStatus = d.status || "needs_process_selection";
       history.pushState({}, "", `?s=${this.sessionId}`);
       this.ls("set", "context", context);
       // Sidebar becomes active now that a session exists.
       document.body.classList.add("with-sidebar");
-      // Route through the process-map screen first; the questions are queued.
-      this.showProcessMap();
+      // V2: conditional routing based on LLM's first read of the context.
+      //  - needs_technical_detail (clear single process) → process-map first,
+      //    then the stashed questions become the technical-detail round.
+      //  - needs_process_selection (vague / multi-process) → questions FIRST
+      //    so we narrow down which process. Process-map comes after LLM signals
+      //    ready_for_process_map.
+      if (d.status === "needs_technical_detail") {
+        this.pendingQuestions = d.questions || [];
+        this.pendingStatus = d.status;
+        this.showProcessMap();
+      } else {
+        // process-selection or anything else — show questions immediately
+        this.pendingQuestions = null;
+        this.pendingStatus = null;
+        this.showQuestions(d.questions || [], d.round, d.status);
+      }
     } catch (e) {
       this.showToast(e.message);
       this.showScreen("screen-context");
@@ -1237,11 +1278,18 @@ const App = {
 
   // ── Process map ────────────────────────────────────────────────
   showProcessMap() {
+    // Display the LLM-identified process name (if any) above the table.
+    const nameEl = document.getElementById("pm-process-name");
+    if (this.processName && nameEl) {
+      nameEl.textContent = `Prozess: ${this.processName}`;
+      nameEl.style.display = "block";
+    } else if (nameEl) {
+      nameEl.style.display = "none";
+    }
     if (!this.processMap.length) {
-      this.processMap = Array.from({length: 3}, (_, i) => ({
-        step: i + 1, who: "", action: "", tool: "",
-        data_in: "", data_out: "", automatable: "partial",
-      }));
+      this.processMap = [{
+        step: 1, who: "", action: "", tool: "", data_in: "", data_out: "",
+      }];
     }
     this.renderProcessMap();
     this.showScreen("screen-process-map");
@@ -1251,24 +1299,16 @@ const App = {
     const root = document.getElementById("pm-rows");
     root.innerHTML = "";
     this.processMap.forEach((step, idx) => {
-      const auto = step.automatable || "partial";
       const row = document.createElement("div");
       row.className = "pm-row";
       row.dataset.idx = String(idx);
       row.innerHTML = `
         <div class="pm-step-num">${idx + 1}</div>
-        <div class="pm-cell" data-label="Wer"><input type="text" placeholder="Sarah" value="${this.esc(step.who || '')}" data-key="who"></div>
-        <div class="pm-cell" data-label="Was passiert"><textarea rows="1" placeholder="Empfängt PDF" data-key="action">${this.esc(step.action || '')}</textarea></div>
-        <div class="pm-cell" data-label="Tool"><input type="text" placeholder="Gmail" value="${this.esc(step.tool || '')}" data-key="tool"></div>
-        <div class="pm-cell" data-label="Daten rein"><input type="text" placeholder="Rechnung PDF" value="${this.esc(step.data_in || '')}" data-key="data_in"></div>
-        <div class="pm-cell" data-label="Daten raus"><input type="text" placeholder="Anhang gespeichert" value="${this.esc(step.data_out || '')}" data-key="data_out"></div>
-        <div class="pm-cell" data-label="Auto?">
-          <select class="auto-${auto}" data-key="automatable">
-            <option value="yes"${auto==='yes'?' selected':''}>✓ ja</option>
-            <option value="partial"${auto==='partial'?' selected':''}>~ teils</option>
-            <option value="no"${auto==='no'?' selected':''}>✗ nein</option>
-          </select>
-        </div>
+        <div class="pm-cell" data-label="Wer"><input type="text" placeholder="z.B. Mitarbeiter" value="${this.esc(step.who || '')}" data-key="who"></div>
+        <div class="pm-cell" data-label="Was passiert"><textarea rows="1" placeholder="z.B. Datei empfangen" data-key="action">${this.esc(step.action || '')}</textarea></div>
+        <div class="pm-cell" data-label="Tool"><input type="text" list="common-tools" placeholder="z.B. Gmail" value="${this.esc(step.tool || '')}" data-key="tool"></div>
+        <div class="pm-cell" data-label="Daten rein"><input type="text" placeholder="z.B. PDF" value="${this.esc(step.data_in || '')}" data-key="data_in"></div>
+        <div class="pm-cell" data-label="Daten raus"><input type="text" placeholder="z.B. Eintrag" value="${this.esc(step.data_out || '')}" data-key="data_out"></div>
         <button class="pm-row-delete" type="button" aria-label="Schritt löschen" data-action="delete-row">×</button>
       `;
       root.appendChild(row);
@@ -1290,7 +1330,7 @@ const App = {
         tool: get("tool"),
         data_in: get("data_in"),
         data_out: get("data_out"),
-        automatable: get("automatable") || "partial",
+        // V2: automatable is no longer collected from the user — AI infers it.
       };
     });
   },
@@ -1299,7 +1339,7 @@ const App = {
     this.processMap = this.collectProcessMap();
     this.processMap.push({
       step: this.processMap.length + 1, who: "", action: "", tool: "",
-      data_in: "", data_out: "", automatable: "partial",
+      data_in: "", data_out: "",
     });
     this.renderProcessMap();
   },
@@ -1308,7 +1348,7 @@ const App = {
     this.processMap = this.collectProcessMap();
     this.processMap.splice(idx, 1);
     if (!this.processMap.length) {
-      this.processMap.push({step: 1, who: "", action: "", tool: "", data_in: "", data_out: "", automatable: "partial"});
+      this.processMap.push({step: 1, who: "", action: "", tool: "", data_in: "", data_out: ""});
     }
     this.renderProcessMap();
   },
@@ -1322,23 +1362,45 @@ const App = {
       cleaned = this.processMap.filter(s =>
         (s.who || s.action || s.tool || s.data_in || s.data_out)
       );
-      this.showLoading("Speichere Prozess-Map");
-      try {
-        const r = await fetch(`/api/session/${this.sessionId}/process_map`, {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({steps: cleaned, notes}),
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "Fehler");
-        this.processMap = d.steps || cleaned;
-        this.processMapNotes = d.notes || notes;
-      } catch (e) {
-        this.showToast("Speichern fehlgeschlagen: " + e.message);
-        this.showScreen("screen-process-map");
+    }
+    this.showLoading(skip ? "Übersprungen — gehe weiter" : "Speichere Prozess-Map");
+    let serverNext = null;
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/process_map`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({steps: cleaned, notes, skipped: !!skip}),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Fehler");
+      this.processMap = d.steps || cleaned;
+      this.processMapNotes = d.notes || notes;
+      serverNext = d.next; // present in path B (rounds-then-map) — null in path A
+    } catch (e) {
+      this.showToast("Speichern fehlgeschlagen: " + e.message);
+      this.showScreen("screen-process-map");
+      return;
+    }
+    // Path B — server already fired evaluate_answers; use its result
+    if (serverNext) {
+      if (serverNext.status === "complete") {
+        this.showROI(serverNext.roi || {}, serverNext.assumptions || []);
         return;
       }
+      if (serverNext.status === "ready_for_process_map") {
+        // Shouldn't happen — but guard: re-show map screen
+        this.processName = serverNext.process_name || this.processName;
+        this.showProcessMap();
+        return;
+      }
+      // needs_more — show the LLM's technical-detail questions
+      this.currentRound = serverNext.round || (this.currentRound + 1);
+      this.showQuestions(serverNext.questions || [], this.currentRound,
+                          serverNext.status || "needs_technical_detail",
+                          serverNext.assumptions);
+      return;
     }
+    // Path A — use the questions stashed from /session/start
     if (this.pendingQuestions && this.pendingQuestions.length) {
       const qs = this.pendingQuestions;
       const status = this.pendingStatus;
@@ -1377,6 +1439,9 @@ const App = {
   },
 
   // ── Sidebar — file upload ──────────────────────────────────────
+  // pending uploads (rendered as spinner rows in the attachments list)
+  pendingUploads: [],
+
   async uploadFiles(files) {
     if (!this.sessionId) {
       this.showToast("Erst Kontext eingeben — dann Dateien hochladen.");
@@ -1388,13 +1453,21 @@ const App = {
         this.showToast(`${file.name}: zu gross (max 5 MB)`);
         continue;
       }
+      // V2: add a "pending" row immediately so the user sees a spinner
+      // (vision OCR can take 15-30s — without this, the UI looks frozen).
+      const pendingId = `up-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+      this.pendingUploads.push({id: pendingId, filename: file.name, size: file.size});
+      this.renderAttachments();
       status.textContent = `Verarbeite ${file.name}…`;
+
       const fd = new FormData();
       fd.append("file", file);
       try {
         const r = await fetch(`/api/session/${this.sessionId}/attachment`, {method: "POST", body: fd});
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `Fehler ${r.status}`);
+        // Remove pending placeholder, add real attachment
+        this.pendingUploads = this.pendingUploads.filter(p => p.id !== pendingId);
         this.attachments.push({
           filename: d.filename, size: d.size, kind: d.kind,
           extracted_text: d.preview, warning: d.warning,
@@ -1403,6 +1476,8 @@ const App = {
         this.renderAttachments();
         status.textContent = `${file.name} hinzugefügt ✓`;
       } catch (e) {
+        this.pendingUploads = this.pendingUploads.filter(p => p.id !== pendingId);
+        this.renderAttachments();
         status.textContent = `Fehler bei ${file.name}: ${e.message}`;
       }
     }
@@ -1424,7 +1499,19 @@ const App = {
 
   renderAttachments() {
     const list = document.getElementById("attachments-list");
-    list.innerHTML = this.attachments.map((a, i) => {
+    // V2: render pending uploads first (with spinner), then finished attachments
+    const pendingHtml = (this.pendingUploads || []).map(p => `
+      <div class="attachment-item attachment-pending">
+        <div class="attachment-row">
+          <span class="attachment-name" title="${this.esc(p.filename)}">
+            <span class="mini-spinner" aria-hidden="true"></span> ${this.esc(p.filename)}
+          </span>
+          <span class="attachment-size">${this.fmtSize(p.size)}</span>
+        </div>
+        <div class="attachment-preview">wird verarbeitet …</div>
+      </div>
+    `).join("");
+    const doneHtml = this.attachments.map((a, i) => {
       const preview = a.extracted_text ? String(a.extracted_text).slice(0, 160) : "";
       const more = a.extracted_text && String(a.extracted_text).length > 160 ? "…" : "";
       return `<div class="attachment-item">
@@ -1437,9 +1524,11 @@ const App = {
         ${a.warning ? `<div class="attachment-warn">⚠ ${this.esc(a.warning)}</div>` : ""}
       </div>`;
     }).join("");
+    list.innerHTML = pendingHtml + doneHtml;
     const badge = document.getElementById("sidebar-fab-badge");
-    badge.textContent = this.attachmentCount || "";
-    badge.classList.toggle("show", !!this.attachmentCount);
+    const totalCount = this.attachmentCount + (this.pendingUploads?.length || 0);
+    badge.textContent = totalCount || "";
+    badge.classList.toggle("show", !!totalCount);
   },
 
   fmtSize(b) {
@@ -1456,15 +1545,34 @@ const App = {
   // ── Submit answers ─────────────────────────────────────────────
   async submitAnswers() {
     const answers = this.collectAnswers();
-    const empty = answers.find(a => !a.answer.trim());
-    if (empty) {
-      document.querySelectorAll(".question-card").forEach(c => {
-        const ta = c.querySelector("textarea");
-        const rb = c.querySelector("input[type=radio]:checked");
-        if ((ta && !ta.value.trim()) || (!ta && !rb)) c.classList.add("error");
-      });
-      document.querySelector(".question-card.error")?.scrollIntoView({behavior:"smooth",block:"center"});
-      this.showToast("Bitte alle Fragen beantworten.");
+    // V2: validate Andere… with empty textarea — block submit + scroll to the offender.
+    let firstError = null;
+    document.querySelectorAll(".question-card").forEach(card => {
+      card.classList.remove("error");
+      const ta = card.querySelector("textarea.q-textarea");
+      const otherTa = card.querySelector("textarea.choice-other-input");
+      const radio = card.querySelector("input[type=radio]:checked");
+      let invalid = false;
+      if (ta && !ta.value.trim()) invalid = true;
+      else if (radio) {
+        if (/^Andere/i.test(radio.value) && (!otherTa || !otherTa.value.trim())) invalid = true;
+      } else if (!ta) {
+        invalid = true; // no choice selected and no textarea
+      }
+      if (invalid) {
+        card.classList.add("error");
+        if (!firstError) firstError = card;
+      }
+    });
+    if (firstError) {
+      firstError.scrollIntoView({behavior:"smooth", block:"center"});
+      // Distinguish the Andere case for a more useful toast
+      const radio = firstError.querySelector("input[type=radio]:checked");
+      if (radio && /^Andere/i.test(radio.value)) {
+        this.showToast("Bitte deine Antwort eingeben — 'Andere…' braucht Freitext.");
+      } else {
+        this.showToast("Bitte alle Fragen beantworten.");
+      }
       return;
     }
     this.showLoading("Verarbeite Antworten");
@@ -1479,6 +1587,12 @@ const App = {
       this.allQA.push({ round: this.currentRound, qa: answers });
       if (d.status === "complete") {
         this.showROI(d.roi, d.assumptions || []);
+      } else if (d.status === "ready_for_process_map") {
+        // V2: LLM has identified the process — transition to process-map screen.
+        this.processName = d.process_name || "";
+        this.toolsIdentified = d.tools_identified || [];
+        // Seed the process-map "tool" hints with what the LLM already heard
+        this.showProcessMap();
       } else {
         this.currentRound = d.round;
         this.showQuestions(d.questions, d.round, d.status, d.assumptions);
@@ -1682,6 +1796,8 @@ const App = {
       this.leadPageId        = s.lead_page_id || null;
       this.processMap        = s.process_map || [];
       this.processMapNotes   = s.process_map_notes || "";
+      this.processName       = s.process_name || "";
+      this.toolsIdentified   = s.tools_identified || [];
       this.attachments       = (s.attachments || []).map(a => ({
         filename: a.filename,
         size: a.size,
@@ -1771,6 +1887,7 @@ const App = {
     this.sessionId = null; this.currentRound = 0;
     this.context = ""; this.allQA = []; this.leadPageId = null; this.promptText = null;
     this.processMap = []; this.processMapNotes = "";
+    this.processName = ""; this.toolsIdentified = [];
     this.attachments = []; this.attachmentCount = 0;
     this.pendingQuestions = null; this.pendingStatus = null;
     history.pushState({}, "", "/");

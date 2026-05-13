@@ -16,6 +16,8 @@ Leads DB ID: NOTION_LEADS_DB_ID env var, falls back to hardcoded fallback below.
 import json
 import os
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import requests
@@ -219,6 +221,14 @@ def create_session(context: str, lead_page_id: Optional[str] = None) -> str:
         # New: process map (guided A→Z walkthrough), filled before Q&A rounds.
         "process_map": [],
         "process_map_notes": "",
+        # V2: user explicitly skipped the process map screen — LLM won't re-trigger it.
+        "process_map_skipped": False,
+        # V2: AI-judged automatability per step ([{step, automatable, reason}]),
+        # populated by background payoff thread.
+        "process_map_classification": [],
+        # V2: name + tools the LLM identified before transitioning to process-map.
+        "process_name": "",
+        "tools_identified": [],
         # New: attachments (Excel/CSV/PDF/image) accumulated in the sidebar.
         "attachments": [],
         # New: free-text "Extras & Dateien" notes pad — autosaved by frontend.
@@ -509,18 +519,37 @@ def _mermaid_label(text: str, limit: int = 32) -> str:
     return cleaned
 
 
-def _build_mermaid(process_map: list) -> str:
+def _classification_by_step(classification: list) -> dict:
+    """Index a classification list ([{step, automatable, reason}]) by step number."""
+    out = {}
+    for c in classification or []:
+        try:
+            out[int(c["step"])] = c
+        except (KeyError, ValueError, TypeError):
+            pass
+    return out
+
+
+def _build_mermaid(process_map: list, classification: list = None) -> str:
     """Render the process map as a Mermaid flowchart. Notion natively renders
-    `mermaid`-language code blocks. Generated deterministically — no LLM call."""
+    `mermaid`-language code blocks. Generated deterministically from rows; the
+    AI-judged classification (V2) drives the per-step color class. Falls back to
+    'partial' coloring when classification is missing for a step."""
     if not process_map:
         return ""
     cls_for = {"yes": "auto", "partial": "partial", "no": "manual"}
+    by_step = _classification_by_step(classification)
     lines = ["flowchart TD"]
     for i, step in enumerate(process_map, start=1):
         who = _mermaid_label(step.get("who"), 24)
         action = _mermaid_label(step.get("action"), 36)
         tool = _mermaid_label(step.get("tool"), 18)
-        cls = cls_for.get((step.get("automatable") or "partial").lower(), "partial")
+        # V2: prefer AI classification; fall back to user-supplied automatable (V1) or "partial".
+        step_idx = int(step.get("step") or i)
+        auto = (by_step.get(step_idx, {}).get("automatable")
+                or step.get("automatable")
+                or "partial").lower()
+        cls = cls_for.get(auto, "partial")
         label = f"{who}<br/>{action}<br/>{tool}"
         lines.append(f'  S{i}["{label}"]:::{cls}')
     for i in range(1, len(process_map)):
@@ -531,17 +560,33 @@ def _build_mermaid(process_map: list) -> str:
     return "\n".join(lines)
 
 
-def _table_rows_for_process_map(process_map: list) -> list:
-    """Build Notion `table_row` children for the process-map table block."""
+def _table_rows_for_process_map(process_map: list, classification: list = None) -> list:
+    """Build Notion `table_row` children for the process-map table block. V2: an
+    extra 'Automatisierbar (Claude)' column shows the AI's verdict + brief reason."""
     def cell(text):
         return [{"type": "text", "text": {"content": str(text)[:1999]}}]
     auto_label = {"yes": "✓ ja", "partial": "~ teils", "no": "✗ nein"}
-    header = {"type": "table_row", "table_row": {"cells": [
+    by_step = _classification_by_step(classification)
+    has_classification = bool(by_step)
+    header_cells = [
         cell("#"), cell("Wer"), cell("Was"), cell("Tool"),
-        cell("Daten rein"), cell("Daten raus"), cell("Auto?"),
-    ]}}
-    rows = [header]
+        cell("Daten rein"), cell("Daten raus"),
+    ]
+    if has_classification:
+        header_cells.append(cell("Automatisierbar (Claude)"))
+    else:
+        header_cells.append(cell("Auto?"))
+    rows = [{"type": "table_row", "table_row": {"cells": header_cells}}]
     for i, step in enumerate(process_map, start=1):
+        step_idx = int(step.get("step") or i)
+        if has_classification:
+            c = by_step.get(step_idx, {})
+            auto = (c.get("automatable") or "partial").lower()
+            reason = c.get("reason", "")
+            auto_cell = cell(f"{auto_label.get(auto, '—')} — {reason}" if reason else auto_label.get(auto, "—"))
+        else:
+            auto = (step.get("automatable") or "partial").lower()
+            auto_cell = cell(auto_label.get(auto, "—"))
         rows.append({"type": "table_row", "table_row": {"cells": [
             cell(step.get("step", i)),
             cell(step.get("who", "")),
@@ -549,7 +594,7 @@ def _table_rows_for_process_map(process_map: list) -> list:
             cell(step.get("tool", "")),
             cell(step.get("data_in", "")),
             cell(step.get("data_out", "")),
-            cell(auto_label.get((step.get("automatable") or "partial").lower(), "—")),
+            auto_cell,
         ]}})
     return rows
 
@@ -589,8 +634,11 @@ def write_payoff_to_page(
     process_map: list,
     process_map_notes: str,
     claude_code_prompt: str,
+    classification: list = None,
 ) -> bool:
     """Append the end-of-interview payoff: process map (mermaid + table) + Claude Code prompt.
+    `classification` (V2) is the AI's per-step automatability verdict — drives mermaid
+    colors + adds a 'Automatisierbar (Claude)' column to the table.
     Idempotent — skips if the heading 'Aktueller Prozess (Ist-Zustand)' is already on the page.
     Returns True if written, False if skipped or failed."""
     if not available() or not lead_page_id:
@@ -605,7 +653,7 @@ def write_payoff_to_page(
     if process_map:
         blocks.append({"object": "block", "type": "heading_2",
                        "heading_2": {"rich_text": _rt(_PAYOFF_HEADING)}})
-        mermaid_src = _build_mermaid(process_map)
+        mermaid_src = _build_mermaid(process_map, classification=classification)
         if mermaid_src:
             blocks.append({"object": "block", "type": "code",
                            "code": {"language": "mermaid", "rich_text": _rt(mermaid_src)}})
@@ -619,7 +667,7 @@ def write_payoff_to_page(
                 "table_width": 7,
                 "has_column_header": True,
                 "has_row_header": False,
-                "children": _table_rows_for_process_map(process_map),
+                "children": _table_rows_for_process_map(process_map, classification=classification),
             },
         }]
         blocks.append({"object": "block", "type": "toggle",
@@ -730,38 +778,156 @@ def create_brief_page(
     return r.json()
 
 
-def replace_brief_body(page_id: str, body_md: str) -> None:
-    """Idempotent body refresh: archive existing children, append new code block.
-    Used when --force overwrites an existing week's brief."""
-    # 1) Fetch all top-level children
+def _fetch_page_blocks(page_id: str, max_pages: int = 8) -> list[dict]:
+    """Page through top-level children of a Notion page. Returns block objects."""
+    blocks: list[dict] = []
+    cursor: Optional[str] = None
+    for _ in range(max_pages):
+        url = f"https://api.notion.com/v1/blocks/{page_id}/children?page_size=100"
+        if cursor:
+            url += f"&start_cursor={cursor}"
+        r = requests.get(url, headers=_notion_headers(), timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        blocks.extend(data.get("results", []))
+        if not data.get("has_more"):
+            break
+        cursor = data.get("next_cursor")
+        if not cursor:
+            break
+    return blocks
+
+
+def _is_synthesis_block(block: dict) -> bool:
+    """Identify the script-owned block: code block with language='markdown'."""
+    if block.get("type") != "code":
+        return False
+    code = block.get("code", {}) or {}
+    return code.get("language") == "markdown"
+
+
+def _extract_code_block_text(block: dict) -> str:
+    """Concatenate rich_text segments from a code block into raw text."""
+    code = block.get("code", {}) or {}
+    parts = []
+    for seg in code.get("rich_text", []):
+        if seg.get("type") == "text":
+            parts.append(seg.get("text", {}).get("content", ""))
+        else:
+            parts.append(seg.get("plain_text", ""))
+    return "".join(parts)
+
+
+def _delete_block(block_id: str) -> bool:
+    """Delete (archive) a single Notion block. Returns True on success or 404."""
     try:
-        cursor = None
-        block_ids: list[str] = []
-        for _ in range(8):
-            url = f"https://api.notion.com/v1/blocks/{page_id}/children?page_size=100"
-            if cursor:
-                url += f"&start_cursor={cursor}"
-            r = requests.get(url, headers=_notion_headers(), timeout=15)
-            r.raise_for_status()
-            data = r.json()
-            block_ids.extend(b["id"] for b in data.get("results", []))
-            if not data.get("has_more"):
-                break
-            cursor = data.get("next_cursor")
-        # 2) Archive each (Notion delete = archive)
-        for bid in block_ids:
-            try:
-                requests.delete(
-                    f"https://api.notion.com/v1/blocks/{bid}",
-                    headers=_notion_headers(),
-                    timeout=10,
+        r = requests.delete(
+            f"https://api.notion.com/v1/blocks/{block_id}",
+            headers=_notion_headers(),
+            timeout=10,
+        )
+        if r.status_code == 404:
+            return True  # already gone — fine
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        print(f"[notion] _delete_block {block_id} failed: {e}")
+        return False
+
+
+def replace_synthesis_block(
+    page_id: str,
+    body_md: str,
+    *,
+    backup_dir: Optional[Path] = None,
+    force: bool = False,
+) -> dict:
+    """Refresh the script-owned synthesis block on a brief page.
+
+    Two modes:
+      • `force=False` (default = "merge"): preserves all non-`language:markdown`
+        blocks (paragraphs, headings, callouts, user-written code in other
+        languages, etc.). Backs up each existing synthesis code block's text
+        content to `backup_dir/brief-pre-merge-<page-no-dashes>-<UTC-iso>.md`,
+        then deletes only those code blocks and appends a fresh one at the end.
+      • `force=True`: full overwrite. Deletes every top-level child and
+        appends one fresh synthesis code block. No backup is written.
+
+    Returns: {"action": "merged"|"replaced",
+              "preserved_block_count": int,
+              "deleted_synthesis_count": int,
+              "backups": [Path, ...]}
+
+    Raises RuntimeError if backup_dir is required (merge mode + existing
+    synthesis to back up) but unwritable.
+    """
+    try:
+        blocks = _fetch_page_blocks(page_id)
+    except Exception as e:
+        raise RuntimeError(f"replace_synthesis_block: fetch failed: {e}") from e
+
+    synthesis = [b for b in blocks if _is_synthesis_block(b)]
+    user_blocks = [b for b in blocks if not _is_synthesis_block(b)]
+
+    backups: list[Path] = []
+    if force:
+        # Full overwrite — delete everything, no backup, no merge concept.
+        to_delete = blocks
+        action = "replaced"
+    else:
+        # Merge — preserve user_blocks. Backup synthesis content first.
+        if synthesis:
+            if backup_dir is None:
+                raise RuntimeError(
+                    "replace_synthesis_block(merge): backup_dir required "
+                    "when existing synthesis block(s) present"
                 )
-            except Exception:
-                pass
-        # 3) Append fresh content
+            try:
+                backup_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                raise RuntimeError(
+                    f"replace_synthesis_block: cannot create backup_dir {backup_dir}: {e}"
+                ) from e
+            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            page_slug = page_id.replace("-", "")
+            for idx, sb in enumerate(synthesis):
+                suffix = f"-{idx}" if len(synthesis) > 1 else ""
+                fpath = backup_dir / f"brief-pre-merge-{page_slug}-{ts}{suffix}.md"
+                try:
+                    fpath.write_text(_extract_code_block_text(sb), encoding="utf-8")
+                    backups.append(fpath)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"replace_synthesis_block: backup write failed at {fpath}: {e}"
+                    ) from e
+        to_delete = synthesis
+        action = "merged"
+
+    for b in to_delete:
+        _delete_block(b["id"])
+
+    try:
         _append_blocks(page_id, _md_body_to_blocks(body_md))
     except Exception as e:
-        raise RuntimeError(f"replace_brief_body failed: {e}") from e
+        raise RuntimeError(f"replace_synthesis_block: append failed: {e}") from e
+
+    return {
+        "action": action,
+        "preserved_block_count": (0 if force else len(user_blocks)),
+        # In merge mode: count of synthesis code blocks deleted.
+        # In force mode: count of ALL blocks deleted (synthesis + user).
+        "deleted_block_count": (len(blocks) if force else len(synthesis)),
+        "deleted_synthesis_count": len(synthesis),
+        "backups": backups,
+    }
+
+
+# Backwards-compatibility shim: keep the old name pointing at the new function
+# in force mode (matches original semantics).
+def replace_brief_body(page_id: str, body_md: str) -> None:
+    """Deprecated — use replace_synthesis_block. Kept for callers that still
+    expect a full overwrite without backup or merge."""
+    replace_synthesis_block(page_id, body_md, backup_dir=None, force=True)
 
 
 def update_brief_props(page_id: str, props: dict) -> None:

@@ -23,30 +23,46 @@ Replaces the older Telegram-only flow ([telegram_interview_bot.md](telegram_inte
 | **Decision points** | Question generation: process-selection vs technical detail. Round loop: complete vs needs_more. Notion payoff: skip if heading already exists. |
 | **Destination** | Notion lead page: per-round Q&A blocks, ROI block, **Mermaid flowchart + step table + Claude Code code block** auto-appended on completion. PDF spec downloadable. |
 
-## Phase order (4 phases)
+## Phase order (V2 — adaptive routing)
+
+The flow adapts based on how clearly the user described the process in the initial context.
 
 1. **Context** (`screen-context`)
    - User picks a lead (autocompletes Notion Leads DB) or types free text.
-   - Submit → `POST /api/session/start` → session created in Notion + first batch of questions returned but **queued** (not shown yet).
+   - Submit → `POST /api/session/start` → session created in Notion. Backend's `evaluate_context` returns a `status`:
+     - **`needs_technical_detail`** — clear single process detected from context. First-round questions are stashed; user routes to the **Process Map** screen first.
+     - **`needs_process_selection`** — vague or multi-process context. User routes to **Q&A** immediately to narrow scope.
    - Sidebar unlocks at this point.
 
-2. **Process map** (`screen-process-map`) — *NEW*
-   - Guided table: `Wer | Was | Tool | Daten rein | Daten raus | Auto?`
-   - Pre-filled with 3 empty rows; user adds/removes via `+ Schritt hinzufügen` / `×`.
-   - Auto column is a 3-state dropdown (`✓ ja` / `~ teils` / `✗ nein`).
-   - Notes textarea below the table for sonderfälle.
-   - Submit → `POST /api/session/{id}/process_map` → state persisted; queued questions then shown.
-   - Skip button → bypasses the persistence call but still transitions to questions (process_map stays empty).
+2a. **Q&A — process identification** (only when status was `needs_process_selection`)
+   - 1–2 rounds of broad questions: which process bothers you most, which tools, what volume.
+   - LLM eventually returns **`status: "ready_for_process_map"`** with a `process_name` + `tools_identified` array. Frontend transitions to the Process Map screen with the picked process named at the top.
+   - The LLM is explicitly instructed: *"Lieber eine Runde mehr Fragen als die falsche Prozesswahl."* If unsure between processes, it asks again instead of committing.
 
-3. **Q&A rounds** (`screen-questions`)
-   - Same as before; LLM asks max 8 questions, max 3 rounds typical.
-   - Choice questions always include `Andere…` as an escape — selecting it reveals a freeform textarea.
+2b. **Process map** (`screen-process-map`)
+   - Guided table: `Wer | Was | Tool | Daten rein | Daten raus`. **No user-facing "Auto?" column** — Claude infers automatability per step at payoff time (V2).
+   - Starts with 1 empty row; user adds rows via `+ Schritt hinzufügen`.
+   - Tool input uses HTML5 `<datalist id="common-tools">` for native autocomplete (~50 common Swiss-SME tools: Gmail, Outlook, Bexio, Banana, etc.).
+   - Process name (from `ready_for_process_map`) shown as subhead.
+   - Framing line: *"Beschreibe wie der Prozess HEUTE abläuft — nicht wie er automatisiert aussehen soll."*
+   - Submit → `POST /api/session/{id}/process_map`. Two server behaviours:
+     - **Path A** (came from `needs_technical_detail`, no prior Q&A): persist only; frontend uses stashed questions.
+     - **Path B** (came from `ready_for_process_map`, has prior Q&A): persist + immediately fire `evaluate_answers`. Response includes `next` with the technical-detail questions for the next round.
+   - Skip button posts `{steps: [], skipped: true}`. State marks `process_map_skipped = true` so the LLM doesn't re-trigger the screen.
+
+3. **Q&A — technical detail**
+   - LLM asks max 6 questions per round. Choice questions always include `Andere…` as escape — selecting it reveals a freeform textarea.
+   - **Andere… with empty textarea is rejected** by both frontend (toast + scroll-to-error) and backend (400 with German message).
    - Sidebar still active — user can drop more files / notes mid-round.
    - On `status: complete` → ROI screen; on `needs_more` → next round.
 
 4. **ROI + payoff** (`screen-roi`)
    - User-facing: bars, savings, complexity, build time.
-   - Notion payoff (auto-written): `Aktueller Prozess (Ist-Zustand)` heading + Mermaid flowchart + collapsible Schritt-Details table + `Build Prompt für Claude Code` heading + callout + markdown code block with the full prompt.
+   - Notion payoff (auto-written by a background thread, ~30–60s after completion):
+     - "Aktueller Prozess (Ist-Zustand)" heading
+     - Mermaid flowchart with **AI-classified colors** (green/yellow/red per `classify_process_map_automatability` Sonnet call)
+     - Collapsible "Schritt-Details (Tabelle)" with an **"Automatisierbar (Claude)" column** containing Claude's verdict + brief reason per step
+     - "Build Prompt für Claude Code" heading + callout + markdown code block with the full prompt (also cached in `state.claude_code_prompt`)
 
 ## Sidebar (always-on while session active)
 
