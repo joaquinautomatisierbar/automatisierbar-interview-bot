@@ -130,9 +130,36 @@ Beispiel: "Für den MVP verwenden wir Google Sheets statt der internen Datenbank
 
 {_FRAGE_TYP_REGEL}
 
-ROI-Schätzung bei complete: Basiere AUSSCHLIESSLICH auf den vom Klienten genannten Zahlen.
-Berechnung: Stunden/Woche × 4.3 × CHF 80/h = CHF/Monat Einsparung.
-Nach Automation: ca. 15–30 Minuten/Woche für Monitoring (keine Schätzung, immer 15 Min als Standard).
+ROI-SCHÄTZUNG bei complete (V3: ZWEI-BAR HONEST ROI — Pflicht):
+
+Basiere AUSSCHLIESSLICH auf den vom Klienten genannten Zahlen.
+
+Zerlege die Zeit nach Automation in ZWEI Komponenten:
+
+(A) `minutes_per_week_machine_after` — System-Durchlaufzeit (was n8n/Tools übernehmen
+    pro Woche, ohne Mensch). Standard: 15 Min/Woche für Monitoring.
+
+(B) `minutes_per_week_human_after` — Verbleibender MENSCHLICHER Aufwand (Review,
+    Freigaben, Eskalationen, Sonderfälle). MUSS > 0 sein wenn der Prozess einen
+    Pflicht-Review oder eine menschliche Freigabe enthält. Sei konservativ:
+    lieber Stunden als Minuten wenn realistisch.
+
+Berechnung:
+- `minutes_per_week_human_after` = Σ(units_per_week × minutes_per_unit) für jeden
+  Review/Freigabe-Schritt aus der Prozess-Map oder Q&A.
+- `chf_monthly_savings` = (hours_per_week_now − (machine + human)/60) × 4.3 × chf_hourly_rate.
+- Wenn `chf_monthly_savings` < 0 → komm bei complete NICHT raus; setze
+  status=needs_more und frag nach realistischeren Zahlen.
+
+`human_residual_breakdown` — listet die Annahmen hinter (B) transparent:
+ein Array von Objekten {{task, units_per_week, minutes_per_unit}}. Pflicht wenn (B) > 15.
+
+VERBOTEN:
+- `minutes_per_week_human_after` auf 0 setzen, wenn die Prozess-Map einen
+  Review-Schritt hat oder die Q&A "Pflicht-Sichtkontrolle" / "Freigabe" / "Eskalation" erwähnt.
+- Eine ROI-Zahl ausgeben, die suggeriert "48h → 15 Min" ohne ehrliche Mensch-Restzeit.
+- Sich auf den Klienten verlassen, dass er die Restzeit kennt — DU rechnest sie aus
+  Volumen × angenommener Prüfzeit/Einheit.
 
 Antworte NUR als gültiges JSON (kein Markdown, kein Text davor/danach):
 
@@ -153,20 +180,28 @@ Bei ready_for_process_map:
   "assumptions": []
 }}
 
-Bei complete:
+Bei complete (V3 two-bar ROI schema):
 {{
   "status": "complete",
   "assumptions": ["Für den MVP verwenden wir Google Sheets statt Bexio.", "..."],
   "roi": {{
     "process": "Automatischer Mahnungsversand per E-Mail",
-    "hours_per_week_now": 5,
-    "minutes_per_week_after": 15,
+    "hours_per_week_now": 12,
+    "minutes_per_week_machine_after": 15,
+    "minutes_per_week_human_after": 75,
+    "human_residual_breakdown": [
+      {{"task": "Pflicht-Sichtkontrolle pro Beleg", "units_per_week": 150, "minutes_per_unit": 0.5}}
+    ],
     "chf_hourly_rate": 80,
-    "chf_monthly_savings": 1560,
-    "complexity": "easy",
-    "build_time_days": "2–3"
+    "chf_monthly_savings": 3608,
+    "complexity": "medium",
+    "build_time_days": "4-6"
   }}
-}}\
+}}
+
+WICHTIG zur Backwards-Compat:
+- Lege `minutes_per_week_after` IMMER ZUSÄTZLICH bei (= machine + human, in Minuten).
+  Das ist nur für altes Frontend-Display — V3-UI nutzt machine_after + human_after separat.\
 """
 
 
@@ -227,6 +262,19 @@ def _format_extras(extra_context: str) -> str:
     return f"=== ZUSÄTZLICHE NOTIZEN (Sidebar) ===\n{extra_context.strip()}"
 
 
+def _format_assumptions(assumptions: list) -> str:
+    """Format the identified MVP assumptions so the spec generator can paste
+    them verbatim into the `## MVP Assumptions` section instead of inventing new ones."""
+    if not assumptions:
+        return ""
+    lines = ["=== IDENTIFIZIERTE MVP-ANNAHMEN (aus Q&A — wortgleich übernehmen) ==="]
+    for a in assumptions:
+        if not a:
+            continue
+        lines.append(f"- {a}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 def _build_user_message(
     *,
     context: str,
@@ -236,6 +284,7 @@ def _build_user_message(
     process_map_skipped: bool = False,
     extra_context: str = "",
     attachments: list = None,
+    assumptions: list = None,
 ) -> str:
     """Compose the user-side message block, including only sections that have content."""
     blocks = [f"URSPRÜNGLICHER KONTEXT:\n{context}"]
@@ -258,7 +307,75 @@ def _build_user_message(
         blocks.append(at)
     if all_qa:
         blocks.append(f"BISHER GESAMMELTE ANTWORTEN:\n{_format_qa(all_qa)}")
+    asm = _format_assumptions(assumptions or [])
+    if asm:
+        blocks.append(asm)
     return "\n\n".join(blocks)
+
+
+# ---------------------------------------------------------------------------
+# Long-form generation with stop_reason="max_tokens" continuation loop.
+# Used by generate_spec_summary + generate_claude_code_prompt so long specs
+# (> max_tokens) get assembled across multiple calls instead of being truncated
+# mid-sentence. Emits a stats line per call so future cutoffs stay visible.
+# ---------------------------------------------------------------------------
+
+_CONTINUATION_NUDGE = (
+    "Bitte fahre genau dort fort wo du aufgehört hast — keine Wiederholung, "
+    "kein neuer Anfang, kein 'Fortsetzung:' Prefix. Direkt weiterschreiben."
+)
+
+
+def _complete_with_continuation(
+    client: anthropic.Anthropic,
+    *,
+    model: str,
+    user_text: str,
+    system: list = None,
+    max_tokens: int = 8000,
+    max_continuations: int = 3,
+    label: str = "generate",
+) -> str:
+    """Run messages.create; on stop_reason == 'max_tokens', send the partial
+    assistant text back with a continuation nudge until the model stops naturally
+    or we hit `max_continuations`. Returns the concatenated text."""
+    messages: list = [{"role": "user", "content": user_text}]
+    full_text = ""
+    total_input = 0
+    total_output = 0
+    continuations = 0
+    final_stop = "end_turn"
+    final_chunk_len = 0
+
+    for _ in range(max_continuations + 1):
+        kwargs = {"model": model, "max_tokens": max_tokens, "messages": list(messages)}
+        if system:
+            kwargs["system"] = system
+        resp = client.messages.create(**kwargs)
+        chunk = resp.content[0].text if resp.content else ""
+        full_text += chunk
+        final_chunk_len = len(chunk)
+        try:
+            total_input += int(getattr(resp.usage, "input_tokens", 0) or 0)
+            total_output += int(getattr(resp.usage, "output_tokens", 0) or 0)
+        except Exception:
+            pass
+        final_stop = getattr(resp, "stop_reason", None) or "unknown"
+        if final_stop != "max_tokens":
+            break
+        continuations += 1
+        # Build the continuation: append assistant's partial + nudge user.
+        messages.append({"role": "assistant", "content": chunk})
+        messages.append({"role": "user", "content": _CONTINUATION_NUDGE})
+
+    print(
+        f"[claude-stats] label={label} stop_reason={final_stop} "
+        f"continuations={continuations} input_tokens={total_input} "
+        f"output_tokens={total_output} chars={len(full_text)} "
+        f"last_chunk_chars={final_chunk_len}",
+        flush=True,
+    )
+    return full_text
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +504,102 @@ def classify_process_map_automatability(
         return []
 
 
+def extract_process_map_draft(
+    context: str,
+    *,
+    attachments: list = None,
+    extra_context: str = "",
+    all_qa: list = None,
+) -> dict:
+    """V3 P1.4 — Extract a draft process-map from the client's free narrative.
+
+    Reads the customer's prose (and any uploaded files / round 1 answers if present)
+    and returns a structured `process_map` they then REVIEW/CORRECT on screen
+    instead of filling from scratch. Lower friction, fewer empty rows.
+
+    Returns:
+        {
+          "steps": [{"step": 1, "who": "...", "action": "...", "tool": "...",
+                     "data_in": "...", "data_out": "..."}, ...],
+          "confidence": "high" | "medium" | "low",
+          "missing": ["unknown step between scan and upload", ...]
+        }
+    On any failure: `{"steps": [], "confidence": "low", "missing": []}` so the
+    frontend can fall back to an empty review form.
+    """
+    if not (context or "").strip():
+        return {"steps": [], "confidence": "low", "missing": []}
+
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    user_content = _build_user_message(
+        context=context,
+        all_qa=all_qa or [],
+        extra_context=extra_context,
+        attachments=attachments,
+    )
+    system_prompt = (
+        "Du bist Automatisierungsexperte bei automatisierbar.ch.\n\n"
+        "AUFGABE: Lies die freie Erzählung des Klienten und extrahiere die einzelnen "
+        "Schritte des aktuellen (Ist-Zustand) Prozesses. Erfinde NICHTS. Wenn ein "
+        "Schritt unklar ist, lass das entsprechende Feld leer und notiere die "
+        "Unklarheit unter `missing`.\n\n"
+        "Felder pro Schritt:\n"
+        "- `who`: Person/Rolle/System, das den Schritt ausführt (z.B. 'Andrea', 'Mandant', 'Bexio').\n"
+        "- `action`: Was passiert (kurzer Verbsatz, deutsch).\n"
+        "- `tool`: Konkretes Tool (Gmail, Bexio, Excel, Telefon, persönlich, etc.).\n"
+        "- `data_in`: Was reinkommt (PDF, E-Mail, Anruf, vorheriger Schritt-Output).\n"
+        "- `data_out`: Was rausgeht (Eintrag in Bexio, E-Mail versendet, Status-Update).\n\n"
+        "Confidence:\n"
+        "- 'high': Erzählung beschreibt 3+ Schritte klar mit Akteur+Tool.\n"
+        "- 'medium': Schritte erkennbar aber Akteure oder Tools fehlen.\n"
+        "- 'low': Erzählung zu vage, weniger als 2 Schritte erkennbar.\n\n"
+        "Antworte NUR als gültiges JSON (kein Markdown davor/danach):\n"
+        '{\n'
+        '  "steps": [\n'
+        '    {"step": 1, "who": "Andrea", "action": "Empfängt Belege per Mail", '
+        '"tool": "Outlook", "data_in": "Mail mit PDF", "data_out": "Beleg in Posteingang"}\n'
+        '  ],\n'
+        '  "confidence": "high|medium|low",\n'
+        '  "missing": ["kurze Beschreibung was unklar war"]\n'
+        '}'
+    )
+    try:
+        msg = client.messages.create(
+            model=MODEL_FAST,
+            max_tokens=1500,
+            system=[{
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_content}],
+        )
+        parsed = _parse_json(msg.content[0].text)
+        # Sanitize
+        steps = []
+        for i, s in enumerate(parsed.get("steps", []) or [], start=1):
+            if not isinstance(s, dict):
+                continue
+            steps.append({
+                "step": int(s.get("step") or i),
+                "who": str(s.get("who", ""))[:200],
+                "action": str(s.get("action", ""))[:500],
+                "tool": str(s.get("tool", ""))[:200],
+                "data_in": str(s.get("data_in", ""))[:300],
+                "data_out": str(s.get("data_out", ""))[:300],
+            })
+        confidence = parsed.get("confidence", "medium")
+        if confidence not in ("high", "medium", "low"):
+            confidence = "medium"
+        missing = [str(m)[:200] for m in (parsed.get("missing") or []) if m]
+        if not steps:
+            confidence = "low"
+        return {"steps": steps, "confidence": confidence, "missing": missing}
+    except Exception as e:
+        print(f"[claude-stats] label=extract_process_map_draft error={e!r}", flush=True)
+        return {"steps": [], "confidence": "low", "missing": []}
+
+
 def generate_spec_summary(
     context: str,
     all_qa: list,
@@ -396,6 +609,7 @@ def generate_spec_summary(
     process_map_skipped: bool = False,
     extra_context: str = "",
     attachments: list = None,
+    assumptions: list = None,
 ) -> str:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     user_content = _build_user_message(
@@ -406,31 +620,32 @@ def generate_spec_summary(
         process_map_skipped=process_map_skipped,
         extra_context=extra_context,
         attachments=attachments,
+        assumptions=assumptions,
     )
-    message = client.messages.create(
+    return _complete_with_continuation(
+        client,
         model=MODEL_FAST,
-        max_tokens=3000,
-        messages=[{
-            "role": "user",
-            "content": (
-                "Erstelle eine vollständige Automatisierungs-Spezifikation basierend auf diesen Informationen.\n\n"
-                "Formatiere sie als strukturiertes Dokument mit diesen Abschnitten:\n"
-                "1. Automatisierungs-Ziel\n"
-                "2. Aktueller Prozess (Ist-Zustand) — als nummerierte Liste, eine Zeile pro Schritt\n"
-                "3. Auslöser (Trigger)\n"
-                "4. Dienste & Zugangsdaten\n"
-                "5. Eingehende Daten (Schema)\n"
-                "6. Geschäftslogik & Regeln\n"
-                "7. Ausgabe & Aktionen\n"
-                "8. Fehlerbehandlung\n"
-                "9. Volumen & Timing\n"
-                "10. MVP-Annahmen\n\n"
-                f"{user_content}\n\n"
-                "Schreibe auf Deutsch. Sei präzise und technisch — ein Entwickler muss danach sofort loslegen können."
-            ),
-        }],
+        max_tokens=8000,
+        label="spec_summary",
+        user_text=(
+            "Erstelle eine vollständige Automatisierungs-Spezifikation basierend auf diesen Informationen.\n\n"
+            "Formatiere sie als strukturiertes Dokument mit diesen Abschnitten:\n"
+            "1. Automatisierungs-Ziel\n"
+            "2. Aktueller Prozess (Ist-Zustand) — als nummerierte Liste, eine Zeile pro Schritt\n"
+            "3. Auslöser (Trigger)\n"
+            "4. Dienste & Zugangsdaten\n"
+            "5. Eingehende Daten (Schema)\n"
+            "6. Geschäftslogik & Regeln\n"
+            "7. Ausgabe & Aktionen\n"
+            "8. Fehlerbehandlung\n"
+            "9. Volumen & Timing\n"
+            "10. MVP-Annahmen — falls der IDENTIFIZIERTE-MVP-ANNAHMEN-Block unten existiert, "
+            "übernimm jeden Punkt WORTGLEICH. Ergänze nur echte Lücken; erfinde keine eigenen "
+            "Defaults wenn der Klient zu einem Punkt schon eine Aussage gemacht hat.\n\n"
+            f"{user_content}\n\n"
+            "Schreibe auf Deutsch. Sei präzise und technisch — ein Entwickler muss danach sofort loslegen können."
+        ),
     )
-    return message.content[0].text
 
 
 def generate_claude_code_prompt(
@@ -444,6 +659,7 @@ def generate_claude_code_prompt(
     process_map_skipped: bool = False,
     extra_context: str = "",
     attachments: list = None,
+    assumptions: list = None,
 ) -> str:
     """Generate a ready-to-paste Claude Code prompt from the collected session data."""
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -478,53 +694,65 @@ def generate_claude_code_prompt(
         process_map_skipped=process_map_skipped,
         extra_context=extra_context,
         attachments=attachments,
+        assumptions=assumptions,
     )
 
-    message = client.messages.create(
+    return _complete_with_continuation(
+        client,
         model=MODEL_FAST,
-        max_tokens=2500,
-        messages=[{
-            "role": "user",
-            "content": (
-                "You are writing a Claude Code prompt that a developer will paste into Claude Code. "
-                "Claude Code will then build the n8n workflow end-to-end without asking the developer any questions.\n\n"
-                "Write in English. Use ONLY the data provided below. Use exact tool names, field names, "
-                "thresholds, and Tagesangaben from the Q&A and process map — never abstract them.\n\n"
-                "STRUCTURE — exactly these sections:\n"
-                "# Automation Build Spec — <ConcreteProcessName>\n"
-                "## Client\n  one paragraph: company, industry, size, the problem this solves\n"
-                "## Goal\n  one sentence with measurable outcome (e.g. 'Cut Mahnungsversand from 3h/week to 15min/week')\n"
-                "## Current Process (As-Is)\n"
-                "  Numbered list, one line per step, format: 'Step N: <who> → <action> (tool: <tool>; in: <data_in> → out: <data_out>; auto: <yes|partial|no>)'.\n"
-                "  Source from PROZESS-MAP if present; otherwise reconstruct from Q&A. This is the anchor every later step references.\n"
-                "## Trigger\n  exact n8n trigger node + config (e.g. 'Schedule Trigger, daily 08:00 Europe/Zurich')\n"
-                "## Services & Auth\n  list every external service: n8n node name → credential type → required scopes\n"
-                "## Input Data Schema\n  JSON example with the user's actual field names and example values\n"
-                "## Business Logic\n  numbered IF/THEN rules with concrete thresholds from the Q&A\n"
-                "## Output & Actions\n  for each output: target system, payload mapping, recipient\n"
-                "## Error Handling\n  retry policy + failure notification target (concrete addresses/channels)\n"
-                "## Volume & Timing\n  records/day from Q&A, peak burst, latency tolerance\n"
-                "## MVP Assumptions\n  list every assumption explicitly. If a fact wasn't in the Q&A, "
-                "PICK A SENSIBLE DEFAULT and label it '(MVP default — confirm with client)'.\n"
-                "## Build Instructions\n  numbered steps a developer follows: 1) Create credential X, 2) Add node Y with config Z, "
-                "3) Wire to node W, ... For each manual step in 'Current Process (As-Is)' marked auto:yes or auto:partial, the build instructions MUST explicitly say which n8n node automates it. End with a test plan: 3 sample payloads (happy path, edge case, failure).\n\n"
-                "HARD RULES:\n"
-                "- NEVER write 'To be defined', 'TBD', 'not specified', 'request from client', or any placeholder. "
-                "  If data is missing, pick a concrete MVP default (Gmail OAuth2, Google Sheets, daily 08:00, "
-                "  retry 3× exponential backoff, notify the contact's email) and mark '(MVP default — confirm with client)'.\n"
-                "- Use exact n8n node names: 'Schedule Trigger', 'HTTP Request', 'Gmail', 'Google Sheets', 'IF', 'Set', etc.\n"
-                "- Reference the user's actual field names from the Q&A and any uploaded files (e.g. 'Rechnungsnummer', 'Fälligkeitsdatum'), not generic 'field_1'.\n"
-                "- If files were uploaded (DATEIEN section), use the column names / structure they reveal as ground truth.\n"
-                "- Max ~250 lines total. Be tight, not verbose.\n\n"
-                "End with this exact line (and nothing after it):\n"
-                "'Build this as an n8n workflow. Start with a working MVP. Flag any credentials or config the client needs to provide.'\n\n"
-                f"=== CLIENT INFO ===\n{lead_section or '(no lead linked — use generic placeholder values from MVP defaults)'}\n\n"
-                f"{payload}\n\n"
-                f"=== ROI ESTIMATE ===\n{roi_section or '(not yet calculated)'}"
-            ),
-        }],
+        max_tokens=8000,
+        label="claude_code_prompt",
+        user_text=(
+            "You are writing a Claude Code prompt that a developer will paste into Claude Code. "
+            "Claude Code will then build the n8n workflow end-to-end without asking the developer any questions.\n\n"
+            "Write in English. Use ONLY the data provided below. Use exact tool names, field names, "
+            "thresholds, and Tagesangaben from the Q&A and process map — never abstract them.\n\n"
+            "STRUCTURE — exactly these sections, in this order:\n"
+            "# Automation Build Spec — <ConcreteProcessName>\n"
+            "## Client\n  one paragraph: company, industry, size, the problem this solves\n"
+            "## Goal\n  one sentence with measurable outcome (e.g. 'Cut Mahnungsversand from 3h/week to 15min/week')\n"
+            "## Current Process (As-Is)\n"
+            "  Numbered list, one line per step, format: 'Step N: <who> → <action> (tool: <tool>; in: <data_in> → out: <data_out>; auto: <yes|partial|no>)'.\n"
+            "  Source from PROZESS-MAP if present; otherwise reconstruct from Q&A. This is the anchor every later step references.\n"
+            "## Trigger\n  exact n8n trigger node + config (e.g. 'Schedule Trigger, daily 08:00 Europe/Zurich')\n"
+            "## Services & Auth\n  list every external service: n8n node name → credential type → required scopes\n"
+            "## Input Data Schema\n  JSON example with the user's actual field names and example values\n"
+            "## Business Logic\n  numbered IF/THEN rules with concrete thresholds from the Q&A\n"
+            "## Output & Actions\n  for each output: target system, payload mapping, recipient\n"
+            "## Error Handling\n  retry policy + failure notification target (concrete addresses/channels)\n"
+            "## Volume & Timing\n  records/day from Q&A, peak burst, latency tolerance\n"
+            "## MVP Assumptions\n"
+            "  If the user-message contains an IDENTIFIZIERTE-MVP-ANNAHMEN block, copy every line VERBATIM into this section. "
+            "  Add additional defaults only for fields truly absent from Q&A AND not contradicted by the client. "
+            "  Mark every default the model invents itself with '(MVP default — confirm with client)'. "
+            "  NEVER fabricate an assumption that contradicts an explicit client statement — those go in the next section.\n"
+            "## Offene Klärungspunkte\n"
+            "  Collect EVERY point where (a) a sensible default would CONTRADICT what the client actually said, or "
+            "  (b) information is genuinely missing and matters for build. Format each as a numbered item that explicitly "
+            "  references the client's statement and proposes a path forward.\n"
+            "  Example: '1. Zentrale Beleg-E-Mail — Kunde sagte: \"wir haben keine zentrale Adresse\". "
+            "  Vorschlag: belege@firma.ch einrichten. ENTSCHEIDUNG vor Build nötig.'\n"
+            "  If no contradictions or open questions remain, write a single line: 'Keine offenen Punkte.'\n"
+            "## Build Instructions\n"
+            "  Numbered steps a developer follows: 1) Create credential X, 2) Add node Y with config Z, "
+            "  3) Wire to node W, … For each manual step in 'Current Process (As-Is)' marked auto:yes or auto:partial, "
+            "  the build instructions MUST explicitly say which n8n node automates it. "
+            "  End with a test plan: 3 sample payloads (happy path, edge case, failure).\n\n"
+            "HARD RULES:\n"
+            "- NEVER write 'To be defined', 'TBD', 'not specified', 'request from client', or any placeholder in MVP Assumptions or Build Instructions. "
+            "  If data is missing AND not contradicted, pick a concrete MVP default and mark '(MVP default — confirm with client)'. "
+            "  If data is missing AND the client explicitly said the opposite, put it in `## Offene Klärungspunkte` instead.\n"
+            "- Use exact n8n node names: 'Schedule Trigger', 'HTTP Request', 'Gmail', 'Google Sheets', 'IF', 'Set', etc.\n"
+            "- Reference the user's actual field names from the Q&A and any uploaded files (e.g. 'Rechnungsnummer', 'Fälligkeitsdatum'), not generic 'field_1'.\n"
+            "- If files were uploaded (DATEIEN section), use the column names / structure they reveal as ground truth.\n"
+            "- Sei vollständig, nicht knapp. Lieber alle Build-Schritte ausführlich beschreiben als mid-section abbrechen.\n\n"
+            "End with this exact line (and nothing after it):\n"
+            "'Build this as an n8n workflow. Start with a working MVP. Flag any credentials or config the client needs to provide.'\n\n"
+            f"=== CLIENT INFO ===\n{lead_section or '(no lead linked — use generic placeholder values from MVP defaults)'}\n\n"
+            f"{payload}\n\n"
+            f"=== ROI ESTIMATE ===\n{roi_section or '(not yet calculated)'}"
+        ),
     )
-    return message.content[0].text
 
 
 # ---------------------------------------------------------------------------

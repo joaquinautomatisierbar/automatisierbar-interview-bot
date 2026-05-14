@@ -456,6 +456,15 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .bar-now  { background: rgba(255,255,255,0.08); height: 0; }
 .bar-after { background: linear-gradient(180deg, #0A8F54, var(--green)); height: 0; }
+/* V3 two-bar stacked: bottom=machine (green), top=human residual (amber) */
+.bar-after-stack {
+  display: flex; flex-direction: column; justify-content: flex-end;
+  width: 100%; border-radius: 6px 6px 0 0; overflow: hidden;
+  transition: height 1.4s cubic-bezier(0.22,1,0.36,1);
+  height: 0;
+}
+.bar-after-machine { background: linear-gradient(180deg, #0A8F54, var(--green)); width: 100%; height: 100%; flex: 1 1 auto; min-height: 0; transition: flex-basis 1.4s ease; }
+.bar-after-human   { background: linear-gradient(180deg, #f59e0b, #fbbf24); width: 100%; height: 0; flex: 0 0 0px; transition: flex-basis 1.4s ease; }
 .bar-val {
   font-size: 28px; font-weight: 300; color: var(--text);
   letter-spacing: -0.02em; margin-top: 12px;
@@ -797,13 +806,13 @@ body.with-sidebar { padding-right: 320px; }
       <div id="lead-pills"></div>
 
       <div class="field-group">
-        <label class="field-label">Situationsbeschreibung</label>
-        <textarea id="context-input" class="context-textarea" rows="5"
-          placeholder="Welche Aufgaben wiederholen sich? Welche Tools sind im Einsatz? Was kostet am meisten Zeit?&#10;&#10;Beispiel: Bei Kundenanfragen wollen fast alle die gleichen Dokumente — es ist sehr zeitraubend, allen separat eine E-Mail zu schreiben."></textarea>
+        <label class="field-label">Beschreibe den Prozess in eigenen Worten</label>
+        <textarea id="context-input" class="context-textarea" rows="10"
+          placeholder="Schreib einfach drauflos — wie läuft der Prozess heute ab, von Anfang bis Ende? Wer macht was, mit welchem Tool? Wo fängt es an, wo hört es auf?&#10;&#10;Beispiel: Andrea bekommt Belege per Mail von Mandanten, sortiert sie, lädt jeden einzeln in Bexio hoch, kontiert und gibt sie an einen Treuhänder zur Sichtkontrolle weiter. Das passiert ca. 150 Mal pro Woche."></textarea>
       </div>
 
       <div class="context-footer">
-        <span class="context-hint">Claude analysiert und generiert in 1–2 Runden alle nötigen Informationen für den Build.</span>
+        <span class="context-hint">Claude liest deine Erzählung, baut daraus einen Prozess-Map-Entwurf — du prüfst nur noch.</span>
         <button id="start-btn" class="btn btn-primary">
           Analyse starten <span class="arrow">→</span>
         </button>
@@ -849,7 +858,10 @@ body.with-sidebar { padding-right: 320px; }
     <div class="pm-intro">
       <h2 id="pm-title">Aktueller Prozess — Schritt für Schritt</h2>
       <p id="pm-process-name" style="display:none;font-size:13px;color:var(--green-dark);margin-bottom:4px;font-weight:500;"></p>
-      <p>Beschreibe wie der Prozess <strong>heute</strong> abläuft, von Anfang bis Ende — <em>nicht</em> wie er nachher automatisiert sein soll. Jeder Schritt: <strong>wer</strong> macht <strong>was</strong> mit <strong>welchem Tool</strong>.</p>
+      <p id="pm-intro-default">Beschreibe wie der Prozess <strong>heute</strong> abläuft, von Anfang bis Ende — <em>nicht</em> wie er nachher automatisiert sein soll. Jeder Schritt: <strong>wer</strong> macht <strong>was</strong> mit <strong>welchem Tool</strong>.</p>
+      <p id="pm-intro-review" style="display:none;background:rgba(21,200,122,0.08);border-left:3px solid var(--green);padding:10px 14px;border-radius:6px;line-height:1.5;">
+        ✨ <strong>Claude hat deinen Prozess so verstanden</strong> — bitte prüf und korrigier wo nötig. Felder sind editierbar, Zeilen kannst du löschen oder ergänzen.
+      </p>
     </div>
 
     <div class="pm-table-wrap">
@@ -858,8 +870,8 @@ body.with-sidebar { padding-right: 320px; }
         <div>Wer</div>
         <div>Was passiert</div>
         <div>Tool</div>
-        <div>Daten rein</div>
-        <div>Daten raus</div>
+        <div title="Was kommt rein — z.B. PDF-Anhang, Kundenname, Anruf">Daten rein</div>
+        <div title="Was geht raus — z.B. Eintrag in Bexio, E-Mail versendet, Status-Update">Daten raus</div>
         <div></div>
       </div>
       <div id="pm-rows"></div>
@@ -952,7 +964,7 @@ body.with-sidebar { padding-right: 320px; }
       <div class="roi-process" id="roi-process-name"></div>
     </div>
 
-    <!-- Bars card -->
+    <!-- Bars card — V3: two-bar honest ROI (machine + human residual) -->
     <div class="roi-card">
       <div class="roi-bars">
         <div class="bar-col">
@@ -963,11 +975,16 @@ body.with-sidebar { padding-right: 320px; }
         </div>
         <div class="bar-col">
           <div class="bar-col-label">Mit Automation</div>
-          <div class="bar bar-after" id="bar-after"></div>
+          <div class="bar bar-after-stack" id="bar-after-stack" title="Grün: System-Zeit. Orange: verbleibende Mensch-Zeit (Review, Sonderfälle).">
+            <div class="bar-after-human" id="bar-after-human"></div>
+            <div class="bar-after-machine" id="bar-after-machine"></div>
+          </div>
           <div class="bar-val" id="val-after">–</div>
-          <div class="bar-unit">Min / Woche</div>
+          <div class="bar-unit"><span id="val-after-unit">Min / Woche</span><br><span id="val-after-split" style="font-size:10px;color:var(--text-dim);"></span></div>
         </div>
       </div>
+      <!-- Breakdown of the residual human time, transparent assumptions -->
+      <div id="roi-human-breakdown" style="display:none;font-size:11px;color:var(--text-muted);margin-top:8px;padding:10px 12px;background:rgba(245,158,11,0.06);border-left:3px solid #f59e0b;border-radius:6px;line-height:1.5;"></div>
       <div class="roi-divider"></div>
       <div class="roi-stat">
         <span class="roi-stat-label">Einsparung / Monat</span>
@@ -1263,6 +1280,9 @@ const App = {
       if (d.status === "needs_technical_detail") {
         this.pendingQuestions = d.questions || [];
         this.pendingStatus = d.status;
+        // V3 P1.4 — extract a process-map draft from the narrative BEFORE showing
+        // the map screen, so the user reviews a prefilled draft instead of filling empty rows.
+        await this.fetchProcessMapDraft();
         this.showProcessMap();
       } else {
         // process-selection or anything else — show questions immediately
@@ -1277,6 +1297,27 @@ const App = {
   },
 
   // ── Process map ────────────────────────────────────────────────
+  async fetchProcessMapDraft() {
+    // V3 P1.4 — Ask the backend to extract a draft process-map from the narrative.
+    // If draft has confidence "low" or no steps, we fall back to empty rows.
+    if (!this.sessionId) return;
+    this.showLoading("Strukturiere deine Beschreibung");
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/extract_map`, {method: "POST"});
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && Array.isArray(d.steps) && d.steps.length && d.confidence !== "low") {
+        this.processMap = d.steps;
+        this.processMapDraft = true;  // flag: showing AI extraction, render review banner
+        this.processMapMissing = d.missing || [];
+      } else {
+        // Fall back to V2 empty-rows behaviour.
+        this.processMapDraft = false;
+      }
+    } catch {
+      this.processMapDraft = false;
+    }
+  },
+
   showProcessMap() {
     // Display the LLM-identified process name (if any) above the table.
     const nameEl = document.getElementById("pm-process-name");
@@ -1285,6 +1326,16 @@ const App = {
       nameEl.style.display = "block";
     } else if (nameEl) {
       nameEl.style.display = "none";
+    }
+    // Toggle review-mode banner vs default intro.
+    const defaultIntro = document.getElementById("pm-intro-default");
+    const reviewIntro = document.getElementById("pm-intro-review");
+    if (this.processMapDraft && defaultIntro && reviewIntro) {
+      defaultIntro.style.display = "none";
+      reviewIntro.style.display = "block";
+    } else if (defaultIntro && reviewIntro) {
+      defaultIntro.style.display = "block";
+      reviewIntro.style.display = "none";
     }
     if (!this.processMap.length) {
       this.processMap = [{
@@ -1453,18 +1504,26 @@ const App = {
         this.showToast(`${file.name}: zu gross (max 5 MB)`);
         continue;
       }
-      // V2: add a "pending" row immediately so the user sees a spinner
+      // V2/V3: add a "pending" row immediately so the user sees a spinner
       // (vision OCR can take 15-30s — without this, the UI looks frozen).
+      // V3 P1.3: tick an elapsed-time counter once per second so the user knows
+      // it's still working, not hung.
       const pendingId = `up-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-      this.pendingUploads.push({id: pendingId, filename: file.name, size: file.size});
+      const started = Date.now();
+      this.pendingUploads.push({id: pendingId, filename: file.name, size: file.size, started});
       this.renderAttachments();
-      status.textContent = `Verarbeite ${file.name}…`;
+      status.textContent = `Verarbeite ${file.name} … 0 s`;
+      const tick = setInterval(() => {
+        const elapsed = Math.round((Date.now() - started) / 1000);
+        status.textContent = `Verarbeite ${file.name} … ${elapsed} s`;
+      }, 1000);
 
       const fd = new FormData();
       fd.append("file", file);
       try {
         const r = await fetch(`/api/session/${this.sessionId}/attachment`, {method: "POST", body: fd});
         const d = await r.json().catch(() => ({}));
+        clearInterval(tick);
         if (!r.ok) throw new Error(d.error || `Fehler ${r.status}`);
         // Remove pending placeholder, add real attachment
         this.pendingUploads = this.pendingUploads.filter(p => p.id !== pendingId);
@@ -1474,14 +1533,16 @@ const App = {
         });
         this.attachmentCount = d.count || this.attachments.length;
         this.renderAttachments();
-        status.textContent = `${file.name} hinzugefügt ✓`;
+        const took = Math.round((Date.now() - started) / 1000);
+        status.textContent = `${file.name} hinzugefügt ✓ (${took} s)`;
       } catch (e) {
+        clearInterval(tick);
         this.pendingUploads = this.pendingUploads.filter(p => p.id !== pendingId);
         this.renderAttachments();
         status.textContent = `Fehler bei ${file.name}: ${e.message}`;
       }
     }
-    setTimeout(() => { status.textContent = ""; }, 3000);
+    setTimeout(() => { status.textContent = ""; }, 4000);
   },
 
   async deleteAttachment(idx) {
@@ -1589,9 +1650,11 @@ const App = {
         this.showROI(d.roi, d.assumptions || []);
       } else if (d.status === "ready_for_process_map") {
         // V2: LLM has identified the process — transition to process-map screen.
+        // V3 P1.4: now also extract a draft from accumulated context + Q&A so the
+        // map is prefilled for review, not blank.
         this.processName = d.process_name || "";
         this.toolsIdentified = d.tools_identified || [];
-        // Seed the process-map "tool" hints with what the LLM already heard
+        await this.fetchProcessMapDraft();
         this.showProcessMap();
       } else {
         this.currentRound = d.round;
@@ -1693,14 +1756,37 @@ const App = {
   // ── ROI screen ─────────────────────────────────────────────────
   showROI(roi, assumptions) {
     const hoursNow  = Number(roi.hours_per_week_now)     || 5;
-    const minsAfter = Number(roi.minutes_per_week_after)  || Math.round((roi.hours_per_week_after || 0.25)*60);
+    // V3: two-bar logic. If new schema fields are present, split machine vs human.
+    // If only legacy `minutes_per_week_after` exists, treat it all as machine time (old session).
+    const minsMachine = Number(roi.minutes_per_week_machine_after);
+    const minsHuman   = Number(roi.minutes_per_week_human_after);
+    const hasTwoBar   = !Number.isNaN(minsMachine) && !Number.isNaN(minsHuman);
+    const minsAfter   = hasTwoBar
+      ? (minsMachine + minsHuman)
+      : (Number(roi.minutes_per_week_after) || Math.round((roi.hours_per_week_after || 0.25)*60));
     const chf       = Number(roi.chf_monthly_savings)     || 0;
     const process   = roi.process || "Automatisierungsprojekt";
+    const breakdown = roi.human_residual_breakdown || [];
 
     document.getElementById("roi-process-name").textContent = process;
     document.getElementById("roi-build").textContent        = roi.build_time_days || "–";
     document.getElementById("roi-complexity").textContent   = {easy:"Einfach ✓",medium:"Mittel",complex:"Komplex"}[roi.complexity] || "–";
     document.getElementById("pdf-btn").href = `/api/session/${this.sessionId}/pdf`;
+
+    // Render the residual-human-time breakdown so the customer sees the math.
+    const bdEl = document.getElementById("roi-human-breakdown");
+    if (hasTwoBar && breakdown.length) {
+      bdEl.style.display = "block";
+      const items = breakdown.map(b => {
+        const upw = Number(b.units_per_week) || 0;
+        const mpu = Number(b.minutes_per_unit) || 0;
+        const total = Math.round(upw * mpu);
+        return `<div>• <strong>${this.esc(b.task || "Review")}</strong> — ${upw} × ${mpu} Min = ${total} Min/Woche</div>`;
+      }).join("");
+      bdEl.innerHTML = `<strong>Wie der menschliche Restaufwand zustande kommt:</strong>${items}`;
+    } else {
+      bdEl.style.display = "none";
+    }
 
     if (assumptions?.length) {
       document.getElementById("assumptions-section").style.display = "block";
@@ -1711,15 +1797,35 @@ const App = {
 
     requestAnimationFrame(() => {
       const MAX = Math.min(window.innerHeight * 0.28, 160);
+      const nowEl = document.getElementById("bar-now");
+      const stackEl = document.getElementById("bar-after-stack");
+      const machineEl = document.getElementById("bar-after-machine");
+      const humanEl = document.getElementById("bar-after-human");
       setTimeout(() => {
-        document.getElementById("bar-now").style.height = MAX + "px";
+        nowEl.style.height = MAX + "px";
         setTimeout(() => {
-          document.getElementById("bar-after").style.height = (MAX * Math.max(0.08, minsAfter / (hoursNow*60))) + "px";
+          const total = MAX * Math.max(0.08, minsAfter / (hoursNow*60));
+          stackEl.style.height = total + "px";
+          if (hasTwoBar) {
+            const humanFrac = minsAfter > 0 ? (minsHuman / minsAfter) : 0;
+            humanEl.style.flex   = `0 0 ${total * humanFrac}px`;
+            machineEl.style.flex = `0 0 ${total * (1 - humanFrac)}px`;
+          } else {
+            humanEl.style.flex   = `0 0 0px`;
+            machineEl.style.flex = `1 1 auto`;
+          }
         }, 280);
       }, 200);
       setTimeout(() => this.counter("val-now",  0, hoursNow,  " Std", 1400), 300);
       setTimeout(() => this.counter("val-after", 0, minsAfter, " Min", 1400), 580);
       setTimeout(() => this.counter("roi-chf",   0, chf,       "",     1800), 850);
+      // Update the split caption on the after bar
+      const splitEl = document.getElementById("val-after-split");
+      if (hasTwoBar && splitEl) {
+        splitEl.textContent = `${minsMachine} Min System · ${minsHuman} Min Mensch`;
+      } else if (splitEl) {
+        splitEl.textContent = "";
+      }
     });
   },
 
@@ -1898,7 +2004,14 @@ const App = {
     document.getElementById("lead-pills").innerHTML = "";
     document.getElementById("assumptions-section").style.display = "none";
     document.getElementById("bar-now").style.height = "0";
-    document.getElementById("bar-after").style.height = "0";
+    const stack = document.getElementById("bar-after-stack");
+    if (stack) stack.style.height = "0";
+    const mEl = document.getElementById("bar-after-machine");
+    const hEl = document.getElementById("bar-after-human");
+    if (mEl) mEl.style.flex = "1 1 auto";
+    if (hEl) hEl.style.flex = "0 0 0px";
+    const bd = document.getElementById("roi-human-breakdown");
+    if (bd) { bd.style.display = "none"; bd.innerHTML = ""; }
     document.getElementById("prompt-body").classList.remove("open");
     document.getElementById("prompt-toggle").classList.remove("open");
     document.getElementById("prompt-loading").style.display = "block";

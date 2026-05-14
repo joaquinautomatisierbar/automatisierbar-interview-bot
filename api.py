@@ -191,7 +191,7 @@ def get_session(session_id):
 
 def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
                           process_map, process_map_notes, extra_context, attachments,
-                          process_map_skipped=False):
+                          process_map_skipped=False, assumptions=None):
     """Spawn a background thread that generates the Claude Code prompt and appends
     the payoff (mermaid + table + code block) to the lead's Notion page.
 
@@ -232,6 +232,7 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
                 process_map_skipped=process_map_skipped,
                 extra_context=extra_context,
                 attachments=attachments,
+                assumptions=assumptions or [],
             )
             # Cache the prompt in session state so /prompt returns instantly when
             # the user clicks "Claude Code Prompt" instead of re-running the 30 s LLM call.
@@ -352,6 +353,7 @@ def submit_answers(session_id):
                     process_map=process_map, process_map_notes=process_map_notes,
                     process_map_skipped=process_map_skipped,
                     extra_context=extra_context, attachments=attachments,
+                    assumptions=assumptions or [],
                 )
 
             return jsonify({
@@ -406,6 +408,7 @@ def submit_answers(session_id):
                         process_map=process_map, process_map_notes=process_map_notes,
                         process_map_skipped=process_map_skipped,
                         extra_context=extra_context, attachments=attachments,
+                        assumptions=fallback_assumptions or [],
                     )
                 return jsonify({
                     "status": "complete",
@@ -447,6 +450,7 @@ def session_pdf(session_id):
         process_map_skipped = False
         extra_context = ""
         attachments = []
+        assumptions = []
 
         if notion_available():
             state = _get(session_id)
@@ -458,6 +462,7 @@ def session_pdf(session_id):
                 process_map_skipped = bool(state.get("process_map_skipped", False))
                 extra_context = state.get("extra_context", "") or ""
                 attachments = state.get("attachments", []) or []
+                assumptions = state.get("assumptions", []) or []
 
         spec_text = generate_spec_summary(
             context, all_qa,
@@ -466,6 +471,7 @@ def session_pdf(session_id):
             process_map_skipped=process_map_skipped,
             extra_context=extra_context,
             attachments=attachments,
+            assumptions=assumptions,
         )
 
         questions = {}
@@ -519,6 +525,7 @@ def session_prompt(session_id):
         process_map_skipped = False
         extra_context = ""
         attachments = []
+        assumptions = []
         cached_prompt = None
 
         if notion_available():
@@ -533,6 +540,7 @@ def session_prompt(session_id):
                 process_map_skipped = bool(state.get("process_map_skipped", False))
                 extra_context = state.get("extra_context", "") or ""
                 attachments = state.get("attachments", []) or []
+                assumptions = state.get("assumptions", []) or []
                 cached_prompt = state.get("claude_code_prompt")
 
         # Fast path: prompt was cached by the background payoff thread (post-completion)
@@ -568,6 +576,7 @@ def session_prompt(session_id):
             process_map_skipped=process_map_skipped,
             extra_context=extra_context,
             attachments=attachments,
+            assumptions=assumptions,
         )
         # Cache for subsequent calls (page reload, "copy prompt" button, second viewer).
         if notion_available():
@@ -719,6 +728,7 @@ def post_process_map(session_id):
                     process_map_skipped=bool(skipped),
                     extra_context=state.get("extra_context", "") or "",
                     attachments=state.get("attachments", []) or [],
+                    assumptions=result.get("assumptions", []) or [],
                 )
         elif result.get("questions"):
             update_session(session_id, {
@@ -728,6 +738,41 @@ def post_process_map(session_id):
         return jsonify({"ok": True, "steps": cleaned, "notes": notes, "skipped": skipped, "next": next_payload})
     except Exception as e:
         app.logger.error("post_process_map error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/session/<session_id>/extract_map", methods=["POST"])
+def extract_process_map(session_id):
+    """V3 P1.4 — Extract a draft process-map from the client's narrative + attachments.
+
+    Returns `{steps, confidence, missing}`. Frontend uses this to prefill the
+    review screen instead of showing an empty form. If confidence is low or
+    steps is empty, frontend falls back to V2 empty-rows behaviour.
+    """
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    try:
+        from claude_client import extract_process_map_draft
+        from notion_session import get_session as _get, update_session, available as notion_available
+        if not notion_available():
+            return jsonify({"error": "notion not configured"}), 503
+        state = _get(session_id) or {}
+        if not state:
+            return jsonify({"error": "session not found"}), 404
+        result = extract_process_map_draft(
+            state.get("context", "") or "",
+            attachments=state.get("attachments", []) or [],
+            extra_context=state.get("extra_context", "") or "",
+            all_qa=state.get("all_qa", []) or [],
+        )
+        # Cache so we don't re-extract on resume/refresh.
+        try:
+            update_session(session_id, {"process_map_draft": result})
+        except Exception as e:
+            app.logger.warning("extract_map cache write failed: %s", e)
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error("extract_process_map error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -759,6 +804,14 @@ def patch_extras(session_id):
 
 @app.route("/api/session/<session_id>/attachment", methods=["POST"])
 def upload_attachment(session_id):
+    """File upload + per-stage wall-clock timing logs.
+
+    Logs `[upload-timing] sid=... file=... size=... stage=multipart_read elapsed=Xs |
+                          stage=extract elapsed=Xs | stage=notion_write elapsed=Xs | total=Xs`
+    so future slow paths surface in Render logs without re-instrumentation."""
+    import time as _t
+    t_start = _t.perf_counter()
+
     if not _valid_session_id(session_id):
         return jsonify({"error": "invalid session id"}), 400
 
@@ -768,17 +821,25 @@ def upload_attachment(session_id):
 
     filename = f.filename or "upload"
     mime = f.mimetype or ""
+
+    t_multipart = _t.perf_counter()
     content = f.read()
+    multipart_elapsed = _t.perf_counter() - t_multipart
+
     if not content:
         return jsonify({"error": "leere Datei"}), 400
     if len(content) > MAX_ATTACHMENT_BYTES:
         return jsonify({"error": f"Datei zu gross (max {MAX_ATTACHMENT_BYTES // (1024*1024)} MB)"}), 413
 
+    size_mb = len(content) / (1024 * 1024)
+
     try:
         from file_extract import extract, is_allowed
         if not is_allowed(filename, mime):
             return jsonify({"error": f"Dateityp nicht erlaubt: {filename}"}), 415
+        t_extract = _t.perf_counter()
         result = extract(filename, content, mime)
+        extract_elapsed = _t.perf_counter() - t_extract
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -796,7 +857,21 @@ def upload_attachment(session_id):
         from notion_session import add_attachment, available as notion_available
         if not notion_available():
             return jsonify({"error": "notion not configured"}), 503
+        t_notion = _t.perf_counter()
         status = add_attachment(session_id, attachment)
+        notion_elapsed = _t.perf_counter() - t_notion
+
+        total_elapsed = _t.perf_counter() - t_start
+        print(
+            f"[upload-timing] sid={session_id[:8]} file={filename!r} "
+            f"size={size_mb:.2f}MB kind={attachment['kind']} "
+            f"stage=multipart_read elapsed={multipart_elapsed:.2f}s | "
+            f"stage=extract elapsed={extract_elapsed:.2f}s | "
+            f"stage=notion_write elapsed={notion_elapsed:.2f}s | "
+            f"total={total_elapsed:.2f}s ok={status.get('ok')}",
+            flush=True,
+        )
+
         if not status.get("ok"):
             code = 413 if status.get("reason") in ("state_full", "too_many") else 400
             return jsonify({"error": status.get("message", "Konnte nicht hinzufügen")}), code
@@ -809,6 +884,12 @@ def upload_attachment(session_id):
             "preview": preview,
             "warning": result.get("warning"),
             "count": status.get("count", 1),
+            "timing": {
+                "multipart_read_s": round(multipart_elapsed, 3),
+                "extract_s": round(extract_elapsed, 3),
+                "notion_write_s": round(notion_elapsed, 3),
+                "total_s": round(total_elapsed, 3),
+            },
         })
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 404

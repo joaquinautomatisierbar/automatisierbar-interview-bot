@@ -73,14 +73,27 @@ def _ensure_state_property(database_id: str) -> None:
 
 
 def _update_page(page_id: str, properties: dict) -> dict:
-    r = requests.patch(
-        f"https://api.notion.com/v1/pages/{page_id}",
-        headers=_notion_headers(),
-        json={"properties": properties},
-        timeout=15,
-    )
-    r.raise_for_status()
-    return r.json()
+    """PATCH page with one retry on transient errors (Notion's API is occasionally
+    flaky — 5xx, gateway timeouts, connection resets). Cheap insurance."""
+    last_exc = None
+    for attempt in range(2):
+        try:
+            r = requests.patch(
+                f"https://api.notion.com/v1/pages/{page_id}",
+                headers=_notion_headers(),
+                json={"properties": properties},
+                timeout=20,
+            )
+            if r.status_code < 500:
+                r.raise_for_status()
+                return r.json()
+            last_exc = requests.HTTPError(f"Notion 5xx: {r.status_code}")
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            last_exc = e
+        if attempt == 0:
+            import time as _t
+            _t.sleep(1.0)
+    raise last_exc
 
 
 def _create_page(database_id: str, properties: dict) -> dict:
@@ -773,6 +786,108 @@ def create_brief_page(
         headers=_notion_headers(),
         json=body,
         timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def _skeleton_body_blocks(week_label: str) -> list[dict]:
+    """Page-body skeleton for a newly-created (pre-Friday) brief page.
+
+    Native Notion blocks — survives the Friday merge. The synthesis code
+    block lands AFTER these on Friday.
+    """
+    return [
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "icon": {"type": "emoji", "emoji": "📝"},
+                "rich_text": _rt(
+                    f"Wochen-Brief {week_label}. Schreib hier deine Notizen, Zitate, "
+                    "Beobachtungen, Customer-Quotes — alles als normale Notion-Blöcke. "
+                    "Am Freitag 16:00 hängt das Skript die synthetisierte Wochen-"
+                    "Auswertung als Markdown-Codeblock unten an. Deine Notizen "
+                    "bleiben unverändert. Schreib NICHT in den Codeblock — der wird "
+                    "jeden Freitag neu generiert."
+                ),
+            },
+        },
+        {
+            "object": "block", "type": "heading_2",
+            "heading_2": {"rich_text": _rt("Wochen-Notizen")},
+        },
+        {
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": _rt("")},
+        },
+    ]
+
+
+def create_skeleton_page(
+    *,
+    briefs_db_id: str,
+    week_of_iso: str,
+    title: str,
+    week_label: str,
+    status: str = "Draft",
+    extra_props: Optional[dict] = None,
+) -> dict:
+    """Create a pre-Friday brief skeleton in the Briefs DB.
+
+    No synthesis code block — that gets appended later by the Friday script.
+    Body: callout reminder + 'Wochen-Notizen' H2 + empty paragraph.
+
+    Returns the created page object (Notion API response).
+    """
+    if not available():
+        raise RuntimeError("NOTION_API_KEY not set")
+
+    properties: dict = {
+        "Name": {"title": [{"type": "text", "text": {"content": title[:1999]}}]},
+        "Week Of": {"date": {"start": week_of_iso}},
+        "Status": {"select": {"name": status}},
+    }
+    if extra_props:
+        properties.update(extra_props)
+
+    body = {
+        "parent": {"database_id": briefs_db_id},
+        "properties": properties,
+        "children": _skeleton_body_blocks(week_label),
+    }
+    r = requests.post(
+        "https://api.notion.com/v1/pages",
+        headers=_notion_headers(),
+        json=body,
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def add_auto_title_formula(briefs_db_id: str) -> dict:
+    """Idempotently add a read-only 'Auto-Title' formula property to the
+    Briefs DB. Computes the canonical title from `Week Of`.
+
+    Formula: "Brief KW-" + week-iso + " · " + ISO date string.
+    Notion shows this in the DB list view so Joaquin sees the correct title
+    even if the page's actual `Name` is blank.
+    """
+    formula = (
+        'if(empty(prop("Week Of")), "—", '
+        '"Brief KW-" + formatDate(prop("Week Of"), "W") + '
+        '" · " + formatDate(prop("Week Of"), "YYYY-MM-DD"))'
+    )
+    patch = {
+        "properties": {
+            "Auto-Title": {"formula": {"expression": formula}},
+        }
+    }
+    r = requests.patch(
+        f"https://api.notion.com/v1/databases/{briefs_db_id}",
+        headers=_notion_headers(),
+        json=patch,
+        timeout=15,
     )
     r.raise_for_status()
     return r.json()

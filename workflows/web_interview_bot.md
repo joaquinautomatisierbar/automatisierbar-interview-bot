@@ -23,28 +23,27 @@ Replaces the older Telegram-only flow ([telegram_interview_bot.md](telegram_inte
 | **Decision points** | Question generation: process-selection vs technical detail. Round loop: complete vs needs_more. Notion payoff: skip if heading already exists. |
 | **Destination** | Notion lead page: per-round Q&A blocks, ROI block, **Mermaid flowchart + step table + Claude Code code block** auto-appended on completion. PDF spec downloadable. |
 
-## Phase order (V2 — adaptive routing)
+## Phase order (V3 — narrative-first, AI-structured, honest ROI)
 
 The flow adapts based on how clearly the user described the process in the initial context.
 
-1. **Context** (`screen-context`)
-   - User picks a lead (autocompletes Notion Leads DB) or types free text.
+1. **Context** (`screen-context`) — **narrative-first (V3)**
+   - User picks a lead (autocompletes Notion Leads DB) or types free narrative.
+   - Textarea is 10 rows; placeholder explicitly invites prose: *"Schreib einfach drauflos, wer macht was mit welchem Tool"*.
    - Submit → `POST /api/session/start` → session created in Notion. Backend's `evaluate_context` returns a `status`:
-     - **`needs_technical_detail`** — clear single process detected from context. First-round questions are stashed; user routes to the **Process Map** screen first.
-     - **`needs_process_selection`** — vague or multi-process context. User routes to **Q&A** immediately to narrow scope.
+     - **`needs_technical_detail`** — clear single process detected. Frontend immediately fires `POST /api/session/{id}/extract_map` to extract a draft process-map from the prose (V3), then routes to the Process Map screen in **review mode** with prefilled rows.
+     - **`needs_process_selection`** — vague or multi-process context. User routes to Q&A immediately to narrow scope.
    - Sidebar unlocks at this point.
 
 2a. **Q&A — process identification** (only when status was `needs_process_selection`)
    - 1–2 rounds of broad questions: which process bothers you most, which tools, what volume.
-   - LLM eventually returns **`status: "ready_for_process_map"`** with a `process_name` + `tools_identified` array. Frontend transitions to the Process Map screen with the picked process named at the top.
-   - The LLM is explicitly instructed: *"Lieber eine Runde mehr Fragen als die falsche Prozesswahl."* If unsure between processes, it asks again instead of committing.
+   - LLM eventually returns **`status: "ready_for_process_map"`** with a `process_name` + `tools_identified` array. Frontend ALSO fires `/extract_map` here (V3) so the process-map is prefilled from context + Q&A so far.
 
-2b. **Process map** (`screen-process-map`)
-   - Guided table: `Wer | Was | Tool | Daten rein | Daten raus`. **No user-facing "Auto?" column** — Claude infers automatability per step at payoff time (V2).
-   - Starts with 1 empty row; user adds rows via `+ Schritt hinzufügen`.
-   - Tool input uses HTML5 `<datalist id="common-tools">` for native autocomplete (~50 common Swiss-SME tools: Gmail, Outlook, Bexio, Banana, etc.).
-   - Process name (from `ready_for_process_map`) shown as subhead.
-   - Framing line: *"Beschreibe wie der Prozess HEUTE abläuft — nicht wie er automatisiert aussehen soll."*
+2b. **Process map** (`screen-process-map`) — **review mode (V3)**
+   - When the draft has confidence "high" or "medium": rows are prefilled with the AI's extraction. Banner reads: *"Claude hat deinen Prozess so verstanden — bitte prüf und korrigier wo nötig."* The user **reviews and corrects** rather than fills from a blank slate.
+   - When confidence is "low" or empty: falls back to V2 empty-rows with default framing.
+   - Columns: `Wer | Was | Tool | Daten rein | Daten raus` (V2 — Auto column removed; AI infers automatability at payoff time).
+   - Tool input has tooltips on Daten-rein/raus columns + HTML5 `<datalist id="common-tools">` autocomplete (~50 Swiss-SME tools).
    - Submit → `POST /api/session/{id}/process_map`. Two server behaviours:
      - **Path A** (came from `needs_technical_detail`, no prior Q&A): persist only; frontend uses stashed questions.
      - **Path B** (came from `ready_for_process_map`, has prior Q&A): persist + immediately fire `evaluate_answers`. Response includes `next` with the technical-detail questions for the next round.
@@ -56,13 +55,16 @@ The flow adapts based on how clearly the user described the process in the initi
    - Sidebar still active — user can drop more files / notes mid-round.
    - On `status: complete` → ROI screen; on `needs_more` → next round.
 
-4. **ROI + payoff** (`screen-roi`)
-   - User-facing: bars, savings, complexity, build time.
+4. **ROI + payoff** (`screen-roi`) — **two-bar honest ROI (V3)**
+   - User-facing: hours-now bar + **stacked after-bar** (green system minutes + amber Mensch-Restzeit). Caption beneath shows the breakdown math: *"150 Belege × 0.5 Min = 75 Min Review"*.
+   - ROI schema (V3): `minutes_per_week_machine_after`, `minutes_per_week_human_after`, `human_residual_breakdown[{task, units_per_week, minutes_per_unit}]`. Legacy `minutes_per_week_after` kept as sum for backward-compat display.
+   - Prompt rule: when process has mandatory review/freigabe, `minutes_per_week_human_after` MUST be > 0 and computed from volume × per-unit time. No more "48 h → 15 min" lies.
    - Notion payoff (auto-written by a background thread, ~30–60s after completion):
      - "Aktueller Prozess (Ist-Zustand)" heading
      - Mermaid flowchart with **AI-classified colors** (green/yellow/red per `classify_process_map_automatability` Sonnet call)
      - Collapsible "Schritt-Details (Tabelle)" with an **"Automatisierbar (Claude)" column** containing Claude's verdict + brief reason per step
      - "Build Prompt für Claude Code" heading + callout + markdown code block with the full prompt (also cached in `state.claude_code_prompt`)
+   - **Spec generation (V3)**: 8 k initial `max_tokens` + `_complete_with_continuation` loop (assistant-replay + nudge) so long specs assemble instead of truncating. MVP-assumptions from `evaluate_answers` piped **verbatim** into the `## MVP Assumptions` section. New `## Offene Klärungspunkte` section surfaces every point where a default would contradict an explicit client statement (e.g. customer said "no central inbox" → spec doesn't silently invent one).
 
 ## Sidebar (always-on while session active)
 
