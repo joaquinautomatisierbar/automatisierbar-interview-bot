@@ -141,6 +141,13 @@ def start_session():
 
     lead_page_id = (data.get("lead_page_id") or "").strip() or None
 
+    # Interviewer = who conducted this interview. Drives per-role Telegram routing
+    # downstream when the build pipeline ships. Allowed values: Joaquin / Nico / Tej / Patrik.
+    # Default Joaquin (until the frontend exposes a selector).
+    interviewer_raw = (data.get("interviewer") or "").strip() or "Joaquin"
+    if interviewer_raw not in ("Joaquin", "Nico", "Tej", "Patrik"):
+        interviewer_raw = "Joaquin"
+
     try:
         from claude_client import evaluate_context
         from notion_session import create_session, update_session, available as notion_available
@@ -155,6 +162,7 @@ def start_session():
                 "current_questions": questions,
                 "round": 1,
                 "lead_page_id": lead_page_id,
+                "interviewer": interviewer_raw,
             })
 
         return jsonify({
@@ -250,6 +258,12 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
             )
             app.logger.info("payoff written for session %s (lead %s): %s",
                             session_id, lead_page_id, wrote)
+
+            # Build-Pipeline dispatch is now MANUAL via POST /api/session/<id>/dispatch_build —
+            # users hit a button on the completion screen to send the brief to the agent team.
+            # No auto-fire from the payoff thread anymore. Confirmation-before-dispatch was an
+            # explicit product decision (2026-05-15) so an operator can sanity-check the
+            # generated prompt before burning agent compute.
         except Exception as e:
             app.logger.error("payoff write failed (non-fatal) for session %s: %s",
                              session_id, e)
@@ -590,6 +604,125 @@ def session_prompt(session_id):
     except Exception as e:
         app.logger.error("session_prompt error: %s", e)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/session/<session_id>/dispatch_build", methods=["POST"])
+def dispatch_build(session_id):
+    """Manual confirmation endpoint — fires the n8n Interview-to-Builder Dispatcher
+    webhook so paperclip's CTO picks up the brief and starts the autonomous build.
+
+    Called from the ROI screen's "An Build-Team senden" button. Idempotent — if
+    already dispatched, returns the existing dispatch metadata.
+    """
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+
+    webhook_url = os.environ.get("BUILD_DISPATCHER_WEBHOOK_URL", "").strip()
+    if not webhook_url:
+        return jsonify({
+            "error": "Build-Dispatcher noch nicht konfiguriert. Setze BUILD_DISPATCHER_WEBHOOK_URL in der Render-Umgebung.",
+            "configured": False,
+        }), 503
+
+    try:
+        from notion_session import get_session as _get_state, update_session
+        state = _get_state(session_id) or {}
+    except Exception as e:
+        app.logger.error("dispatch_build: get_session failed: %s", e)
+        return jsonify({"error": f"session lookup failed: {e}"}), 500
+
+    if not state:
+        return jsonify({"error": "session not found"}), 404
+
+    # Idempotency: refuse to re-dispatch unless explicitly forced.
+    already_dispatched_at = state.get("build_dispatched_at")
+    if already_dispatched_at and not (request.get_json(silent=True) or {}).get("force"):
+        return jsonify({
+            "status": "already_dispatched",
+            "dispatched_at": already_dispatched_at,
+            "build_issue_identifier": state.get("build_issue_identifier"),
+            "build_issue_id": state.get("build_issue_id"),
+        })
+
+    prompt_text = state.get("claude_code_prompt")
+    if not prompt_text:
+        return jsonify({"error": "Kein Build-Prompt verfügbar — Interview noch nicht abgeschlossen?"}), 409
+
+    # Gather metadata for the webhook payload
+    lead_page_id = state.get("lead_page_id")
+    lead_info = None
+    if lead_page_id:
+        try:
+            from notion_session import get_lead_by_page_id
+            lead_info = get_lead_by_page_id(lead_page_id)
+        except Exception as e:
+            app.logger.warning("dispatch_build: lead lookup failed: %s", e)
+
+    lead_name = (lead_info or {}).get("firma") or \
+                (lead_info or {}).get("name") or \
+                (state.get("context", "") or "")[:40] or \
+                session_id[:8]
+    interviewer = state.get("interviewer") or "Joaquin"
+
+    payload = {
+        "session_id": session_id,
+        "lead_page_id": lead_page_id,
+        "lead_name": lead_name,
+        "claude_code_prompt": prompt_text,
+        "process_map": state.get("process_map") or [],
+        "interviewer": interviewer,
+    }
+
+    try:
+        import requests as _requests
+        resp = _requests.post(webhook_url, json=payload, timeout=15)
+    except Exception as e:
+        app.logger.error("dispatch_build: webhook POST failed: %s", e)
+        return jsonify({"error": f"webhook POST failed: {e}"}), 502
+
+    if resp.status_code >= 400:
+        app.logger.warning(
+            "dispatch_build: webhook returned %s — body=%s",
+            resp.status_code, resp.text[:300],
+        )
+        return jsonify({
+            "error": f"Build-Pipeline antwortete {resp.status_code}",
+            "detail": resp.text[:300],
+        }), 502
+
+    # Parse response — n8n dispatcher returns the paperclip Issue payload (id, identifier, etc.)
+    try:
+        ack = resp.json() if resp.content else {}
+    except Exception:
+        ack = {"raw": resp.text[:500]}
+
+    # Persist dispatch state in session
+    from datetime import datetime, timezone
+    dispatched_at = datetime.now(timezone.utc).isoformat()
+    build_issue_id = ack.get("id")
+    build_issue_identifier = ack.get("identifier")
+    try:
+        update_session(session_id, {
+            "build_dispatched_at": dispatched_at,
+            "build_issue_id": build_issue_id,
+            "build_issue_identifier": build_issue_identifier,
+            "build_interviewer": interviewer,
+        })
+    except Exception as e:
+        app.logger.warning("dispatch_build: session update failed (non-fatal): %s", e)
+
+    app.logger.info(
+        "dispatch_build: session=%s lead=%s issue=%s",
+        session_id, lead_name, build_issue_identifier or "?",
+    )
+    return jsonify({
+        "status": "dispatched",
+        "dispatched_at": dispatched_at,
+        "build_issue_id": build_issue_id,
+        "build_issue_identifier": build_issue_identifier,
+        "lead_name": lead_name,
+        "interviewer": interviewer,
+    })
 
 
 # ---------------------------------------------------------------------------
