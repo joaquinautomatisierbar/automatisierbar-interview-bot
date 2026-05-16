@@ -606,6 +606,102 @@ def session_prompt(session_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/session/<session_id>/validate", methods=["POST"])
+def validate_session(session_id):
+    """Pre-dispatch completeness check (AUT-37). Runs a single Sonnet 4.6 pass
+    over the generated claude_code_prompt + process_map and tells the frontend
+    whether the brief is concrete enough to hand to the build pipeline.
+
+    Returns 200 with `{status, missing, pass_number, soft_warn, cost_usd_total}`.
+    Frontend treats 5xx as fail-open and proceeds with the existing dispatch path.
+    """
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+
+    try:
+        from notion_session import get_session as _get_state, update_session
+        state = _get_state(session_id) or {}
+    except Exception as e:
+        app.logger.error("validate_session: get_session failed: %s", e)
+        return jsonify({"error": f"session lookup failed: {e}"}), 500
+
+    if not state:
+        return jsonify({"error": "session not found"}), 404
+
+    prompt_text = state.get("claude_code_prompt")
+    if not prompt_text:
+        return jsonify({"error": "Interview noch nicht abgeschlossen — Build-Prompt fehlt"}), 409
+
+    process_map = state.get("process_map") or []
+    pass_history = list(state.get("validation_passes") or [])
+
+    # Best-effort: pull just the "## Offene Klärungspunkte" section out of the
+    # generated prompt so the validator can score that block separately. If the
+    # regex misses we pass an empty string and the validator falls back to scanning
+    # the full prompt_text it already receives.
+    klär_text = ""
+    try:
+        import re as _re
+        m = _re.search(r"##\s*Offene Klärungspunkte\s*\n([\s\S]*?)(?:\n##\s|\Z)", prompt_text)
+        if m:
+            klär_text = m.group(1).strip()
+    except Exception:
+        klär_text = ""
+
+    try:
+        from claude_client import validate_brief_completeness
+        result = validate_brief_completeness(
+            prompt_text=prompt_text,
+            process_map=process_map,
+            klärungspunkte_text=klär_text,
+            pass_history=pass_history,
+        )
+    except Exception as e:
+        app.logger.error("validate_session: validator threw: %s", e)
+        # Fail-open: tell the frontend it can proceed with dispatch.
+        return jsonify({
+            "status": "pass",
+            "missing": [],
+            "pass_number": len(pass_history) + 1,
+            "soft_warn": False,
+            "cost_usd_total": float(state.get("validation_cost_usd") or 0.0),
+            "reasoning": "validator failed — proceeding fail-open",
+        }), 200
+
+    status = result.get("status") or "pass"
+    missing = result.get("missing") or []
+    cost_call = float(result.get("cost_usd") or 0.0)
+    pass_number = len(pass_history) + 1
+    cumulative_cost = float(state.get("validation_cost_usd") or 0.0) + cost_call
+
+    from datetime import datetime, timezone
+    pass_record = {
+        "pass_number": pass_number,
+        "status": status,
+        "missing": missing,
+        "reasoning": result.get("reasoning", ""),
+        "cost_usd": cost_call,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        update_session(session_id, {
+            "validation_passes": pass_history + [pass_record],
+            "validation_cost_usd": cumulative_cost,
+        })
+    except Exception as e:
+        app.logger.warning("validate_session: state persist failed (non-fatal): %s", e)
+
+    return jsonify({
+        "status": status,
+        "missing": missing,
+        "pass_number": pass_number,
+        "soft_warn": pass_number >= 4,
+        "cost_usd_total": cumulative_cost,
+        "reasoning": result.get("reasoning", ""),
+    })
+
+
 @app.route("/api/session/<session_id>/dispatch_build", methods=["POST"])
 def dispatch_build(session_id):
     """Manual confirmation endpoint — fires the n8n Interview-to-Builder Dispatcher

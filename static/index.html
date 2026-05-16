@@ -573,7 +573,11 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
   background: var(--light-bg); color: var(--light-text);
   resize: vertical;
 }
-.pm-cell textarea { min-height: 32px; line-height: 1.4; }
+.pm-cell textarea {
+  min-height: 32px; line-height: 1.4;
+  resize: none; overflow: hidden;
+  white-space: pre-wrap; word-break: break-word;
+}
 .pm-cell input:focus, .pm-cell select:focus, .pm-cell textarea:focus {
   outline: none; border-color: var(--green); background: #fff;
   box-shadow: 0 0 0 2px rgba(21,200,122,0.1);
@@ -1129,6 +1133,10 @@ const App = {
         sel.className = `auto-${sel.value}`;
       }
     });
+    // Auto-grow process-map textareas as the user types — AUT-37 fix for cell truncation.
+    document.getElementById("screen-process-map").addEventListener("input", e => {
+      if (e.target.matches(".pm-cell textarea")) this._autoGrowTextarea(e.target);
+    });
     document.getElementById("pm-notes").addEventListener("input", e => {
       this.processMapNotes = e.target.value;
     });
@@ -1365,16 +1373,26 @@ const App = {
       row.dataset.idx = String(idx);
       row.innerHTML = `
         <div class="pm-step-num">${idx + 1}</div>
-        <div class="pm-cell" data-label="Wer"><input type="text" placeholder="z.B. Mitarbeiter" value="${this.esc(step.who || '')}" data-key="who"></div>
+        <div class="pm-cell" data-label="Wer"><textarea rows="1" placeholder="z.B. Mitarbeiter" data-key="who">${this.esc(step.who || '')}</textarea></div>
         <div class="pm-cell" data-label="Was passiert"><textarea rows="1" placeholder="z.B. Datei empfangen" data-key="action">${this.esc(step.action || '')}</textarea></div>
-        <div class="pm-cell" data-label="Tool"><input type="text" list="common-tools" placeholder="z.B. Gmail" value="${this.esc(step.tool || '')}" data-key="tool"></div>
-        <div class="pm-cell" data-label="Daten rein"><input type="text" placeholder="z.B. PDF" value="${this.esc(step.data_in || '')}" data-key="data_in"></div>
-        <div class="pm-cell" data-label="Daten raus"><input type="text" placeholder="z.B. Eintrag" value="${this.esc(step.data_out || '')}" data-key="data_out"></div>
+        <div class="pm-cell" data-label="Tool"><textarea rows="1" list="common-tools" placeholder="z.B. Gmail" data-key="tool">${this.esc(step.tool || '')}</textarea></div>
+        <div class="pm-cell" data-label="Daten rein"><textarea rows="1" placeholder="z.B. PDF" data-key="data_in">${this.esc(step.data_in || '')}</textarea></div>
+        <div class="pm-cell" data-label="Daten raus"><textarea rows="1" placeholder="z.B. Eintrag" data-key="data_out">${this.esc(step.data_out || '')}</textarea></div>
         <button class="pm-row-delete" type="button" aria-label="Schritt löschen" data-action="delete-row">×</button>
       `;
       root.appendChild(row);
     });
     document.getElementById("pm-notes").value = this.processMapNotes || "";
+    // Defer auto-grow to next frame — scrollHeight is 0 when the screen is still hidden.
+    requestAnimationFrame(() => {
+      root.querySelectorAll(".pm-cell textarea").forEach(t => this._autoGrowTextarea(t));
+    });
+  },
+
+  _autoGrowTextarea(el) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = (el.scrollHeight + 2) + "px";
   },
 
   collectProcessMap() {
@@ -1906,7 +1924,157 @@ const App = {
       .catch(() => this.showToast("Kopieren fehlgeschlagen."));
   },
 
+  // dispatchBuild = entry point (button onclick). Runs a Sonnet validation pass
+  // first; on `pass` → calls _doDispatch(). On `needs_clarification` → renders
+  // missing list inline so Tej can patch the brief and retry. On 5xx/network
+  // error → fail-open straight to _doDispatch() so a validator bug never blocks Tej.
   async dispatchBuild() {
+    const btn = document.getElementById("dispatch-btn");
+    const statusEl = document.getElementById("dispatch-status");
+    if (!btn || !statusEl) return;
+    if (!this.sessionId) {
+      statusEl.style.display = "block";
+      statusEl.style.color = "#EF4444";
+      statusEl.textContent = "Keine Session-ID — bitte Seite neu laden.";
+      return;
+    }
+    btn.disabled = true;
+    const origLabel = btn.textContent;
+    btn.textContent = "Prüfe Brief…";
+    statusEl.style.display = "none";
+
+    let v = null;
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!r.ok) throw new Error(`validate HTTP ${r.status}`);
+      v = await r.json();
+    } catch (e) {
+      console.warn("validate failed — fail-open to direct dispatch:", e);
+      btn.textContent = origLabel;
+      btn.disabled = false;
+      return this._doDispatch();
+    }
+
+    if (v.status === "pass") {
+      btn.textContent = origLabel;
+      btn.disabled = false;
+      return this._doDispatch();
+    }
+
+    // needs_clarification
+    const passNum = v.pass_number || 1;
+    const softWarn = !!v.soft_warn || passNum >= 4;
+    this._renderValidationGap(v, { softWarn, passNum, origLabel });
+    btn.textContent = origLabel;
+    btn.disabled = false;
+  },
+
+  _renderValidationGap(v, { softWarn, passNum, origLabel }) {
+    const statusEl = document.getElementById("dispatch-status");
+    if (!statusEl) return;
+    const missing = Array.isArray(v.missing) ? v.missing : [];
+    const itemsHtml = missing.map(m => {
+      const el = this.esc(m.element || "?");
+      const q = this.esc(m.question_to_ask_interviewee || "");
+      return `<li><strong>${el}:</strong> ${q}</li>`;
+    }).join("");
+
+    const banner = softWarn
+      ? `<div style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);padding:10px 12px;border-radius:8px;margin-bottom:10px;">
+           ⚠️ Validierung hat nach <strong>${passNum} Durchläufen</strong> noch Lücken — Build-Team wird wahrscheinlich nachfragen. Trotzdem senden?
+         </div>`
+      : `<div style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);padding:10px 12px;border-radius:8px;margin-bottom:10px;">
+           ⚠️ Brief ist noch nicht vollständig (Pass ${passNum} / 4) — bitte ergänzen, bevor wir senden:
+         </div>`;
+
+    const ctas = softWarn
+      ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+           <button id="dispatch-anyway-btn" class="btn btn-primary" style="font-size:12.5px;padding:8px 14px;">Trotzdem senden →</button>
+           <button id="dispatch-add-context-btn" class="btn btn-ghost" style="font-size:12.5px;padding:8px 14px;">Klärung anfordern</button>
+         </div>`
+      : `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+           <button id="dispatch-add-context-btn" class="btn btn-primary" style="font-size:12.5px;padding:8px 14px;">Klärung anfordern</button>
+           <button id="dispatch-retry-btn" class="btn btn-ghost" style="font-size:12.5px;padding:8px 14px;">Erneut prüfen</button>
+         </div>`;
+
+    statusEl.style.display = "block";
+    statusEl.style.color = "var(--text)";
+    statusEl.innerHTML = `
+      ${banner}
+      ${itemsHtml ? `<ul style="margin:6px 0 4px 18px;line-height:1.55;">${itemsHtml}</ul>` : ""}
+      <div id="dispatch-context-pad" style="display:none;margin-top:10px;">
+        <textarea id="dispatch-context-input" rows="3" placeholder="Zusatzkontext eintragen (z.B. 'Trigger ist Cronjob 08:00 Europe/Zurich')…" style="width:100%;box-sizing:border-box;padding:8px 10px;font-size:12.5px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;font-family:inherit;resize:vertical;min-height:60px;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button id="dispatch-context-save-btn" class="btn btn-primary" style="font-size:12px;padding:6px 12px;">Speichern + erneut prüfen</button>
+          <button id="dispatch-context-cancel-btn" class="btn btn-ghost" style="font-size:12px;padding:6px 12px;">Abbrechen</button>
+        </div>
+      </div>
+      ${ctas}
+    `;
+
+    const addBtn = document.getElementById("dispatch-add-context-btn");
+    if (addBtn) addBtn.addEventListener("click", () => {
+      document.getElementById("dispatch-context-pad").style.display = "block";
+      const ti = document.getElementById("dispatch-context-input");
+      if (ti) ti.focus();
+    });
+    const cancelBtn = document.getElementById("dispatch-context-cancel-btn");
+    if (cancelBtn) cancelBtn.addEventListener("click", () => {
+      document.getElementById("dispatch-context-pad").style.display = "none";
+    });
+    const saveBtn = document.getElementById("dispatch-context-save-btn");
+    if (saveBtn) saveBtn.addEventListener("click", () => this._appendContextAndRevalidate());
+    const retryBtn = document.getElementById("dispatch-retry-btn");
+    if (retryBtn) retryBtn.addEventListener("click", () => this.dispatchBuild());
+    const anywayBtn = document.getElementById("dispatch-anyway-btn");
+    if (anywayBtn) anywayBtn.addEventListener("click", () => this._doDispatch());
+  },
+
+  async _appendContextAndRevalidate() {
+    const ti = document.getElementById("dispatch-context-input");
+    const note = ((ti && ti.value) || "").trim();
+    if (!note) {
+      if (ti) ti.focus();
+      return;
+    }
+    const saveBtn = document.getElementById("dispatch-context-save-btn");
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Speichere…"; }
+    // Append to existing extras instead of overwriting (existing extras keep the
+    // sidebar's contents intact; new note prefixed with the validation pass header).
+    const existing = (document.getElementById("extras-notes")?.value || "").trim();
+    const stamp = new Date().toLocaleString("de-CH");
+    const combined = (existing ? existing + "\n\n" : "")
+                   + `[Klärung @ ${stamp}]\n${note}`;
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/extras`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extra_context: combined }),
+      });
+      if (!r.ok) throw new Error(`extras HTTP ${r.status}`);
+      // Keep the sidebar UI in sync so the user sees what was saved.
+      const en = document.getElementById("extras-notes");
+      if (en) en.value = combined;
+      // Re-run the validation pass with the new context in place.
+      this.dispatchBuild();
+    } catch (e) {
+      const statusEl = document.getElementById("dispatch-status");
+      if (statusEl) {
+        statusEl.style.color = "#EF4444";
+        statusEl.innerHTML = `❌ Speichern fehlgeschlagen: ${this.esc(e.message)}`;
+      }
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Speichern + erneut prüfen"; }
+    }
+  },
+
+  // _doDispatch — the original direct-to-dispatch path. Called when validation
+  // passes OR when the user clicks "Trotzdem senden" after a soft-warn OR when
+  // /validate errors out.
+  async _doDispatch() {
     const btn = document.getElementById("dispatch-btn");
     const statusEl = document.getElementById("dispatch-status");
     if (!btn || !statusEl) return;

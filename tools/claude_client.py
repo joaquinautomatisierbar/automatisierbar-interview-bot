@@ -756,6 +756,156 @@ def generate_claude_code_prompt(
 
 
 # ---------------------------------------------------------------------------
+# Pre-dispatch validation — does the brief contain the 5 process-map elements
+# and a complete Klärungspunkte block? Run before sending to the build pipeline.
+# ---------------------------------------------------------------------------
+
+# Sonnet 4.6 pricing as of 2026-05 (USD per 1M tokens).
+_SONNET_INPUT_USD_PER_M = 3.0
+_SONNET_OUTPUT_USD_PER_M = 15.0
+
+_VALIDATE_SYSTEM = (
+    "You are a strict completeness reviewer for an automation build brief. "
+    "Your only job: decide whether the brief is concrete enough to hand to a "
+    "developer who will build an n8n workflow without follow-up questions.\n\n"
+    "Output STRICT JSON in this shape, nothing else:\n"
+    "{\n"
+    "  \"status\": \"pass\" | \"needs_clarification\",\n"
+    "  \"missing\": [\n"
+    "    {\"element\": \"Trigger\"|\"Data sources\"|\"Transformations\"|\"Decision points\"|\"Destination\"|\"Klärungspunkte\","
+    " \"question_to_ask_interviewee\": \"<one specific question in Hochdeutsch>\"}\n"
+    "  ],\n"
+    "  \"reasoning\": \"<short>\"\n"
+    "}\n\n"
+    "Checks to perform:\n"
+    "1) 5-element process map. Each of these must be concretely described in the brief: "
+    "Trigger (what kicks the workflow off — e.g. 'Cronjob 08:00 Europe/Zurich' passes; 'irgendein Trigger' fails). "
+    "Data sources (where input comes from — exact tools/inboxes/files). "
+    "Transformations (what changes between in and out — exact rules, not 'irgendwie verarbeiten'). "
+    "Decision points (every IF/THEN with concrete thresholds — not 'je nachdem'). "
+    "Destination (where output lands — exact recipient/table/channel).\n"
+    "2) Klärungspunkte completeness. Every `## Offene Klärungspunkte` item must include an MVP default AND "
+    "an explicit confirmation flag (e.g. 'MVP-Default: …; bestätigen vor Build').\n\n"
+    "RULES:\n"
+    "- If ALL five elements are concrete AND every Klärungspunkt has a default+flag → status=\"pass\", missing=[].\n"
+    "- If anything is missing or hand-waved → status=\"needs_clarification\" and list each gap.\n"
+    "- Questions must be specific enough that the interviewee can answer in one sentence "
+    "(e.g. 'Welcher genaue Tagesabschnitt löst den Cronjob aus?' beats 'Trigger präzisieren').\n"
+    "- Write all questions in Hochdeutsch.\n"
+    "- Do NOT invent missing elements. Only flag what is actually absent.\n"
+    "- Output the JSON object only — no preamble, no markdown fences."
+)
+
+
+def validate_brief_completeness(
+    prompt_text: str,
+    process_map: list,
+    klärungspunkte_text: str = "",
+    pass_history: list = None,
+) -> dict[str, Any]:
+    """Run a single Sonnet 4.6 completeness check against the generated brief.
+
+    Returns a dict with `status` (pass|needs_clarification), `missing` (list of
+    {element, question_to_ask_interviewee}), `reasoning`, and `cost_usd`.
+    Never raises — on failure returns status='pass' with reasoning describing
+    the error, so the dispatch path stays unblocked.
+    """
+    pass_history = pass_history or []
+    process_map = process_map or []
+
+    pm_block = _format_process_map(process_map) or "(no process map provided)"
+    history_block = ""
+    if pass_history:
+        lines = []
+        for i, p in enumerate(pass_history[-3:], start=1):
+            missing = p.get("missing") or []
+            tags = ", ".join(m.get("element", "?") for m in missing) or "—"
+            lines.append(f"Pass {p.get('pass_number', i)}: status={p.get('status', '?')} missing=[{tags}]")
+        history_block = "=== PRIOR VALIDATION PASSES ===\n" + "\n".join(lines) + "\n\n"
+
+    klär_block = (klärungspunkte_text or "").strip() or "(no Klärungspunkte block extracted)"
+
+    user_text = (
+        f"{history_block}"
+        f"=== BUILD-BRIEF (full prompt) ===\n{prompt_text}\n\n"
+        f"=== EXTRACTED PROCESS MAP ===\n{pm_block}\n\n"
+        f"=== EXTRACTED KLÄRUNGSPUNKTE ===\n{klär_block}\n\n"
+        "Validate completeness per the rules in the system prompt. Output JSON only."
+    )
+
+    t0 = time.time()
+    in_tok = 0
+    out_tok = 0
+    try:
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        resp = client.messages.create(
+            model=MODEL_FAST,
+            max_tokens=1200,
+            system=[{
+                "type": "text",
+                "text": _VALIDATE_SYSTEM,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_text}],
+        )
+        raw = resp.content[0].text if resp.content else ""
+        try:
+            in_tok = int(getattr(resp.usage, "input_tokens", 0) or 0)
+            out_tok = int(getattr(resp.usage, "output_tokens", 0) or 0)
+        except Exception:
+            pass
+        parsed = _parse_json(raw)
+    except Exception as e:
+        elapsed = time.time() - t0
+        print(
+            f"[claude-stats] label=validate_brief_completeness error={e!r} "
+            f"elapsed={elapsed:.2f}s",
+            flush=True,
+        )
+        return {
+            "status": "pass",
+            "missing": [],
+            "reasoning": f"validator unavailable ({e!r}) — fail-open to keep dispatch unblocked",
+            "cost_usd": 0.0,
+        }
+
+    cost_usd = (in_tok * _SONNET_INPUT_USD_PER_M + out_tok * _SONNET_OUTPUT_USD_PER_M) / 1_000_000
+    elapsed = time.time() - t0
+    status = parsed.get("status") if parsed.get("status") in ("pass", "needs_clarification") else "needs_clarification"
+    missing_raw = parsed.get("missing") or []
+    missing: list = []
+    valid_elements = {"Trigger", "Data sources", "Transformations", "Decision points", "Destination", "Klärungspunkte"}
+    for m in missing_raw:
+        if not isinstance(m, dict):
+            continue
+        el = str(m.get("element", "")).strip() or "?"
+        if el not in valid_elements:
+            el = "?"
+        q = str(m.get("question_to_ask_interviewee", "")).strip()[:400]
+        if not q:
+            continue
+        missing.append({"element": el, "question_to_ask_interviewee": q})
+    if status == "pass":
+        missing = []
+    elif not missing:
+        # needs_clarification claimed but no gaps listed → treat as pass to avoid false-positive blocks.
+        status = "pass"
+
+    print(
+        f"[claude-stats] label=validate_brief_completeness status={status} "
+        f"missing_count={len(missing)} input_tokens={in_tok} output_tokens={out_tok} "
+        f"cost_usd={cost_usd:.4f} elapsed={elapsed:.2f}s",
+        flush=True,
+    )
+    return {
+        "status": status,
+        "missing": missing,
+        "reasoning": str(parsed.get("reasoning", ""))[:500],
+        "cost_usd": cost_usd,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Weekly LinkedIn brief synthesis
 # ---------------------------------------------------------------------------
 
