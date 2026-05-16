@@ -116,3 +116,92 @@ required by `evaluate_context` / `evaluate_answers` / `generate_claude_code_prom
 - No outbound side effects on import — the validator hits Anthropic only when
   the new `/validate` endpoint is called, which is only reachable after
   `claude_code_prompt` has been generated (i.e. after a full interview).
+
+---
+
+## Release Engineer handoff — Joaquin reviews before merge
+
+`[INTERNAL]` artifact staged on GitHub. **Joaquin owns the merge to `main`.**
+Release Engineer will NOT push to `main` and will NOT touch the live Render
+service. Render auto-deploys from `main` only — merging is the deploy.
+
+### 1. Pull the branch locally
+
+```bash
+cd "/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview"
+git fetch origin
+git checkout feature/aut-37-validation-textbox-fix
+git diff main..HEAD                                # full diff for review
+git diff main..HEAD -- static/index.html           # Track A only
+git diff main..HEAD -- api.py tools/claude_client.py # Track B only
+```
+
+Branch tip: `2e40ad7` (single squash) on top of baseline `a2cc1f9` (manual
+build-team dispatch infrastructure, pre-existing on this branch and required
+for Track B's `/validate` to slot in).
+
+GitHub PR helper (one click): <https://github.com/sexyjoaquin15-cloud/automatisierbar-interview-bot/pull/new/feature/aut-37-validation-textbox-fix>
+
+### 2. Local verification (MacBook, before merge)
+
+```bash
+# Optional: smoke-test the Flask app locally on the branch
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+ANTHROPIC_API_KEY=$(grep ANTHROPIC_API_KEY .env | cut -d= -f2) python api.py
+# Browse http://localhost:5000 and walk Golden-Path A2 in TESTING.md
+```
+
+Full reproducible test plan: `TESTING.md` on this branch — Track A textbox
+golden-path + Track B validation pass/fail/soft-warn scenarios, with curl
+recipes for the new `/api/session/<id>/validate` endpoint and screenshots
+checklist.
+
+### 3. Deploy procedure (when ready)
+
+```bash
+git checkout main
+git merge --no-ff feature/aut-37-validation-textbox-fix     # preserves squash
+git push origin main
+```
+
+Render auto-deploys from `main` push in ~2-3 min. Release Engineer will
+monitor logs for the first 5 min after merge via Render dashboard.
+
+If you prefer the merge-via-PR path, the GitHub PR link above is ready;
+"Squash and merge" or "Create a merge commit" both work — the squash on the
+feature branch keeps history clean either way.
+
+### 4. Rollback
+
+Full procedure lives in `ROLLBACK.md` on this branch. Quick reference:
+
+- **Both tracks together:** `git revert -m 1 <merge-sha>` on main + push.
+- **Track A only (keep validation gate):** `git revert --no-commit <commit-sha-track-A>` — note that since AUT-37 is a single squash, partial revert requires hunk-picking out the `static/index.html` Track A diff; ROLLBACK.md walks through it.
+- **Track B only (runtime-disable, no revert):** delete the `/api/session/<id>/validate` endpoint route block in `api.py` and redeploy — the frontend falls open to direct dispatch via its existing fail-open path.
+
+Render auto-redeploys reverted state in ~2-3 min.
+
+### 5. Things Joaquin should specifically eyeball
+
+Per the Product Engineer SHIP comment:
+
+1. Run TESTING.md **Golden-Path A2** in a real Chrome — QA's mobile screenshot
+   was taken from a demo HTML, not the production page. Verify the textarea
+   auto-grow works on the live route, not just in QA's standalone fixture.
+2. The Tool cell autocomplete (`list="common-tools"`) is **silently no-op'd**
+   on the new `<textarea>` (HTML spec). The attribute is still in the markup
+   but does nothing. Decide whether to file a follow-up issue or accept it.
+3. ROLLBACK.md's partial-revert recipe assumes commit-per-track granularity;
+   the squash collapses this. Full revert is the safe path; partial requires
+   hunk-picking.
+
+### 6. Pre-merge gate (Release Engineer policy)
+
+- [x] Branch pushed to `origin/feature/aut-37-validation-textbox-fix`
+- [x] No commits to `main`
+- [x] `.env` confirmed gitignored; diff scanned for API-key leakage — clean
+- [x] Engineer artifacts (RELEASE_NOTES.md, ROLLBACK.md, TESTING.md) present
+- [x] QA `TEST_PASS` and Product Engineer `SHIP` markers logged on AUT-38
+- [ ] Joaquin reviews diff + merges to main *(owner: Joaquin)*
+- [ ] Release Engineer monitors Render deploy logs (5 min post-merge) *(owner: Release Engineer, on Joaquin's go-ahead)*
