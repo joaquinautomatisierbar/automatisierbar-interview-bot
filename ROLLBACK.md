@@ -1,3 +1,27 @@
+# Rollback — AUT-22
+
+## Q&A Archive in Notion payoff (commit 7e64cdb)
+
+This is a purely additive change (one new parameter + new Notion blocks). Rollback options:
+
+**Revert commit on branch (before merge):**
+```bash
+git revert 7e64cdb
+git push origin fix/AUT-22-full-feature-restore
+```
+
+**Revert after merge to main:**
+```bash
+git revert <merge-sha> -m 1  # or revert 7e64cdb directly if fast-forward
+git push origin main
+```
+
+Existing Notion pages that already have the "Interview-Verlauf (Q&A)" section are unaffected (Notion blocks are not deleted by a code rollback). Future payoff writes will stop appending the Q&A section. No session-state schema changes — `all_qa` was already in the state; rollback only removes the rendering call.
+
+**Deployment note:** Render is auto-deployed from `fix/AUT-7-bug-02-03-04` (not from `main` — see SHA mismatch note in AUT-22 comments). After merge+rollback to `main`, Render must be manually triggered to redeploy from `main`.
+
+---
+
 # Rollback — AUT-37
 
 The two tracks are independently revertable. Pick the one(s) you need to back
