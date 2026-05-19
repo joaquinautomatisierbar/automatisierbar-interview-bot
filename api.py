@@ -174,7 +174,10 @@ def start_session():
 
     except Exception as e:
         app.logger.error("start_session error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        err = str(e)
+        if "404" in err and "notion.com" in err:
+            return jsonify({"error": "lead_not_found"}), 404
+        return jsonify({"error": "KI-Service vorübergehend nicht verfügbar — bitte erneut versuchen"}), 500
 
 
 @app.route("/api/session/<session_id>", methods=["GET"])
@@ -542,6 +545,7 @@ def session_prompt(session_id):
         assumptions = []
         cached_prompt = None
 
+        state = None
         if notion_available():
             state = _get(session_id)
             if state:
@@ -562,18 +566,11 @@ def session_prompt(session_id):
         if cached_prompt:
             return jsonify({"prompt": cached_prompt, "cached": True})
 
-        # If the session is already complete, the background payoff thread is most likely
-        # still generating the prompt (races with the user clicking the toggle). Poll the
-        # cache for up to 40 s before falling back to a fresh generation. Cheaper than 2×
-        # the LLM call, still well under gunicorn's 120 s worker timeout.
-        from notion_session import get_session as _get_state
-        if state and state.get("status") == "complete":
-            import time as _t
-            for _ in range(20):  # 20 × 2 s = 40 s max
-                _t.sleep(2)
-                fresh = _get_state(session_id) or {}
-                if fresh.get("claude_code_prompt"):
-                    return jsonify({"prompt": fresh["claude_code_prompt"], "cached": True})
+        if state is None:
+            return jsonify({"error": "session not found"}), 404
+
+        if state.get("status") != "complete":
+            return jsonify({"error": "Interview noch nicht abgeschlossen — Build-Prompt fehlt"}), 409
 
         lead_info = None
         if lead_page_id:
