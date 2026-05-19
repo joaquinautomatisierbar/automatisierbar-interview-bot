@@ -258,6 +258,7 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
                 process_map_notes=process_map_notes or "",
                 claude_code_prompt=prompt_text or "",
                 classification=classification,
+                all_qa=all_qa or [],
             )
             app.logger.info("payoff written for session %s (lead %s): %s",
                             session_id, lead_page_id, wrote)

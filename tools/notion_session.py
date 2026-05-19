@@ -648,10 +648,13 @@ def write_payoff_to_page(
     process_map_notes: str,
     claude_code_prompt: str,
     classification: list = None,
+    all_qa: list = None,
 ) -> bool:
-    """Append the end-of-interview payoff: process map (mermaid + table) + Claude Code prompt.
+    """Append the end-of-interview payoff: process map (mermaid + table) + Claude Code prompt
+    + Q&A Archive.
     `classification` (V2) is the AI's per-step automatability verdict — drives mermaid
     colors + adds a 'Automatisierbar (Claude)' column to the table.
+    `all_qa` is the full interview Q&A history ([{round, qa: [{question, answer}]}]).
     Idempotent — skips if the heading 'Aktueller Prozess (Ist-Zustand)' is already on the page.
     Returns True if written, False if skipped or failed."""
     if not available() or not lead_page_id:
@@ -703,12 +706,30 @@ def write_payoff_to_page(
         blocks.append({"object": "block", "type": "code",
                        "code": {"language": "markdown", "rich_text": _rt(claude_code_prompt)}})
 
+    # Q&A Archive — full interview transcript appended after the Build-Prompt block.
+    if all_qa:
+        blocks.append({"object": "block", "type": "heading_2",
+                       "heading_2": {"rich_text": _rt("Interview-Verlauf (Q&A)")}})
+        for round_data in all_qa:
+            round_num = round_data.get("round", "?")
+            qa_items = round_data.get("qa") or []
+            for item in qa_items:
+                q = item.get("question", "")
+                a = item.get("answer", "nicht beantwortet")
+                if q:
+                    blocks.append({"object": "block", "type": "paragraph",
+                                   "paragraph": {"rich_text": _rt(f"R{round_num} ❓ {q}")}})
+                blocks.append({"object": "block", "type": "paragraph",
+                               "paragraph": {"rich_text": _rt(f"💬 {a}")}})
+
     if not blocks:
         return False
 
     try:
-        # Notion appends max 100 blocks per call — payoff is always under 10, so safe.
-        _append_blocks(lead_page_id, blocks)
+        # Notion appends max 100 blocks per call — split if the Q&A archive is large.
+        BATCH = 100
+        for i in range(0, len(blocks), BATCH):
+            _append_blocks(lead_page_id, blocks[i:i + BATCH])
         return True
     except Exception as e:
         print(f"[notion] write_payoff_to_page failed: {e}")
