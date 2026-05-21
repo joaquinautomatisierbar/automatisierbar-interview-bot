@@ -1,3 +1,52 @@
+# Rollback — AUT-46
+
+## Marketing image pipeline — render tools + agent/skill updates
+
+**Branch:** `build/AUT-46-marketing-image-pipeline`
+
+All changes are additive. Rollback is file-deletion + optional Notion schema remove. No Render deploy, no n8n activation touched.
+
+### Severity 1 (< 2 min) — Remove render tools, revert brief prompt
+
+If the render tools cause import errors or break the cron pipeline:
+
+```bash
+rm tools/render_linkedin_image.py tools/render_n8n_workflow_diagram.py
+git revert HEAD~1  # reverts the commit that added the render tools + brief synthesis
+git push origin build/AUT-46-marketing-image-pipeline
+```
+
+Image Curator automatically falls back to spec-only output (no actual PNGs generated). Pipeline keeps running without images — same behaviour as before AUT-46.
+
+### Severity 2 — Revert agent/skill instruction changes
+
+If the live Paperclip agent instructions cause bad behaviour in a Friday run, restore the previous versions from git history:
+
+```bash
+git log --oneline build/AUT-46-marketing-image-pipeline  # find the pre-AUT-46 commit
+# Then restore each file individually:
+git show <pre-AUT-46-sha>:tools/paperclip/companies/automatisierbar-build/agents/image-curator/AGENTS.md \
+  > /home/paperclip/automatisierbar-build/agents/image-curator/AGENTS.md
+git show <pre-AUT-46-sha>:tools/paperclip/companies/automatisierbar-build/agents/pr-director/AGENTS.md \
+  > /home/paperclip/automatisierbar-build/agents/pr-director/AGENTS.md
+git show <pre-AUT-46-sha>:tools/paperclip/companies/automatisierbar-build/skills/suggest-linkedin-image/SKILL.md \
+  > /home/paperclip/automatisierbar-build/skills/suggest-linkedin-image/SKILL.md
+```
+
+### Severity 3 — Remove Notion Image Files property
+
+If the `Image Files` property on the Post Variants DB causes Notion API errors:
+
+1. Open Notion DB `013ef8bc-4837-44c3-bfa2-b8b15792fb80`.
+2. Click the `Image Files` property header → **Delete property**.
+3. Existing variant rows are unaffected (the property is additive).
+
+### Deployment note
+
+No Render service or n8n workflow was activated by this change. After rollback to main, no redeployment is required — the MacBook Friday cron picks up the reverted tools on the next run.
+
+---
+
 # Rollback — AUT-22
 
 ## Q&A Archive in Notion payoff (commit 7e64cdb)
