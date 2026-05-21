@@ -1,5 +1,73 @@
 # Release Notes
 
+## build/AUT-46-marketing-image-pipeline (AUT-46)
+
+**Tag: [INTERNAL]** — Joaquin reviews and merges manually. No Render deploy, no n8n activation needed.
+
+### What this change does
+
+Replaces the spec-only image layer in the weekly LinkedIn Marketing pipeline with a deterministic PNG renderer. Every Post Variants DB row now gets 2–4 actual image files (1080px+ resolution) directly attached to a new `Image Files` Notion property: hero cards in brand colors, n8n-style workflow diagrams matching the Mandantenfall reference style, and supporting stat/quote cards. The Automatisierbar wordmark is suppressed by default (`branding: "none"`) and only appears when the brief explicitly sets `image_branding: wordmark`. This removes the manual image-creation step from every Friday run.
+
+### Review steps for Joaquin
+
+```bash
+# 1. Fetch + switch to the branch
+git fetch origin
+git checkout build/AUT-46-marketing-image-pipeline
+
+# 2. Diff against main (what changed in the repo)
+git diff main...build/AUT-46-marketing-image-pipeline
+```
+
+Key files to review:
+- `tools/render_linkedin_image.py` — NEW: hero card PNG renderer
+- `tools/render_n8n_workflow_diagram.py` — NEW: workflow diagram PNG renderer
+- `prompts/linkedin_brief_synthesis.md` — UPDATED: `image_branding` optional field
+- `requirements.txt` — UPDATED: `cairosvg>=2.7` + `Pillow>=10.0` added
+- `TESTING-AUT-46.md` — operator smoke tests + Bike-Method Phase 1 integration test
+
+Agent/skill changes (live in Paperclip, not in this repo diff):
+- `image-curator/AGENTS.md` — invokes render tools, Notion direct upload + Drive fallback
+- `pr-director/AGENTS.md` — `Image Files` coordination, `image_count`/`image_source` in webhook
+- `suggest-linkedin-image/SKILL.md` — HARD RULE branding:none default + PR Director rejection gate
+
+### Local verification (MacBook, before merging to main)
+
+Follow `TESTING-AUT-46.md`:
+
+1. **Smoke Test 1** (2 min): `python3 tools/render_linkedin_image.py` — verify 1200×1200 PNG, no wordmark.
+2. **Smoke Test 2** (3 min): `python3 tools/render_n8n_workflow_diagram.py` — verify 2400×1200 landscape + 1200×1200 square.
+3. **Prerequisite 1**: Add `Image Files` (Files & media) property to Notion Post Variants DB `013ef8bc-4837-44c3-bfa2-b8b15792fb80`.
+4. **Prerequisite 2**: Pre-create Drive folder `Automatisierbar/LinkedIn-Post-Images/` with PR Director OAuth access.
+5. **Smoke Test 3** (10 min): `python tools/linkedin_brief.py --week-of 2026-05-22 --person Joaquin` → verify 5–7 variants, 2–4 image files each, ≥1080px, no wordmark, workflow diagrams on explainer posts.
+
+### Deploy procedure
+
+No deployment action needed. The MacBook Friday cron (`tools/linkedin_brief.py`) picks up the new tools automatically on the next run after merge to `main`. No Render redeploy, no n8n activation.
+
+### Rollback
+
+See `ROLLBACK.md` → **AUT-46 section**.
+
+- **< 2 min**: `rm tools/render_linkedin_image.py tools/render_n8n_workflow_diagram.py` — Image Curator falls back to spec-only output, pipeline keeps running.
+- Full rollback (agent/skill instructions): restore files from git history (documented in ROLLBACK.md).
+- Notion `Image Files` property: delete via Notion DB settings UI (additive, no data loss).
+
+### Runtime credentials expected
+
+- `NOTION_API_KEY` — already in PR Director env
+- Google Drive OAuth — already in PR Director env
+- No new secrets required.
+
+### Manual steps before activation
+
+1. Joaquin: complete TESTING-AUT-46.md Prerequisite 1 (Notion DB `Image Files` property).
+2. Joaquin: complete TESTING-AUT-46.md Prerequisite 2 (Drive folder pre-create).
+3. Run Smoke Tests 1–3. Pass → merge branch to `main`.
+4. Observe the next Friday run (KW 22, 2026-05-22). Pass → Phase 1 validated.
+
+---
+
 ## feature/aut-37-validation-textbox-fix (AUT-37)
 
 Two surgical changes to the Interview-Bot. Both ship in a single PR but are

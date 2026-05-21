@@ -174,7 +174,10 @@ def start_session():
 
     except Exception as e:
         app.logger.error("start_session error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        err = str(e)
+        if "404" in err and "notion.com" in err:
+            return jsonify({"error": "lead_not_found"}), 404
+        return jsonify({"error": "KI-Service vorübergehend nicht verfügbar — bitte erneut versuchen"}), 500
 
 
 @app.route("/api/session/<session_id>", methods=["GET"])
@@ -233,21 +236,32 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
                 except Exception as e:
                     app.logger.warning("payoff: classification failed: %s", e)
 
-            prompt_text = generate_claude_code_prompt(
-                context, all_qa, roi or {}, lead_info,
-                process_map=process_map,
-                process_map_notes=process_map_notes,
-                process_map_skipped=process_map_skipped,
-                extra_context=extra_context,
-                attachments=attachments,
-                assumptions=assumptions or [],
-            )
+            # generate_claude_code_prompt is a 25-40 s Sonnet call that can fail due to
+            # rate limits, a missing API key, or a gunicorn worker timeout on Render free tier.
+            # Wrap it so Q&A Archive + process-map still land on the Notion page even when
+            # the LLM call fails — write_payoff_to_page already skips the build-prompt block
+            # when claude_code_prompt is falsy.
+            prompt_text = None
+            try:
+                prompt_text = generate_claude_code_prompt(
+                    context, all_qa, roi or {}, lead_info,
+                    process_map=process_map,
+                    process_map_notes=process_map_notes,
+                    process_map_skipped=process_map_skipped,
+                    extra_context=extra_context,
+                    attachments=attachments,
+                    assumptions=assumptions or [],
+                )
+            except Exception as e:
+                app.logger.error("payoff: generate_claude_code_prompt failed: %s", e)
+
             # Cache the prompt in session state so /prompt returns instantly when
             # the user clicks "Claude Code Prompt" instead of re-running the 30 s LLM call.
-            try:
-                update_session(session_id, {"claude_code_prompt": prompt_text})
-            except Exception as e:
-                app.logger.warning("payoff: prompt cache write failed: %s", e)
+            if prompt_text:
+                try:
+                    update_session(session_id, {"claude_code_prompt": prompt_text})
+                except Exception as e:
+                    app.logger.warning("payoff: prompt cache write failed: %s", e)
 
             wrote = write_payoff_to_page(
                 lead_page_id,
@@ -255,6 +269,7 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
                 process_map_notes=process_map_notes or "",
                 claude_code_prompt=prompt_text or "",
                 classification=classification,
+                all_qa=all_qa or [],
             )
             app.logger.info("payoff written for session %s (lead %s): %s",
                             session_id, lead_page_id, wrote)
@@ -542,6 +557,7 @@ def session_prompt(session_id):
         assumptions = []
         cached_prompt = None
 
+        state = None
         if notion_available():
             state = _get(session_id)
             if state:
@@ -562,18 +578,11 @@ def session_prompt(session_id):
         if cached_prompt:
             return jsonify({"prompt": cached_prompt, "cached": True})
 
-        # If the session is already complete, the background payoff thread is most likely
-        # still generating the prompt (races with the user clicking the toggle). Poll the
-        # cache for up to 40 s before falling back to a fresh generation. Cheaper than 2×
-        # the LLM call, still well under gunicorn's 120 s worker timeout.
-        from notion_session import get_session as _get_state
-        if state and state.get("status") == "complete":
-            import time as _t
-            for _ in range(20):  # 20 × 2 s = 40 s max
-                _t.sleep(2)
-                fresh = _get_state(session_id) or {}
-                if fresh.get("claude_code_prompt"):
-                    return jsonify({"prompt": fresh["claude_code_prompt"], "cached": True})
+        if state is None:
+            return jsonify({"error": "session not found"}), 404
+
+        if state.get("status") != "complete":
+            return jsonify({"error": "Interview noch nicht abgeschlossen — Build-Prompt fehlt"}), 409
 
         lead_info = None
         if lead_page_id:
