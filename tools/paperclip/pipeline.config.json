@@ -1,0 +1,128 @@
+{
+  "_doc": "Single source of truth for the paperclip build pipeline. Tools resolve agents by stable urlKey at runtime (NOT by the lastSeenId UUIDs, which change on re-import). Verified against live VPS on 2026-05-29.",
+
+  "company": {
+    "id": "47196d38-2f19-4168-af8f-fe9451dff910",
+    "name": "Automatisierbar Build Pipeline",
+    "issuePrefix": "AUT"
+  },
+
+  "api": {
+    "internal": "http://127.0.0.1:3100",
+    "internalAuth": "none (local_trusted)",
+    "external": "https://paperclip.automatisierbar.ch",
+    "externalAuthEnvVar": "PAPERCLIP_BEARER_TOKEN",
+    "healthPath": "/api/health"
+  },
+
+  "host": {
+    "ip": "72.61.106.8",
+    "hostname": "srv1677199",
+    "sshUser": "paperclip",
+    "sshKey": "~/.ssh/paperclip_vps",
+    "servicesDir": "/home/paperclip/services",
+    "secretsFile": "/etc/paperclip/secrets"
+  },
+
+  "deployMap": {
+    "tools/paperclip/orchestrator.js": "/home/paperclip/services/orchestrator.js",
+    "tools/paperclip/telegram_listener.py": "/home/paperclip/services/telegram_listener.py",
+    "tools/paperclip/deploy/systemd/*.service|.timer": "/etc/systemd/system/",
+    "tools/paperclip/deploy/paperclip-watchdog.sh": "/usr/local/bin/paperclip-watchdog.sh"
+  },
+
+  "systemd": {
+    "services": ["paperclip", "paperclip-orchestrator", "paperclip-listener"],
+    "timers": ["paperclip-watchdog.timer"],
+    "logs": {
+      "paperclip": "/var/log/paperclip.log",
+      "paperclip-orchestrator": "/var/log/paperclip-orchestrator.log",
+      "paperclip-listener": "/var/log/paperclip-listener.log"
+    },
+    "postgresStopHook": "/usr/local/bin/paperclip-postgres-cleanup.sh",
+    "watchdog": "restart paperclip after 2 consecutive non-200 /api/health checks (60s timer)"
+  },
+
+  "buildPipeline": {
+    "_order": "Sequence of stages for a CLIENT/INTERNAL build. presentation-designer only runs on [CLIENT]/[CLIENT-DEMO].",
+    "stages": [
+      { "urlKey": "ceo", "role": "router", "emits": "routes to cto", "next": "cto" },
+      { "urlKey": "cto", "role": "plan-lock", "emits": "ENGINEER_START (plan locked)", "next": "engineer" },
+      { "urlKey": "engineer", "role": "build", "emits": "READY_FOR_TEST", "next": "qa-engineer", "onReject": null },
+      { "urlKey": "qa-engineer", "role": "test", "emits": "TEST_PASS", "next": "product-engineer", "onReject": "TEST_FAIL -> engineer" },
+      { "urlKey": "product-engineer", "role": "intent-review", "emits": "SHIP", "next": "presentation-designer|release-engineer", "onReject": "NEEDS_QOL -> engineer" },
+      { "urlKey": "presentation-designer", "role": "presentation", "emits": "PRESENTATION_READY", "next": "release-engineer", "clientOnly": true },
+      { "urlKey": "release-engineer", "role": "release", "emits": "issue done", "onReject": "RELEASE_BLOCKED -> cto" }
+    ],
+    "markers": ["ENGINEER_START", "READY_FOR_TEST", "TEST_PASS", "TEST_FAIL", "SHIP", "NEEDS_QOL", "PRESENTATION_READY", "RELEASE_BLOCKED", "BLOCKED"],
+    "orchestratorWatchUrlKeys": ["cto", "engineer", "qa-engineer", "product-engineer", "presentation-designer", "release-engineer"]
+  },
+
+  "marketingPipeline": {
+    "stages": [
+      { "urlKey": "pr-director", "role": "cmo", "next": "copy-writer|hook-strategist|image-curator" },
+      { "urlKey": "copy-writer", "role": "draft" },
+      { "urlKey": "hook-strategist", "role": "score" },
+      { "urlKey": "image-curator", "role": "image" }
+    ]
+  },
+
+  "agentRoster": {
+    "_note": "lastSeenId is for human reference only; resolve live by urlKey. Verified 2026-05-29.",
+    "ceo": { "lastSeenId": "361636bd-3e84-449b-8d34-4104fde67c68", "role": "agent", "reportsTo": null, "team": "firm" },
+    "cto": { "lastSeenId": "d9c458cd-a8a7-4307-b420-850e9ed26cea", "role": "agent", "reportsTo": "ceo", "team": "build" },
+    "engineer": { "lastSeenId": "59f30016-822a-4779-885f-501e329814dc", "role": "agent", "reportsTo": "cto", "team": "build" },
+    "qa-engineer": { "lastSeenId": "4b3f11cd-39b8-4c35-b1ca-26afd5ac7795", "role": "agent", "reportsTo": "cto", "team": "build" },
+    "product-engineer": { "lastSeenId": "1f722d24-8855-4b01-a5e4-cc4bd8cc611c", "role": "agent", "reportsTo": "cto", "team": "build" },
+    "release-engineer": { "lastSeenId": "be8f5a81-2f27-4652-84e7-0286d48a2045", "role": "agent", "reportsTo": "cto", "team": "build" },
+    "presentation-designer": { "lastSeenId": "aa6f67a6-9602-45d3-a854-96b90b14e0ab", "role": "agent", "reportsTo": "cto", "team": "build" },
+    "pr-director": { "lastSeenId": "3b661785-0b9e-42f8-a4a9-c489334ac15e", "role": "cmo", "reportsTo": "ceo", "team": "marketing" },
+    "copy-writer": { "lastSeenId": "c87a4094-80c3-4886-8446-8737c53ccc63", "role": "agent", "reportsTo": "pr-director", "team": "marketing" },
+    "hook-strategist": { "lastSeenId": "322a014f-1d0a-4b07-beca-57d20e691b43", "role": "agent", "reportsTo": "pr-director", "team": "marketing" },
+    "image-curator": { "lastSeenId": "a4dc0a59-54ed-4511-9a6f-b6718b8e2dfc", "role": "agent", "reportsTo": "pr-director", "team": "marketing" }
+  },
+
+  "expectedHeartbeat": {
+    "_doc": "Preflight asserts each agent's runtimeConfig.heartbeat matches its class. As of 2026-05-29 the build-class agents FAIL this (wakeOnDemand:null) — this is the suspected root cause of mid-build stalls.",
+    "buildClassUrlKeys": ["cto", "engineer", "qa-engineer", "product-engineer", "release-engineer", "presentation-designer"],
+    "buildClassExpect": { "enabled": false, "wakeOnDemand": true, "cooldownSec": 60, "maxConcurrentRunsMax": 2 },
+    "marketingClassUrlKeys": ["pr-director", "copy-writer", "hook-strategist", "image-curator"],
+    "marketingClassExpect": { "enabled": false, "wakeOnDemand": true, "cooldownSec": 60, "maxConcurrentRunsMax": 1 },
+    "ceoExpect": { "enabled": false, "maxConcurrentRunsMax": 1, "_note": "CEO woken by team-chat listener + 3h routine + dispatcher; wakeOnDemand not required" }
+  },
+
+  "thresholds": {
+    "pollIntervalSec": 30,
+    "stallSec": 120,
+    "iterationCapBuildTest": 8,
+    "iterationCapBuildReview": 3,
+    "hungRunTimeoutSec": 1800,
+    "todoStallSec": 1800,
+    "triggerCooldownSec": 60
+  },
+
+  "telegram": {
+    "operatorBotTokenEnv": "OPERATOR_TELEGRAM_BOT_TOKEN",
+    "operatorChatIdEnv": "OPERATOR_TELEGRAM_CHAT_ID",
+    "teamBotTokenEnv": "TEAM_TELEGRAM_BOT_TOKEN",
+    "perPersonChatIdEnvs": ["JOAQUIN_CHAT_ID", "NICO_CHAT_ID", "TEJ_CHAT_ID", "PATRIK_CHAT_ID"]
+  },
+
+  "n8nWorkflows": {
+    "_note": "From memory; not re-verified 2026-05-29. Verify before relying.",
+    "interviewToBuilderDispatcher": "kCHX1L1wos60Ifm9",
+    "buildComplete": "s252bXER2d8AXDn9",
+    "marketingPrDispatcher": "DRrAavl5hL7pbrY5",
+    "marketingBriefReady": "xk4xPJeCX9MYwoR2"
+  },
+
+  "secretsAvailable": [
+    "CLAUDE_CODE_OAUTH_TOKEN", "PAPERCLIP_BEARER_TOKEN", "PAPERCLIP_API",
+    "OPERATOR_TELEGRAM_BOT_TOKEN", "OPERATOR_TELEGRAM_CHAT_ID", "TEAM_TELEGRAM_BOT_TOKEN",
+    "JOAQUIN_CHAT_ID", "NICO_CHAT_ID", "TEJ_CHAT_ID", "PATRIK_CHAT_ID",
+    "N8N_API_KEY", "NOTION_API_KEY", "NOTION_BRIEFS_DB_ID", "NOTION_POST_VARIANTS_DB_ID",
+    "GH_TOKEN", "GITHUB_TOKEN", "GITHUB_PAT_JOAQUINAUTOMATISIERBAR", "GITLAB_PAT_SEXYJOAQUIN15",
+    "RENDER_API_KEY_AUTOMATISIERBAR", "RENDER_API_KEY_SEXYJOAQUIN15", "TRIGGER_SECRET_KEY",
+    "MARKETING_DISPATCHER_WEBHOOK_URL", "BRIEF_PERSON"
+  ]
+}

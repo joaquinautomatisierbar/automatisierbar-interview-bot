@@ -1,0 +1,25 @@
+[Unit]
+Description=Paperclip Telegram listener (Automatisierbar Operations bot)
+After=paperclip.service network-online.target
+Wants=paperclip.service network-online.target
+
+[Service]
+Type=simple
+User=paperclip
+Group=paperclip
+WorkingDirectory=/home/paperclip
+Environment="HOME=/home/paperclip"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PAPERCLIP_API=http://127.0.0.1:3100"
+EnvironmentFile=/etc/paperclip/secrets
+ExecStart=/usr/bin/python3 /home/paperclip/services/telegram_listener.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/paperclip-listener.log
+StandardError=append:/var/log/paperclip-listener.err
+
+# Resource limits
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

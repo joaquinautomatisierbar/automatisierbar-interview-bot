@@ -1,0 +1,7 @@
+[Unit]
+Description=Watchdog — restart paperclip when DB unreachable
+After=paperclip.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/paperclip-watchdog.sh

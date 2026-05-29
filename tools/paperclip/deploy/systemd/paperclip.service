@@ -1,0 +1,26 @@
+[Unit]
+Description=Paperclip server (Automatisierbar dev team)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=paperclip
+Group=paperclip
+WorkingDirectory=/home/paperclip
+Environment="HOME=/home/paperclip"
+Environment="NODE_ENV=production"
+Environment="PATH=/home/paperclip/.local/share/npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EnvironmentFile=/etc/paperclip/secrets
+ExecStart=/home/paperclip/.local/share/npm-global/bin/paperclipai run --bind tailnet
+ExecStopPost=/usr/local/bin/paperclip-postgres-cleanup.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/paperclip.log
+StandardError=append:/var/log/paperclip.err
+# Resource limits
+MemoryMax=2.5G
+TasksMax=200
+
+[Install]
+WantedBy=multi-user.target
