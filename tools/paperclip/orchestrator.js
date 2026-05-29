@@ -1,224 +1,209 @@
 #!/usr/bin/env node
-// Build Pipeline Orchestrator — safety net + iteration cap enforcement.
+// orchestrator.js — Build Pipeline safety-net + enforcement loop.
 //
-// paperclip's auto-pickup handles the common case (assignee idle → wakes on assignment).
-// This orchestrator handles edge cases:
-//   1. Sibling agent crashed mid-handoff, next agent never woke
-//   2. Iteration cap reached (Build↔Test > 8, Build↔Review > 3) — halt the issue + ping operator
-//   3. Stale in_progress issues that lost their execution path — escalate
+// paperclip's wake_assignee + (now-fixed) wakeOnDemand handle the happy path.
+// This loop is the backstop that guarantees every issue ends in a NOTIFIED terminal
+// state — never silent limbo. It implements the in-flight rows of RELIABILITY.md.
 //
-// Run: node tools/paperclip/orchestrator.js
-// Or via launchd plist (see tools/paperclip/launchd/).
+// Detects & acts on (per 30s tick):
+//   - Stall: watched assignee idle/error, no run, > stallSec        -> resume + heartbeat
+//   - Hung run: executionRunId set but no progress > hungRunTimeout  -> halt + notify  (no blind cancel)
+//   - Iteration caps: Build<->Test > 8, Build<->Review > 3           -> halt + notify
+//   - Pending approval/disposition interaction                       -> escalate (or auto-accept if enabled)
+//   - Parent blocked on a child that reached terminal                -> notify "tree review-ready"
+//   - Issue reaches done/in_review                                   -> one tag-aware completion ping
+//
+// Config: ../pipeline.config.json (resolved by urlKey — no hardcoded UUIDs).
+// Run:  node orchestrator.js            (loop)
+//       node orchestrator.js --once      (single tick)
+//       node orchestrator.js --dry-run   (print actions, take none — safe anywhere)
 
-const API = "http://localhost:3100";
-const COMPANY = "47196d38-2f19-4168-af8f-fe9451dff910";
-const POLL_INTERVAL_MS = 30_000;        // tick every 30s
-const STALL_THRESHOLD_MS = 120_000;     // assignee idle for 2 min with no executionRunId → trigger
-const ITERATION_CAP_BUILD_TEST = 8;     // Engineer↔QA loops
-const ITERATION_CAP_BUILD_REVIEW = 3;   // Engineer↔Product loops
-const PROJECT_ROOT = "/home/paperclip";
-const TELEGRAM_BOT_TOKEN = process.env.OPERATOR_TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.OPERATOR_TELEGRAM_CHAT_ID;
-
-const PIPELINE_URLKEYS = new Set(["cto", "engineer", "qa-engineer", "product-engineer", "release-engineer"]);
-
-// Agent registry populated on startup
-const AGENTS_BY_ID = {};
-
-// Track which (issue, agent) pairs we've already triggered to avoid duplicate kicks
-const RECENT_TRIGGERS = new Map();  // `${issueId}:${agentId}` -> timestamp
-const TRIGGER_COOLDOWN_MS = 60_000;
-
-// Track halted issues so we don't re-halt every tick
-const HALTED_ISSUES = new Set();
-
+const fs = require("node:fs");
+const path = require("node:path");
 const { execFile } = require("node:child_process");
-const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
+const { CFG, probe, api, apiPost, apiPatch, arr, agentsByUrlKey } = require("./lib/transport");
+
+const DRY = process.argv.includes("--dry-run");
+const ONCE = process.argv.includes("--once");
+const T = CFG.thresholds;
+const WATCH = new Set(CFG.buildPipeline.orchestratorWatchUrlKeys);
+const AUTONOMOUS_TAGS = new Set(["CLIENT", "CLIENT-DEMO"]);          // run unattended
+const APPROVAL_TAGS = new Set(["INTERNAL", "CLIENT-PROD"]);          // require operator
+const AUTO_ACCEPT = process.env.ORCH_AUTO_ACCEPT === "1";            // flag-gated; default escalate-only
+
+const EVENTS_LOG = path.join(__dirname, ".pipeline-events.log");
+const STATE_FILE = path.join(__dirname, ".orchestrator-state.json");
+const TG_TOKEN = process.env.OPERATOR_TELEGRAM_BOT_TOKEN;
+const TG_CHAT = process.env.OPERATOR_TELEGRAM_CHAT_ID;
+
+const log = (m) => console.log(`[${new Date().toISOString()}] ${m}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ageSec = (iso) => (iso ? Math.round((Date.now() - new Date(iso).getTime()) / 1000) : null);
+const tagOf = (t = "") => (t.match(/\[([A-Z][A-Z0-9-]*)\]/) || [, ""])[1].toUpperCase();
 
-async function jget(path) {
-  const res = await fetch(`${API}${path}`);
-  if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
-  return res.json();
+// ---- persistent state (survives restarts) ----
+let STATE = { seeded: false, notifiedTerminal: [], halted: [], treeNotified: [], escalated: [] };
+function loadState() { try { STATE = { ...STATE, ...JSON.parse(fs.readFileSync(STATE_FILE, "utf8")) }; } catch {} }
+function saveState() { try { fs.writeFileSync(STATE_FILE, JSON.stringify(STATE)); } catch (e) { log(`state save failed: ${e.message}`); } }
+const sset = (k) => new Set(STATE[k]);
+const sadd = (k, v) => { const s = sset(k); if (!s.has(v)) { s.add(v); STATE[k] = [...s]; saveState(); } };
+
+// ---- transient (per-process) ----
+const RECENT_TRIGGERS = new Map();
+const recentlyTriggered = (id) => { const t = RECENT_TRIGGERS.get(id); return t && Date.now() - t < T.triggerCooldownSec * 1000; };
+
+function logEvent(ev) {
+  const line = JSON.stringify({ ts: new Date().toISOString(), dry: DRY, ...ev });
+  try { fs.appendFileSync(EVENTS_LOG, line + "\n"); } catch {}
+  log(`EVENT ${ev.category} ${ev.identifier || ""} — ${ev.action}${ev.detail ? ": " + ev.detail : ""}`);
 }
 
-async function jpatch(path, body) {
-  const res = await fetch(`${API}${path}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`PATCH ${path} → ${res.status}: ${await res.text()}`);
-  return res.json();
-}
-
-async function refreshAgents() {
-  const agents = await jget(`/api/companies/${COMPANY}/agents`);
-  for (const a of agents) AGENTS_BY_ID[a.id] = a;
-  const pipelineCount = agents.filter((a) => PIPELINE_URLKEYS.has(a.urlKey)).length;
-  log(`refreshed agent registry — ${agents.length} total, ${pipelineCount} in Build Pipeline`);
-}
-
-function isPipelineAgent(agentId) {
-  const a = AGENTS_BY_ID[agentId];
-  return a && PIPELINE_URLKEYS.has(a.urlKey);
-}
-
-function triggerHeartbeat(agentId) {
-  // background-fire the CLI; don't await (each heartbeat run streams for 5-25 min)
-  log(`→ triggering heartbeat for agent ${AGENTS_BY_ID[agentId]?.name || agentId.slice(0, 8)}`);
-  const proc = execFile(
-    "npx",
-    [
-      "paperclipai",
-      "heartbeat",
-      "run",
-      "--agent-id",
-      agentId,
-      "--source",
-      "on_demand",
-      "--trigger",
-      "ping",
-      "--json",
-    ],
-    { cwd: PROJECT_ROOT, env: process.env, stdio: "ignore" },
-    (err) => {
-      if (err) log(`heartbeat ${agentId.slice(0, 8)} exited: ${err.message}`);
-      else log(`heartbeat ${agentId.slice(0, 8)} completed`);
-    }
-  );
-  proc.unref();
-  RECENT_TRIGGERS.set(agentId, Date.now());
-}
-
-function recentlyTriggered(agentId) {
-  const t = RECENT_TRIGGERS.get(agentId);
-  return t && Date.now() - t < TRIGGER_COOLDOWN_MS;
-}
-
-async function notifyTelegramHalt(reason) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    log(`telegram halt skipped (env vars missing): ${reason}`);
-    return;
-  }
-  const text = `🛑 *paperclip orchestrator HALT*\n\n${reason}`;
+async function telegram(text) {
+  if (DRY) { log(`[dry] telegram: ${text.replace(/\n/g, " ")}`); return; }
+  if (!TG_TOKEN || !TG_CHAT) { log(`telegram skipped (env missing): ${text}`); return; }
   try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text,
-        parse_mode: "Markdown",
-      }),
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT, text, parse_mode: "Markdown" }),
     });
-  } catch (e) {
-    log(`telegram halt POST failed: ${e.message}`);
-  }
+  } catch (e) { log(`telegram POST failed: ${e.message}`); }
 }
 
-async function haltIssue(issue, reason) {
-  if (HALTED_ISSUES.has(issue.id)) return;
-  HALTED_ISSUES.add(issue.id);
-  log(`HALT ${issue.identifier}: ${reason}`);
-  await notifyTelegramHalt(`[paperclip orchestrator] HALT ${issue.identifier}: ${reason}`);
-  try {
-    await jpatch(`/api/issues/${issue.id}`, { status: "blocked" });
-    log(`  marked ${issue.identifier} blocked`);
-  } catch (e) {
-    log(`  failed to mark ${issue.identifier} blocked: ${e.message}`);
+function triggerHeartbeat(agent) {
+  if (recentlyTriggered(agent.id)) return;
+  RECENT_TRIGGERS.set(agent.id, Date.now());
+  if (DRY) { log(`[dry] would heartbeat ${agent.urlKey}`); return; }
+  const proc = execFile("npx",
+    ["paperclipai", "heartbeat", "run", "--agent-id", agent.id, "--source", "on_demand", "--trigger", "ping", "--json"],
+    { cwd: process.env.HOME || "/home/paperclip", env: process.env, stdio: "ignore" },
+    (err) => log(err ? `heartbeat ${agent.urlKey} exited: ${err.message}` : `heartbeat ${agent.urlKey} done`));
+  proc.unref();
+}
+
+async function haltIssue(issue, category, reason) {
+  if (sset("halted").has(issue.id)) return;
+  sadd("halted", issue.id);
+  logEvent({ category, identifier: issue.identifier, action: "HALT", detail: reason });
+  await telegram(`🛑 *Pipeline HALT* — ${issue.identifier}\n_${category}_\n${reason}\n\n${(issue.title || "").slice(0, 80)}`);
+  if (!DRY) { try { await apiPatch(`/api/issues/${issue.id}`, { status: "blocked" }); } catch (e) { log(`mark blocked failed ${issue.identifier}: ${e.message}`); } }
+}
+
+async function notifyCompletion(issue) {
+  const tag = tagOf(issue.title);
+  const where = (APPROVAL_TAGS.has(tag) || tag === "INTERNAL" || !AUTONOMOUS_TAGS.has(tag))
+    ? "→ staged for your review/merge (no auto-deploy)"
+    : "→ demo-ready (workflow inactive + presentation/ROI), awaiting your go-live";
+  logEvent({ category: "terminal-notify", identifier: issue.identifier, action: "COMPLETE", detail: `${issue.status} ${tag}` });
+  await telegram(`✅ *Build ${issue.status === "done" ? "done" : "ready for review"}* — ${issue.identifier}${tag ? ` [${tag}]` : ""}\n${(issue.title || "").slice(0, 80)}\n${where}`);
+}
+
+async function handleInteractions(issue) {
+  let inters;
+  try { inters = arr(await api(`/api/issues/${issue.id}/interactions`), "interactions"); } catch { return; }
+  const pending = inters.filter((x) => (x.status === "pending" || x.status === "open" || x.status == null) && /confirm|disposition|approval/i.test(x.type || x.kind || ""));
+  if (!pending.length) return;
+  const tag = tagOf(issue.title);
+  for (const itx of pending) {
+    if (AUTO_ACCEPT && AUTONOMOUS_TAGS.has(tag)) {
+      logEvent({ category: "approval-wait", identifier: issue.identifier, action: "AUTO-ACCEPT", detail: `${tag} interaction ${itx.id}` });
+      if (!DRY) { try { await apiPost(`/api/issues/${issue.id}/interactions/${itx.id}/accept`, {}); } catch (e) { log(`accept failed: ${e.message}`); } }
+    } else {
+      const key = `${issue.id}:${itx.id}`;
+      if (sset("escalated").has(key)) continue;
+      sadd("escalated", key);
+      logEvent({ category: "approval-wait", identifier: issue.identifier, action: "ESCALATE", detail: `${tag || "untagged"} needs disposition` });
+      await telegram(`⏸ *Awaiting your decision* — ${issue.identifier}${tag ? ` [${tag}]` : ""}\n${(issue.title || "").slice(0, 80)}\nPipeline is waiting on an approval/disposition.`);
+    }
   }
 }
 
 async function tick() {
-  await refreshAgents();
-  const issues = await jget(`/api/companies/${COMPANY}/issues`);
-  const pipelineIssues = issues.filter(
-    (i) => i.status === "in_progress" && i.assigneeAgentId && isPipelineAgent(i.assigneeAgentId)
-  );
-  log(`tick — ${pipelineIssues.length} active pipeline issue(s)`);
+  await probe();
+  const { byId } = await agentsByUrlKey();
+  const issues = arr(await api(`/api/companies/${CFG.company.id}/issues`), "issues");
+  const identToStatus = {};
+  for (const i of issues) identToStatus[i.identifier] = i.status;
 
-  for (const issue of pipelineIssues) {
-    const assignee = AGENTS_BY_ID[issue.assigneeAgentId];
-    if (!assignee) continue;
+  // Seed terminal notifications on first ever run so we don't back-notify the existing backlog.
+  if (!STATE.seeded) {
+    STATE.notifiedTerminal = issues.filter((i) => ["done", "in_review"].includes(i.status)).map((i) => i.id);
+    STATE.seeded = true; saveState();
+    log(`seeded ${STATE.notifiedTerminal.length} existing terminal issues (no back-notify)`);
+  }
 
-    // Count iteration loops by counting runs per role on this issue
-    const runs = await jget(`/api/issues/${issue.id}/runs`);
-    const runsByRole = { engineer: 0, "qa-engineer": 0, "product-engineer": 0 };
-    for (const r of runs) {
-      const a = AGENTS_BY_ID[r.agentId];
-      if (!a) continue;
-      if (r.status !== "succeeded" && r.status !== "failed") continue;
-      if (runsByRole[a.urlKey] !== undefined) runsByRole[a.urlKey]++;
+  const active = issues.filter((i) => i.status === "in_progress" && i.assigneeAgentId);
+  log(`tick — ${issues.length} issues, ${active.length} in_progress`);
+
+  // ---- terminal-state notification guarantee + parent-child resolution ----
+  for (const i of issues) {
+    if (["done", "in_review"].includes(i.status) && !sset("notifiedTerminal").has(i.id)) {
+      await notifyCompletion(i); sadd("notifiedTerminal", i.id);
     }
-    const buildTestLoops = Math.max(runsByRole.engineer, runsByRole["qa-engineer"]);
-    const buildReviewLoops = runsByRole["product-engineer"];
-
-    if (buildTestLoops > ITERATION_CAP_BUILD_TEST) {
-      await haltIssue(
-        issue,
-        `Build↔Test iteration cap exceeded (engineer=${runsByRole.engineer}, qa=${runsByRole["qa-engineer"]}, cap=${ITERATION_CAP_BUILD_TEST})`
-      );
-      continue;
-    }
-    if (buildReviewLoops > ITERATION_CAP_BUILD_REVIEW) {
-      await haltIssue(
-        issue,
-        `Build↔Review iteration cap exceeded (product=${buildReviewLoops}, cap=${ITERATION_CAP_BUILD_REVIEW})`
-      );
-      continue;
-    }
-
-    // Stall detection — assignee idle/error AND no executionRunId AND issue.updatedAt > threshold ago
-    if (issue.executionRunId) continue;
-    if (!["idle", "error"].includes(assignee.status)) continue;
-    if (recentlyTriggered(assignee.id)) continue;
-
-    const updatedAtMs = new Date(issue.updatedAt).getTime();
-    const stallMs = Date.now() - updatedAtMs;
-    if (stallMs < STALL_THRESHOLD_MS) continue;
-
-    log(
-      `stall on ${issue.identifier} → assignee=${assignee.urlKey} status=${assignee.status} idle for ${Math.round(stallMs / 1000)}s`
-    );
-    // If agent in error state, try resuming first
-    if (assignee.status === "error") {
-      try {
-        const res = await fetch(`${API}/api/agents/${assignee.id}/resume`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-        });
-        if (res.ok) log(`  resumed ${assignee.urlKey} out of error state`);
-      } catch (e) {
-        log(`  resume failed: ${e.message}`);
+    if (i.status === "blocked") {
+      const ba = i.blockerAttention || {};
+      const childId = ba.sampleBlockerIdentifier;
+      if (ba.reason === "active_child" && childId && ["in_review", "done"].includes(identToStatus[childId]) && !sset("treeNotified").has(i.id)) {
+        sadd("treeNotified", i.id);
+        logEvent({ category: "parent-child", identifier: i.identifier, action: "TREE-READY", detail: `child ${childId} ${identToStatus[childId]}` });
+        await telegram(`🌳 *Build tree review-ready* — ${i.identifier}\nChild ${childId} reached \`${identToStatus[childId]}\`. Parent is blocked only on it — review the tree.`);
       }
     }
-    triggerHeartbeat(assignee.id);
+  }
+
+  // ---- in-flight enforcement on watched pipeline issues ----
+  for (const issue of active) {
+    const assignee = byId[issue.assigneeAgentId];
+    if (!assignee || !WATCH.has(assignee.urlKey)) continue;
+
+    // iteration caps
+    const runs = arr(await api(`/api/issues/${issue.id}/runs`), "runs");
+    const cnt = { engineer: 0, "qa-engineer": 0, "product-engineer": 0 };
+    for (const r of runs) {
+      const a = byId[r.agentId]; if (!a) continue;
+      if (!["succeeded", "failed"].includes(r.status)) continue;
+      if (cnt[a.urlKey] !== undefined) cnt[a.urlKey]++;
+    }
+    if (Math.max(cnt.engineer, cnt["qa-engineer"]) > T.iterationCapBuildTest) {
+      await haltIssue(issue, "iteration-loop", `Build↔Test cap exceeded (eng=${cnt.engineer}, qa=${cnt["qa-engineer"]}, cap=${T.iterationCapBuildTest})`); continue;
+    }
+    if (cnt["product-engineer"] > T.iterationCapBuildReview) {
+      await haltIssue(issue, "iteration-loop", `Build↔Review cap exceeded (product=${cnt["product-engineer"]}, cap=${T.iterationCapBuildReview})`); continue;
+    }
+
+    // hung run: execution flagged but no progress past timeout
+    if (issue.executionRunId) {
+      const runAge = ageSec(issue.executionLockedAt || issue.startedAt || issue.updatedAt);
+      if (runAge != null && runAge > T.hungRunTimeoutSec) {
+        await haltIssue(issue, "run-hung", `run ${String(issue.executionRunId).slice(0, 8)} no progress for ${Math.round(runAge / 60)}m (timeout ${Math.round(T.hungRunTimeoutSec / 60)}m). Manual check needed.`);
+      }
+      continue;
+    }
+
+    // stall: idle/error assignee, no run, past threshold -> resume + heartbeat
+    if (!["idle", "error"].includes(assignee.status)) continue;
+    if (recentlyTriggered(assignee.id)) continue;
+    const stall = ageSec(issue.updatedAt);
+    if (stall == null || stall < T.stallSec) continue;
+    logEvent({ category: "post-handoff-stall", identifier: issue.identifier, action: "RECOVER", detail: `${assignee.urlKey} ${assignee.status} idle ${stall}s` });
+    if (assignee.status === "error" && !DRY) {
+      try { await apiPost(`/api/agents/${assignee.id}/resume`, {}); log(`resumed ${assignee.urlKey}`); } catch (e) { log(`resume failed: ${e.message}`); }
+    }
+    triggerHeartbeat(assignee);
+  }
+
+  // ---- approval / disposition waits (in_progress + blocked) ----
+  for (const issue of issues.filter((i) => ["in_progress", "blocked"].includes(i.status))) {
+    await handleInteractions(issue);
   }
 }
 
 async function main() {
-  log(`Build Pipeline Orchestrator starting. Polling every ${POLL_INTERVAL_MS / 1000}s.`);
-  log(`Iteration caps: Build↔Test=${ITERATION_CAP_BUILD_TEST}, Build↔Review=${ITERATION_CAP_BUILD_REVIEW}`);
-  log(`Stall threshold: ${STALL_THRESHOLD_MS / 1000}s`);
-
-  while (true) {
-    try {
-      await tick();
-    } catch (e) {
-      log(`tick error: ${e.message}`);
-    }
-    await sleep(POLL_INTERVAL_MS);
-  }
+  loadState();
+  log(`Orchestrator${DRY ? " [DRY-RUN]" : ""} starting — company=${CFG.company.name}`);
+  log(`watch=${[...WATCH].join(",")} | stall=${T.stallSec}s hungRun=${T.hungRunTimeoutSec}s caps=${T.iterationCapBuildTest}/${T.iterationCapBuildReview} | autoAccept=${AUTO_ACCEPT}`);
+  if (ONCE || DRY) { await tick(); return; }
+  for (;;) { try { await tick(); } catch (e) { log(`tick error: ${e.message}`); } await sleep(T.pollIntervalSec * 1000); }
 }
 
-process.on("SIGTERM", () => {
-  log("SIGTERM received, exiting");
-  process.exit(0);
-});
-
-main().catch((e) => {
-  log(`fatal: ${e.stack || e.message}`);
-  process.exit(1);
-});
+process.on("SIGTERM", () => { log("SIGTERM, exiting"); process.exit(0); });
+main().catch((e) => { log(`fatal: ${e.stack || e.message}`); process.exit(1); });

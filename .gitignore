@@ -9,3 +9,7 @@ credentials.json
 token.json
 n8n-mcp/
 n8n-skills/
+
+# paperclip orchestrator runtime artifacts
+tools/paperclip/.orchestrator-state.json
+tools/paperclip/.pipeline-events.log
