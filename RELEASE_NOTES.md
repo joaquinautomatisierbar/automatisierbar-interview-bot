@@ -1,5 +1,62 @@
 # Release Notes
 
+## build/AUT-115-canary (AUT-115) — [INTERNAL] Pipeline canary
+
+**What changed:** Adds a single-file heartbeat marker `tools/paperclip/CANARY_LASTRUN.md` containing one line: `2026-05-29T20:38:19Z pipeline canary ok`. This is an internal canary build that validates all five build-pipeline agent stages (CTO → Engineer → QA → Product → Release) are operational. Zero impact on `api.py`, Render, Notion, n8n workflows, or any live system — this file is not loaded or referenced at runtime.
+
+### Review the change
+
+```bash
+cd "/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview"
+git fetch origin
+git checkout build/AUT-115-canary
+git diff main..HEAD
+```
+
+Expected diff: exactly 1 file added (`tools/paperclip/CANARY_LASTRUN.md`), 1 line inserted.
+
+Commit: `356285b Add canary heartbeat marker file (AUT-115)`
+
+### Verify locally
+
+```bash
+cat tools/paperclip/CANARY_LASTRUN.md
+# Expected: 2026-05-29T20:38:19Z pipeline canary ok
+```
+
+File must contain exactly one non-empty line matching `YYYY-MM-DDTHH:MM:SSZ pipeline canary ok`.
+
+### Deploy procedure (when ready)
+
+```bash
+git checkout main
+git merge --no-ff build/AUT-115-canary
+git push origin main
+```
+
+Render auto-deploys from `main` push in ~2-3 min. Since this file is not referenced by `api.py` or any workflow, there is zero runtime impact. No env-var changes required.
+
+### Rollback
+
+The change is trivially reversible:
+
+```bash
+git revert 356285b
+git push origin main
+```
+
+Or simply delete the file manually and commit. Render redeploys in ~2-3 min.
+
+### Pre-merge gate
+
+- [x] Branch pushed to `origin/build/AUT-115-canary`
+- [x] No commits to `main`
+- [x] `.env` confirmed gitignored; diff clean — no secrets
+- [x] QA `TEST_PASS` and Product `SHIP` markers on AUT-115
+- [ ] Joaquin reviews diff + merges to main *(owner: Joaquin)*
+
+---
+
 ## feature/aut-37-validation-textbox-fix (AUT-37)
 
 Two surgical changes to the Interview-Bot. Both ship in a single PR but are
