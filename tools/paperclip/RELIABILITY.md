@@ -62,3 +62,29 @@ or `blocked` (with a categorized reason). No silent limbo.
 - Orchestrator watches 5 of 6 build agents — **missing presentation-designer** (#11).
 - **AUT-65** blocked 3d on child **AUT-66** (`in_review`) — parent-child gap (#12), seen-but-ignored by the 3h health-check.
 - 4 issues in `in_review` 6-10 days (AUT-66/46/29/10) — correct terminal state, awaiting operator.
+
+---
+
+## Bike-Method ramp gates (production autonomy graduation)
+
+Autonomy is earned, not granted. Three gates between "+- works" and trusting the pipeline with
+real customers / real-deploy. Each gate is a measurable, falsifiable thing — no vibes.
+
+| Gate | Condition to clear | Effect of passing |
+|---|---|---|
+| **A — Canary green** | One green `canary.js` per track (INTERNAL + CLIENT), end-to-end through real agents, reaching terminal | The toolkit is live and proven; orchestrator + preflight + canary all wired |
+| **B — Real builds, zero touch** | 3 consecutive real `[INTERNAL]` builds + 3 consecutive real `[CLIENT]` builds with **zero manual intervention** (no human heartbeat triggers, no manual resume, no halt that needs operator action) | `ORCH_AUTO_ACCEPT=1` may be enabled for `[CLIENT]` (pipeline auto-accepts agent plan-confirmations) |
+| **C — Cost + latency in band** | Per-build Max-abo budget < $30 INTERNAL / < $40 CLIENT; wall-clock < 30min INTERNAL / < 90min CLIENT, sustained over 5 builds | Pipeline considered production-stable; Bike-Method Phase 3 → 4 transition for routine builds |
+
+### Status as of 2026-05-30
+
+- ✅ **Gate A — PASSED.** INTERNAL: AUT-115 (5/5 markers in 8 min, `in_review`). CLIENT: AUT-118/119 (CTO→child→Engineer→QA→Product→Release, 60 min, real multi-iteration recovery, ended `done`).
+- ⏳ **Gate B — 0/3 + 0/3.** Counts the next 3 real builds per track from this point.
+- ⏳ **Gate C — bands defined, not yet measured at scale.**
+
+### Known follow-ups before Gate B counts cleanly
+
+- `canary.js`: detect parent→child split on `[CLIENT]`, pivot watcher to the child (currently watcher dies on parent block).
+- `canary.js` markers: include `PLAN_LOCKED` for CTO; tighten release-engineer regex to `RELEASE STAGED|RELEASE_NOTES` (the broad `release` matched stray text in the CLIENT canary scorecard).
+- CTO routing: when CTO splits a `[CLIENT]` issue into a child, **preserve the `[CLIENT]` tag** so the Presentation Designer routing kicks in. AUT-119 ran as `[BUILD]` and skipped the Presentation Designer entirely (no process-diagram / ROI / demo script produced).
+
