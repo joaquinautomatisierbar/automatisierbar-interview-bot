@@ -63,13 +63,13 @@ function expectedStages() {
   if (MODE === "plumbing") return [{ urlKey: "cto", marker: "BLOCKED", terminal: true }];
   const isClient = TAG === "client";
   const stages = [
-    { urlKey: "cto", marker: "ENGINEER_START|Plan locked|plan document" },
+    { urlKey: "cto", marker: "PLAN_LOCKED|ENGINEER_START|Plan locked" },
     { urlKey: "engineer", marker: "READY_FOR_TEST" },
     { urlKey: "qa-engineer", marker: "TEST_PASS" },
-    { urlKey: "product-engineer", marker: "SHIP" },
+    { urlKey: "product-engineer", marker: "\\bSHIP\\b" },
   ];
   if (isClient) stages.push({ urlKey: "presentation-designer", marker: "PRESENTATION_READY" });
-  stages.push({ urlKey: "release-engineer", marker: "RELEASE|staged|in_review", terminal: true });
+  stages.push({ urlKey: "release-engineer", marker: "RELEASE STAGED|RELEASE BLOCKED|RELEASE_NOTES|RELEASE READY", terminal: true });
   return stages;
 }
 
@@ -115,12 +115,21 @@ async function watch(issue, budgetMin) {
       const label = st.urlKey;
       if (seen[label]) continue;
       const re = new RegExp(st.marker, "i");
-      if (re.test(blob)) { seen[label] = { at: Math.round((Date.now() - started) / 1000) }; log(paint(`  ✓ ${label} (${st.marker.split("|")[0]}) @ ${seen[label].at}s`, C.grn)); }
+      if (re.test(blob)) { seen[label] = { at: Math.round((Date.now() - started) / 1000) }; log(paint(`  ✓ ${label} (${st.marker.split("|")[0].replace(/\\b/g, "").trim()}) @ ${seen[label].at}s`, C.grn)); }
     }
     const elapsed = Math.round((Date.now() - started) / 1000);
     log(paint(`  … status=${cur.status} seen=[${Object.keys(seen).join(",")}] ${elapsed}s`, C.dim));
     if (["in_review", "done"].includes(cur.status)) { terminalReached = true; break; }
-    if (cur.status === "blocked") { blocked = true; break; }
+    if (cur.status === "blocked") {
+      // Parent-child pivot: if blocked because a child issue is the active work,
+      // switch the watcher to the child and keep going. (CTO splits [CLIENT] into a child.)
+      const childIdent = cur.blockerAttention?.sampleBlockerIdentifier;
+      if (cur.blockerAttention?.reason === "active_child" && childIdent && childIdent !== issue.identifier) {
+        log(paint(`  ↳ PIVOT — ${cur.identifier} blocked on child ${childIdent}; switching watch to child`, C.yel));
+        try { issue = await resolveByIdent(childIdent); continue; } catch (e) { log(`pivot failed: ${e.message}`); }
+      }
+      blocked = true; break;
+    }
   }
 
   // scorecard
