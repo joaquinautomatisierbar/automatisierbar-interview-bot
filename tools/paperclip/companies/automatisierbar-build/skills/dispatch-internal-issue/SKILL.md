@@ -29,8 +29,10 @@ CTO_ID=$(curl -s "http://127.0.0.1:3100/api/companies/47196d38-2f19-4168-af8f-fe
 
 ### Step 2 — create the issue
 
+The issue-creation endpoint is **company-scoped**: `POST /api/companies/<cid>/issues`. The plain `/api/issues` returns 404 (verified 2026-06-01 by AUT-140 dispatch test).
+
 ```bash
-curl -s -X POST "http://127.0.0.1:3100/api/issues" \
+curl -s -X POST "http://127.0.0.1:3100/api/companies/47196d38-2f19-4168-af8f-fe9451dff910/issues" \
   -H "Content-Type: application/json" \
   --data-binary @- <<EOF
 {
