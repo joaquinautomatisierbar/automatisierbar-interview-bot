@@ -1,0 +1,76 @@
+schema: paperclip/v1
+# Per-agent secret declarations. Only the 4 agents that touch an external system
+# get keys; the other 7 (CEO, CTO, Product Engineer, Presentation Designer,
+# Copy Writer, Hook Strategist, Image Curator) are reasoning-only and get none.
+#
+# These are env-var-name declarations. The actual value binding (env var name ->
+# paperclip-managed secretId) is wired on the live company as a `secret_ref`
+# in each agent's adapterConfig.env, which lets the agent-facing name differ
+# from the stored secret name (e.g. GH_TOKEN -> github_pat_joaquinautomatisierbar).
+# NEVER declare ANTHROPIC_API_KEY here — agents auth via CLAUDE_CODE_OAUTH_TOKEN
+# (Max abo) at the process level; a console key would shadow it and burn credits.
+agents:
+  engineer:
+    inputs:
+      env:
+        N8N_API_KEY:        # build + deploy inactive workflows for QA
+          kind: secret
+          requirement: optional
+        NOTION_API_KEY:     # write sandbox/test Notion DBs
+          kind: secret
+          requirement: optional
+  qa-engineer:
+    inputs:
+      env:
+        N8N_API_KEY:        # validate + pin-data test the deployed workflow
+          kind: secret
+          requirement: optional
+        NOTION_API_KEY:     # read-side verification of Notion-writing artifacts
+          kind: secret
+          requirement: optional
+  release-engineer:
+    inputs:
+      env:
+        N8N_API_KEY:        # publish / update workflows in n8n cloud
+          kind: secret
+          requirement: optional
+        GH_TOKEN:           # push build branches (bind -> github_pat_joaquinautomatisierbar)
+          kind: secret
+          requirement: optional
+        RENDER_API_KEY:     # deploy/preview (bind -> render_api_key_automatisierbar)
+          kind: secret
+          requirement: optional
+        TRIGGER_DEV_API_KEY: # trigger.dev deploy (bind -> trigger_secret_key)
+          kind: secret
+          requirement: optional
+        VERCEL_TOKEN:       # unused today; declared for when a Vercel build lands
+          kind: secret
+          requirement: optional
+  pr-director:
+    inputs:
+      env:
+        NOTION_API_KEY:              # read brief + write Post Variants DB via REST
+          kind: secret
+          requirement: optional
+        NOTION_POST_VARIANTS_DB_ID:  # target DB for variant rows
+          kind: secret
+          requirement: optional
+        NOTION_BRIEFS_DB_ID:         # source briefs DB
+          kind: secret
+          requirement: optional
+  # ---- 2026-06-01: two new agents in the AI OS - OPERATIONS project ----
+  # Both operator-driven (no auto-routine), reasoning + chat only. Internal
+  # Planner is fully reasoning-only. Test Data Generator needs GitHub PAT + N8N
+  # API key to clone/push branches and to pull workflow JSON for shape inference.
+  internal-planner:
+    inputs:
+      env: {}    # reasoning-only; reads firm context + source mount, dispatches via local paperclip API (no auth)
+  test-data-generator:
+    inputs:
+      env:
+        GITHUB_PAT_JOAQUINAUTOMATISIERBAR:  # clone paperclipai-builds + system repos; push fixture branches
+          kind: secret
+          requirement: required
+        N8N_API_KEY:                        # pull workflow JSON via cloud API for shape inference
+          kind: secret
+          requirement: optional
