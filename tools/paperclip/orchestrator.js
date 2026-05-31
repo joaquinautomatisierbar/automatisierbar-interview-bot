@@ -94,6 +94,9 @@ async function notifyCompletion(issue) {
     ? "→ staged for your review/merge (no auto-deploy)"
     : "→ demo-ready (workflow inactive + presentation/ROI), awaiting your go-live";
   logEvent({ category: "terminal-notify", identifier: issue.identifier, action: "COMPLETE", detail: `${issue.status} ${tag}` });
+  // Operator preference 2026-06-01: only ping for client-track builds. Routines (health-checks),
+  // INTERNAL, marketing briefs etc. still get the audit-log row above but no Telegram.
+  if (!tag.startsWith("CLIENT")) return;
   await telegram(`✅ *Build ${issue.status === "done" ? "done" : "ready for review"}* — ${issue.identifier}${tag ? ` [${tag}]` : ""}\n${(issue.title || "").slice(0, 80)}\n${where}`);
 }
 
@@ -125,18 +128,21 @@ async function tick() {
   for (const i of issues) identToStatus[i.identifier] = i.status;
 
   // Seed terminal notifications on first ever run so we don't back-notify the existing backlog.
+  // Only seed `done` — in_review issues that later transition to done should still trigger one ping.
   if (!STATE.seeded) {
-    STATE.notifiedTerminal = issues.filter((i) => ["done", "in_review"].includes(i.status)).map((i) => i.id);
+    STATE.notifiedTerminal = issues.filter((i) => i.status === "done").map((i) => i.id);
     STATE.seeded = true; saveState();
-    log(`seeded ${STATE.notifiedTerminal.length} existing terminal issues (no back-notify)`);
+    log(`seeded ${STATE.notifiedTerminal.length} existing done issues (no back-notify)`);
   }
 
   const active = issues.filter((i) => i.status === "in_progress" && i.assigneeAgentId);
   log(`tick — ${issues.length} issues, ${active.length} in_progress`);
 
   // ---- terminal-state notification guarantee + parent-child resolution ----
+  // Only fire on `done`. `in_review` is sometimes a transient handoff state (saw this on AUT-123
+  // 2026-05-30) — pinging there double-fired with the approval-escalate path.
   for (const i of issues) {
-    if (["done", "in_review"].includes(i.status) && !sset("notifiedTerminal").has(i.id)) {
+    if (i.status === "done" && !sset("notifiedTerminal").has(i.id)) {
       await notifyCompletion(i); sadd("notifiedTerminal", i.id);
     }
     if (i.status === "blocked") {
@@ -145,7 +151,10 @@ async function tick() {
       if (ba.reason === "active_child" && childId && ["in_review", "done"].includes(identToStatus[childId]) && !sset("treeNotified").has(i.id)) {
         sadd("treeNotified", i.id);
         logEvent({ category: "parent-child", identifier: i.identifier, action: "TREE-READY", detail: `child ${childId} ${identToStatus[childId]}` });
-        await telegram(`🌳 *Build tree review-ready* — ${i.identifier}\nChild ${childId} reached \`${identToStatus[childId]}\`. Parent is blocked only on it — review the tree.`);
+        // Client-only Telegram (audit row above still fires for any tag).
+        if (tagOf(i.title).startsWith("CLIENT")) {
+          await telegram(`🌳 *Build tree review-ready* — ${i.identifier}\nChild ${childId} reached \`${identToStatus[childId]}\`. Parent is blocked only on it — review the tree.`);
+        }
       }
     }
   }
