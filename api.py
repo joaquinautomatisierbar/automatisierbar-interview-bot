@@ -537,8 +537,22 @@ def session_pdf(session_id):
         return jsonify({"error": str(e)}), 500
 
 
+# Sessions currently generating a prompt in a background thread.
+# Prevents duplicate generation when the user polls before the first thread completes.
+_prompt_generating: set = set()
+
+
 @app.route("/api/session/<session_id>/prompt", methods=["GET"])
 def session_prompt(session_id):
+    """Return the cached Claude Code prompt or 202 while generating it async.
+
+    Design: the LLM call takes 25–40 s, which exceeds Render's HTTP proxy
+    idle timeout (~30 s). Blocking the gunicorn worker drops the connection
+    before the response is sent, causing the frontend to see a 500 or a reset.
+    Solution: return 202 immediately and generate the prompt in a daemon thread.
+    The frontend polls every 3 s; once the thread caches the prompt in Notion
+    the next poll returns 200 with the prompt text.
+    """
     if not _valid_session_id(session_id):
         return jsonify({"error": "invalid session id"}), 400
     try:
@@ -573,8 +587,7 @@ def session_prompt(session_id):
                 assumptions = state.get("assumptions", []) or []
                 cached_prompt = state.get("claude_code_prompt")
 
-        # Fast path: prompt was cached by the background payoff thread (post-completion)
-        # or by a prior /prompt call. Avoids paying for a second 30 s Sonnet call.
+        # Fast path: prompt already cached by payoff thread or a prior poll.
         if cached_prompt:
             return jsonify({"prompt": cached_prompt, "cached": True})
 
@@ -584,52 +597,48 @@ def session_prompt(session_id):
         if state.get("status") != "complete":
             return jsonify({"error": "Interview noch nicht abgeschlossen — Build-Prompt fehlt"}), 409
 
-        lead_info = None
-        if lead_page_id:
-            try:
-                from notion_session import get_lead_by_page_id
-                lead_info = get_lead_by_page_id(lead_page_id)
-            except Exception as e:
-                app.logger.error("get_lead_by_page_id failed: %s", e)
+        # Kick off background generation (idempotent — skips if already running).
+        if session_id not in _prompt_generating:
+            _prompt_generating.add(session_id)
+            import threading
 
-        # Single retry: transient Anthropic errors (rate-limit, 500, connection)
-        # are common on cold sessions; a 3 s pause before retry resolves ~80% of them.
-        import time as _time
-        _gen_exc = None
-        for _attempt in range(2):
-            try:
-                prompt_text = generate_claude_code_prompt(
-                    context, all_qa, roi, lead_info,
-                    process_map=process_map,
-                    process_map_notes=process_map_notes,
-                    process_map_skipped=process_map_skipped,
-                    extra_context=extra_context,
-                    attachments=attachments,
-                    assumptions=assumptions,
-                )
-                _gen_exc = None
-                break
-            except Exception as _exc:
-                _gen_exc = _exc
-                app.logger.warning(
-                    "session_prompt: LLM attempt %d failed (%s: %s)%s",
-                    _attempt + 1, type(_exc).__name__, _exc,
-                    " — retrying in 3s" if _attempt == 0 else "",
-                    exc_info=True,
-                )
-                if _attempt == 0:
-                    _time.sleep(3)
-        if _gen_exc:
-            raise _gen_exc
+            lead_page_id_snap = lead_page_id
+            context_snap, all_qa_snap, roi_snap = context, all_qa, roi
+            pm_snap, pmn_snap, pms_snap = process_map, process_map_notes, process_map_skipped
+            ec_snap, att_snap, asm_snap = extra_context, attachments, assumptions
 
-        # Cache for subsequent calls (page reload, "copy prompt" button, second viewer).
-        if notion_available():
-            try:
-                update_session(session_id, {"claude_code_prompt": prompt_text})
-            except Exception as e:
-                app.logger.warning("prompt cache write failed: %s", e)
+            def _generate_prompt():
+                try:
+                    lead_info = None
+                    if lead_page_id_snap:
+                        try:
+                            from notion_session import get_lead_by_page_id
+                            lead_info = get_lead_by_page_id(lead_page_id_snap)
+                        except Exception as e:
+                            app.logger.warning("async_prompt: get_lead failed: %s", e)
 
-        return jsonify({"prompt": prompt_text, "cached": False})
+                    prompt_text = generate_claude_code_prompt(
+                        context_snap, all_qa_snap, roi_snap, lead_info,
+                        process_map=pm_snap,
+                        process_map_notes=pmn_snap,
+                        process_map_skipped=pms_snap,
+                        extra_context=ec_snap,
+                        attachments=att_snap,
+                        assumptions=asm_snap,
+                    )
+                    if notion_available():
+                        update_session(session_id, {"claude_code_prompt": prompt_text})
+                        app.logger.info("async_prompt: cached for session %s", session_id)
+                except Exception as e:
+                    app.logger.error("async_prompt: generation failed for %s: %s",
+                                     session_id, e, exc_info=True)
+                finally:
+                    _prompt_generating.discard(session_id)
+
+            threading.Thread(target=_generate_prompt, daemon=True).start()
+
+        # Tell the frontend to poll again in 3 s.
+        return jsonify({"status": "generating", "retry_after_ms": 3000}), 202
 
     except Exception as e:
         app.logger.error("session_prompt error: %s", e, exc_info=True)

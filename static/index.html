@@ -1895,21 +1895,37 @@ const App = {
   },
 
   async loadPrompt() {
+    // Server generates the prompt in a background thread to avoid Render proxy
+    // timeout (LLM call takes 25-40 s, proxy drops connection at ~30 s).
+    // 202 means "still generating — poll again". We retry up to 60 × 3 s = 3 min.
+    const MAX_POLLS = 60;
     try {
-      const r = await fetch(`/api/session/${this.sessionId}/prompt`);
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || !d.prompt) {
-        throw new Error(d.error || `Fehler ${r.status}`);
+      for (let poll = 0; poll < MAX_POLLS; poll++) {
+        const r = await fetch(`/api/session/${this.sessionId}/prompt`);
+        const d = await r.json().catch(() => ({}));
+
+        if (r.status === 202 && d.status === 'generating') {
+          const wait = d.retry_after_ms || 3000;
+          await new Promise(res => setTimeout(res, wait));
+          continue;
+        }
+
+        if (!r.ok || !d.prompt) {
+          throw new Error(d.error || `Fehler ${r.status}`);
+        }
+
+        this.promptText = d.prompt;
+        document.getElementById("prompt-loading").style.display = "none";
+        const pre = document.getElementById("prompt-text");
+        pre.textContent = this.promptText;
+        pre.style.display = "block";
+        document.getElementById("prompt-copy").style.display = "flex";
+        // Prompt is ready → reveal the "An Build-Team senden" CTA
+        const ds = document.getElementById("dispatch-section");
+        if (ds) ds.style.display = "block";
+        return;
       }
-      this.promptText = d.prompt;
-      document.getElementById("prompt-loading").style.display = "none";
-      const pre = document.getElementById("prompt-text");
-      pre.textContent = this.promptText;
-      pre.style.display = "block";
-      document.getElementById("prompt-copy").style.display = "flex";
-      // Prompt is ready → reveal the "An Build-Team senden" CTA
-      const ds = document.getElementById("dispatch-section");
-      if (ds) ds.style.display = "block";
+      throw new Error('Prompt-Generierung dauert zu lange — bitte Seite neu laden.');
     } catch (e) {
       const ld = document.getElementById("prompt-loading");
       ld.classList.add("error");
