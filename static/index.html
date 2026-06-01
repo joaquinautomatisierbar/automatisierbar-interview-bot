@@ -133,6 +133,20 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 }
 .btn-outline-violet:hover { background: rgba(21,200,122,0.1); border-color: var(--green); }
 
+.pill-interviewer {
+  display: inline-flex; align-items: center;
+  padding: 6px 14px; min-height: 32px;
+  border-radius: 100px; font-size: 13px; font-weight: 500;
+  font-family: inherit; cursor: pointer; transition: all var(--ease);
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.pill-interviewer:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+.pill-interviewer--active {
+  background: rgba(21,200,122,0.15); color: var(--green);
+  border-color: rgba(21,200,122,0.4);
+}
+
 /* ── Input ── */
 .input-field {
   width: 100%; background: var(--bg-card);
@@ -815,6 +829,16 @@ body.with-sidebar { padding-right: 320px; }
           placeholder="Schreib einfach drauflos — wie läuft der Prozess heute ab, von Anfang bis Ende? Wer macht was, mit welchem Tool? Wo fängt es an, wo hört es auf?&#10;&#10;Beispiel: Andrea bekommt Belege per Mail von Mandanten, sortiert sie, lädt jeden einzeln in Bexio hoch, kontiert und gibt sie an einen Treuhänder zur Sichtkontrolle weiter. Das passiert ca. 150 Mal pro Woche."></textarea>
       </div>
 
+      <div class="field-group" style="margin-bottom:20px;">
+        <label class="field-label">Interviewer</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="pill-interviewer pill-interviewer--active" onclick="App.setInterviewer('Joaquin', this)">Joaquin</button>
+          <button type="button" class="pill-interviewer" onclick="App.setInterviewer('Nico', this)">Nico</button>
+          <button type="button" class="pill-interviewer" onclick="App.setInterviewer('Tej', this)">Tej</button>
+          <button type="button" class="pill-interviewer" onclick="App.setInterviewer('Patrik', this)">Patrik</button>
+        </div>
+      </div>
+
       <div class="context-footer">
         <span class="context-hint">Claude liest deine Erzählung, baut daraus einen Prozess-Map-Entwurf — du prüfst nur noch.</span>
         <button id="start-btn" class="btn btn-primary">
@@ -1012,6 +1036,19 @@ body.with-sidebar { padding-right: 320px; }
       </div>
     </div>
 
+    <!-- Re-evaluate -->
+    <div id="reevaluate-section" style="display:none;margin-top:14px;">
+      <button id="reevaluate-trigger" class="btn btn-ghost" style="font-size:13px;padding:8px 16px;min-height:36px;" onclick="App.toggleReevaluate()">Angaben korrigieren</button>
+      <div id="reevaluate-panel" style="display:none;margin-top:10px;padding:14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;">
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">Was war falsch oder unvollständig?</label>
+        <textarea id="reevaluate-note" class="context-textarea" rows="3" maxlength="2000" placeholder="Claude wertet alles neu aus — beschreibe die Korrektur."></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;gap:8px;">
+          <button class="btn btn-ghost" style="font-size:13px;padding:8px 14px;min-height:36px;" onclick="App.toggleReevaluate()">Abbrechen</button>
+          <button id="reevaluate-confirm" class="btn btn-primary" style="font-size:13px;padding:8px 16px;min-height:36px;" onclick="App.submitReevaluate()">Neu auswerten →</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Claude Code Prompt -->
     <div class="prompt-section">
       <button class="prompt-toggle" id="prompt-toggle" onclick="App.togglePrompt()">
@@ -1087,6 +1124,8 @@ const App = {
   allQA: [],
   leadPageId: null,
   promptText: null,
+  selectedInterviewer: "Joaquin",
+  _reevaluateLock: false,
   // Process map + sidebar state
   processMap: [],
   processMapNotes: "",
@@ -1279,7 +1318,7 @@ const App = {
       const r = await fetch("/api/session/start", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ context, lead_page_id: this.leadPageId }),
+        body: JSON.stringify({ context, lead_page_id: this.leadPageId, interviewer: this.selectedInterviewer }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Fehler");
@@ -1821,6 +1860,17 @@ const App = {
       document.getElementById("assumptions-list").innerHTML = assumptions.map(a=>`<li>${this.esc(a)}</li>`).join("");
     }
 
+    // Reveal re-evaluate trigger; reset panel to collapsed state
+    const reevalSec = document.getElementById("reevaluate-section");
+    if (reevalSec) {
+      reevalSec.style.display = "block";
+      const panel = document.getElementById("reevaluate-panel");
+      if (panel) panel.style.display = "none";
+      const note = document.getElementById("reevaluate-note");
+      if (note) note.value = "";
+      this._reevaluateLock = false;
+    }
+
     this.showScreen("screen-roi");
 
     // Auto-load the Claude Code prompt in the background so the "An Build-Team senden"
@@ -2258,6 +2308,11 @@ const App = {
     document.getElementById("client-search").value = "";
     document.getElementById("lead-pills").innerHTML = "";
     document.getElementById("assumptions-section").style.display = "none";
+    const reevalSec = document.getElementById("reevaluate-section");
+    if (reevalSec) reevalSec.style.display = "none";
+    const reevalPanel = document.getElementById("reevaluate-panel");
+    if (reevalPanel) reevalPanel.style.display = "none";
+    this._reevaluateLock = false;
     document.getElementById("bar-now").style.height = "0";
     const stack = document.getElementById("bar-after-stack");
     if (stack) stack.style.height = "0";
@@ -2293,6 +2348,55 @@ const App = {
       if (op === "set") localStorage.setItem(`ab_${key}`, val);
       if (op === "get") return localStorage.getItem(`ab_${key}`);
     } catch { return null; }
+  },
+
+  // ── Interviewer selector ───────────────────────────────────────
+  setInterviewer(name, btn) {
+    this.selectedInterviewer = name;
+    document.querySelectorAll(".pill-interviewer").forEach(el => el.classList.remove("pill-interviewer--active"));
+    btn.classList.add("pill-interviewer--active");
+  },
+
+  // ── Re-evaluate ────────────────────────────────────────────────
+  toggleReevaluate() {
+    const panel = document.getElementById("reevaluate-panel");
+    if (!panel) return;
+    const isOpen = panel.style.display !== "none";
+    panel.style.display = isOpen ? "none" : "block";
+    if (!isOpen) {
+      const note = document.getElementById("reevaluate-note");
+      if (note) note.focus();
+    }
+  },
+
+  async submitReevaluate() {
+    if (this._reevaluateLock) return;
+    const note = (document.getElementById("reevaluate-note")?.value || "").trim();
+    if (!note) { this.shakeField("reevaluate-note"); return; }
+
+    this._reevaluateLock = true;
+    const confirmBtn = document.getElementById("reevaluate-confirm");
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = "Lädt…"; }
+
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/reevaluate`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ correction_note: note }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Fehler");
+
+      if (d.status === "complete") {
+        this.showROI(d.roi || {}, d.assumptions || []);
+      } else {
+        this.showQuestions(d.questions || [], d.round, d.status);
+      }
+    } catch (e) {
+      this.showToast(e.message);
+      this._reevaluateLock = false;
+      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = "Neu auswerten →"; }
+    }
   },
 };
 

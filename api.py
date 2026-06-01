@@ -463,6 +463,86 @@ def submit_answers(session_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/session/<session_id>/reevaluate", methods=["POST"])
+def reevaluate_session(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    data = request.get_json(silent=True) or {}
+    correction_note = (data.get("correction_note") or "").strip()
+    if not correction_note:
+        return jsonify({"error": "correction_note required"}), 400
+    if len(correction_note) > 2000:
+        return jsonify({"error": "correction_note too long (max 2000 chars)"}), 400
+
+    try:
+        from claude_client import evaluate_answers
+        from notion_session import get_session as _get, update_session, available as notion_available
+
+        context = ""
+        all_qa = []
+        process_map = []
+        process_map_notes = ""
+        process_map_skipped = False
+        extra_context = ""
+        attachments = []
+
+        if notion_available():
+            state = _get(session_id)
+            if state:
+                context = state.get("context", "")
+                all_qa = state.get("all_qa", [])
+                process_map = state.get("process_map", []) or []
+                process_map_notes = state.get("process_map_notes", "") or ""
+                process_map_skipped = bool(state.get("process_map_skipped", False))
+                extra_context = state.get("extra_context", "") or ""
+                attachments = state.get("attachments", []) or []
+
+        # APPEND — never overwrite existing extra_context
+        extra_context = extra_context + f"\n[RE-EVALUATE NOTE]: {correction_note}"
+
+        if notion_available():
+            update_session(session_id, {"extra_context": extra_context})
+
+        result = evaluate_answers(
+            context, all_qa,
+            process_map=process_map,
+            process_map_notes=process_map_notes,
+            process_map_skipped=process_map_skipped,
+            extra_context=extra_context,
+            attachments=attachments,
+        )
+
+        if result.get("status") == "complete":
+            roi = result.get("roi", {})
+            assumptions = result.get("assumptions", [])
+            if notion_available():
+                update_session(session_id, {
+                    "status": "complete",
+                    "roi": roi,
+                    "assumptions": assumptions,
+                })
+            return jsonify({"status": "complete", "assumptions": assumptions, "roi": roi})
+
+        next_questions = result.get("questions", [])
+        last_round = all_qa[-1].get("round", 1) if all_qa else 1
+        next_round = last_round + 1
+        if notion_available():
+            update_session(session_id, {
+                "current_questions": next_questions,
+                "round": next_round,
+            })
+        return jsonify({
+            "status": result.get("status", "needs_more"),
+            "round": next_round,
+            "questions": next_questions,
+            "assumptions": result.get("assumptions", []),
+        })
+
+    except Exception as e:
+        app.logger.error("reevaluate error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/session/<session_id>/pdf", methods=["GET"])
 def session_pdf(session_id):
     if not _valid_session_id(session_id):
