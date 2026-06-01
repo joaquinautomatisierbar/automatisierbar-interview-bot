@@ -541,6 +541,7 @@ def session_prompt(session_id):
         attachments = []
         assumptions = []
         cached_prompt = None
+        state = None  # guard: referenced at line 570 outside the notion_available() block
 
         if notion_available():
             state = _get(session_id)
