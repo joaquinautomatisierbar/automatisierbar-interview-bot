@@ -153,3 +153,49 @@ that strips both keys. Not required for the rollback to be functional.
 No env-var changes were made for AUT-37, so nothing to undo on the Render
 dashboard. Auto-deploy is wired to `main` only — once the revert merge lands,
 the rollback is complete in one deploy cycle.
+
+---
+
+# Rollback — AUT-149
+
+## Fix /prompt 500 (async generation + state=None)
+
+5 commits were merged directly to `main`. All changes are in `api.py`,
+`tools/claude_client.py`, and `static/index.html`. No schema changes,
+no new credentials, no external side-effects during rollback.
+
+### Full revert (all 5 AUT-149 commits)
+
+```bash
+# Revert in reverse-commit order (newest first):
+git revert --no-edit 24fa52b ccdf27a cc2e689 7f125f0 9ceed81
+git push origin main
+# Render auto-deploys the reverted state in ~2-3 minutes
+```
+
+### What each commit did (for surgical partial rollback)
+
+| SHA | File | What it does |
+|---|---|---|
+| `24fa52b` | `api.py` | `_prompt_errors` dict — prevents repeated LLM-call spam on failure |
+| `cc2e689` | `api.py`, `static/index.html` | Core fix: async generation + frontend polling loop (202 response) |
+| `ccdf27a` | `api.py` | Single LLM retry on cold-start + exc_info logging |
+| `7f125f0` | `api.py` | exc_info=True + exception type in error string |
+| `9ceed81` | `tools/claude_client.py` | ANTHROPIC_API_KEY .get() + RuntimeError instead of KeyError |
+
+### Session-state safety
+
+No Notion schema changes. Existing sessions are unaffected — the endpoint
+only reads from and writes to the `claude_code_prompt` key already present
+in session state. Rollback does not corrupt any session.
+
+### Render-side
+
+No env-var changes were made for AUT-149. After revert + push to main,
+Render auto-deploys. No manual Render dashboard steps needed.
+
+### Note on `_prompt_generating` / `_prompt_errors` in-flight state
+
+These are in-process dicts (not persisted). On Render the instance restarts
+after redeploy — both dicts are cleared automatically. No stale state survives
+a rollback deploy.
