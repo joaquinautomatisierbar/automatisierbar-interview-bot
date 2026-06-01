@@ -611,8 +611,9 @@ def session_prompt(session_id):
         return jsonify({"prompt": prompt_text, "cached": False})
 
     except Exception as e:
-        app.logger.error("session_prompt error: %s", e)
-        return jsonify({"error": str(e)}), 500
+        app.logger.error("session_prompt error: %s", e, exc_info=True)
+        error_msg = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+        return jsonify({"error": error_msg}), 500
 
 
 @app.route("/api/session/<session_id>/validate", methods=["POST"])
