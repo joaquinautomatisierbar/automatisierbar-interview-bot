@@ -199,3 +199,57 @@ Render auto-deploys. No manual Render dashboard steps needed.
 These are in-process dicts (not persisted). On Render the instance restarts
 after redeploy — both dicts are cleared automatically. No stale state survives
 a rollback deploy.
+
+---
+
+# Rollback — AUT-156
+
+## Interviewer Selector + Re-evaluate Button (Changes 1 & 2)
+
+**Branch:** `build/AUT-156-interviewer-selector-reevaluate`
+**Commit:** `2f2a1dc`
+
+All changes are in `api.py` (+80 lines) and `static/index.html` (+106 lines). No schema changes, no new credentials, no new environment variables.
+
+### Full revert (both changes together)
+
+```bash
+git revert --no-edit 2f2a1dc
+git push origin build/AUT-156-interviewer-selector-reevaluate
+# Render auto-deploys the reverted state in ~2-3 minutes
+```
+
+### Change 1 only — revert interviewer selector (frontend)
+
+If the pill selector causes UI regressions but `/reevaluate` should stay:
+
+```bash
+# Cherry-pick what to keep or manually restore the three frontend hunks:
+# - Remove .pill-interviewer / .pill-interviewer--active CSS (~line 136)
+# - Remove the <div class="field-group"> pill block (~line 829)
+# - Revert startSession() body: remove `interviewer: this.selectedInterviewer`
+# - Remove App.selectedInterviewer and App.setInterviewer()
+```
+
+No backend change to revert for Change 1 — api.py already stored `interviewer` before AUT-156.
+
+### Change 2 only — revert /reevaluate route + frontend panel
+
+If the re-evaluate flow causes issues but the selector should stay:
+
+**Backend (`api.py`):** Remove the `reevaluate_session` view function (the `@app.route("/api/session/<session_id>/reevaluate")` block, ~80 lines added at line 463).
+
+**Frontend (`static/index.html`):**
+- Remove `#reevaluate-section` div (~line 1036)
+- Remove `_reevaluateLock` state property
+- Remove the `showROI()` reveal block for `reevaluate-section` (~line 1860)
+- Remove the `resetROI()` cleanup block for `reevaluate-section` (~line 2308)
+- Remove `toggleReevaluate()` and `submitReevaluate()` methods
+
+### Session-state safety
+
+The `extra_context` field in Notion session state is APPENDED to (never overwritten). Existing sessions that had no `extra_context` are unaffected — the field defaults to `""`. Rollback does not corrupt existing session state.
+
+### Render-side
+
+No env-var changes were made for AUT-156. After revert + push to the branch, Render auto-deploys from whatever branch is wired to production. No manual Render dashboard steps needed.
