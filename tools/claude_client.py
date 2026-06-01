@@ -662,7 +662,10 @@ def generate_claude_code_prompt(
     assumptions: list = None,
 ) -> str:
     """Generate a ready-to-paste Claude Code prompt from the collected session data."""
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY env var is not set on this Render service")
+    client = anthropic.Anthropic(api_key=api_key)
 
     lead_section = ""
     if lead_info:
