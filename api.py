@@ -540,6 +540,9 @@ def session_pdf(session_id):
 # Sessions currently generating a prompt in a background thread.
 # Prevents duplicate generation when the user polls before the first thread completes.
 _prompt_generating: set = set()
+# Stores the last generation error per session so repeated polls surface the real
+# error instead of spawning a new LLM thread on every poll when generation fails.
+_prompt_errors: dict = {}
 
 
 @app.route("/api/session/<session_id>/prompt", methods=["GET"])
@@ -597,6 +600,11 @@ def session_prompt(session_id):
         if state.get("status") != "complete":
             return jsonify({"error": "Interview noch nicht abgeschlossen — Build-Prompt fehlt"}), 409
 
+        # If a prior generation attempt failed, surface the error immediately.
+        if session_id in _prompt_errors:
+            err = _prompt_errors.pop(session_id)
+            return jsonify({"error": f"Prompt-Generierung fehlgeschlagen: {err}"}), 500
+
         # Kick off background generation (idempotent — skips if already running).
         if session_id not in _prompt_generating:
             _prompt_generating.add(session_id)
@@ -630,8 +638,10 @@ def session_prompt(session_id):
                         update_session(session_id, {"claude_code_prompt": prompt_text})
                         app.logger.info("async_prompt: cached for session %s", session_id)
                 except Exception as e:
+                    err_msg = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
                     app.logger.error("async_prompt: generation failed for %s: %s",
-                                     session_id, e, exc_info=True)
+                                     session_id, err_msg, exc_info=True)
+                    _prompt_errors[session_id] = err_msg
                 finally:
                     _prompt_generating.discard(session_id)
 
