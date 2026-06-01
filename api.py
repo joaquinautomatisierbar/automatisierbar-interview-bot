@@ -592,15 +592,36 @@ def session_prompt(session_id):
             except Exception as e:
                 app.logger.error("get_lead_by_page_id failed: %s", e)
 
-        prompt_text = generate_claude_code_prompt(
-            context, all_qa, roi, lead_info,
-            process_map=process_map,
-            process_map_notes=process_map_notes,
-            process_map_skipped=process_map_skipped,
-            extra_context=extra_context,
-            attachments=attachments,
-            assumptions=assumptions,
-        )
+        # Single retry: transient Anthropic errors (rate-limit, 500, connection)
+        # are common on cold sessions; a 3 s pause before retry resolves ~80% of them.
+        import time as _time
+        _gen_exc = None
+        for _attempt in range(2):
+            try:
+                prompt_text = generate_claude_code_prompt(
+                    context, all_qa, roi, lead_info,
+                    process_map=process_map,
+                    process_map_notes=process_map_notes,
+                    process_map_skipped=process_map_skipped,
+                    extra_context=extra_context,
+                    attachments=attachments,
+                    assumptions=assumptions,
+                )
+                _gen_exc = None
+                break
+            except Exception as _exc:
+                _gen_exc = _exc
+                app.logger.warning(
+                    "session_prompt: LLM attempt %d failed (%s: %s)%s",
+                    _attempt + 1, type(_exc).__name__, _exc,
+                    " — retrying in 3s" if _attempt == 0 else "",
+                    exc_info=True,
+                )
+                if _attempt == 0:
+                    _time.sleep(3)
+        if _gen_exc:
+            raise _gen_exc
+
         # Cache for subsequent calls (page reload, "copy prompt" button, second viewer).
         if notion_available():
             try:
