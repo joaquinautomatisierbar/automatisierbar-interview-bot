@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>automatisierbar · Script-Tuner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --green:        #15C87A;
+  --green-dark:   #0A8F54;
+  --green-deep:   #063D25;
+  --green-light:  #D4F7E9;
+  --green-glow:   rgba(21,200,122,0.15);
+  --bg:           #09100D;
+  --bg-card:      rgba(255,255,255,0.04);
+  --bg-card-hover:rgba(255,255,255,0.07);
+  --border:       rgba(255,255,255,0.08);
+  --border-green: rgba(21,200,122,0.3);
+  --text:         #EEF5F1;
+  --text-muted:   rgba(238,245,241,0.45);
+  --text-dim:     rgba(238,245,241,0.25);
+  --white:        #FFFFFF;
+  --red:          #EF4444;
+  --radius:       10px;
+  --radius-sm:    6px;
+  --ease:         0.22s ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ── Screens ── */
+.screen { display: none; min-height: 100vh; flex-direction: column; }
+.screen.active { display: flex; }
+.screen.fade-in { animation: fadeUp 0.35s ease forwards; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: #EF4444; color: #fff;
+  padding: 10px 18px; border-radius: 8px;
+  font-size: 13px; font-weight: 500;
+  opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 9999; pointer-events: none; max-width: 90vw;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.success { background: var(--green-dark); }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 500; opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease; padding: 24px;
+}
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal {
+  background: #16161F; border: 1px solid var(--border);
+  border-radius: 14px; padding: 28px 32px;
+  max-width: 720px; width: 100%;
+  max-height: 86vh; display: flex; flex-direction: column;
+  transform: translateY(8px); transition: transform 0.2s ease;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal h3 { font-size: 17px; font-weight: 600; margin-bottom: 12px; flex-shrink: 0; }
+.modal p { font-size: 14px; color: var(--text-muted); line-height: 1.65; }
+.modal-body { overflow-y: auto; margin-top: 4px; }
+.modal-close {
+  margin-top: 20px; padding: 9px 18px; flex-shrink: 0; align-self: flex-start;
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text); border-radius: var(--radius-sm);
+  font-size: 13px; font-family: inherit; cursor: pointer;
+  transition: background var(--ease);
+}
+.modal-close:hover { background: var(--bg-card-hover); }
+
+/* Diff viewer */
+.diff-box {
+  background: #0C120F; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.7; white-space: pre-wrap;
+  word-break: break-word; overflow-x: auto;
+}
+.diff-line { display: block; }
+.diff-add { color: #7EE8B4; background: rgba(21,200,122,0.10); }
+.diff-del { color: #F4A0A0; background: rgba(239,68,68,0.10); }
+.diff-hunk { color: var(--text-muted); }
+.diff-meta { color: var(--text-dim); }
+.empty-diff { color: var(--text-muted); font-size: 13px; }
+
+.skipped-note {
+  margin-top: 14px; font-size: 12.5px; line-height: 1.6;
+  color: #F4A0A0; background: rgba(239,68,68,0.07);
+  border: 1px solid rgba(239,68,68,0.18); border-radius: var(--radius-sm);
+  padding: 10px 13px;
+}
+.skipped-note strong { color: #F4B5B5; }
+
+/* ── Logo ── */
+.logo-mark { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo-icon { width: 28px; height: 28px; flex-shrink: 0; }
+.logo-text { font-size: 16px; font-weight: 500; color: var(--text); letter-spacing: -0.02em; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 11px 22px; min-height: 44px;
+  border-radius: var(--radius-sm); font-size: 14px;
+  font-weight: 500; font-family: inherit; cursor: pointer;
+  transition: all var(--ease); border: none; text-decoration: none;
+}
+.btn-primary { background: var(--green); color: #fff; }
+.btn-primary:hover { background: var(--green); box-shadow: 0 0 0 3px rgba(21,200,122,0.22); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.4; pointer-events: none; }
+.btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--bg-card-hover); color: var(--text); border-color: rgba(255,255,255,0.15); }
+
+/* ── Chip/pill ── */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 500;
+  background: rgba(21,200,122,0.12); color: #C4B5FD;
+  border: 1px solid rgba(21,200,122,0.22);
+}
+
+/* ════════════════════════════════════════════════
+   TOPBAR
+   ════════════════════════════════════════════════ */
+.t-topbar {
+  background: rgba(9,16,13,0.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 20; flex-shrink: 0;
+}
+.t-topbar-right { display: flex; align-items: center; gap: 12px; }
+.t-topbar-label { font-size: 12px; color: var(--text-muted); letter-spacing: 0.02em; }
+
+/* ════════════════════════════════════════════════
+   LOADING
+   ════════════════════════════════════════════════ */
+#screen-loading { background: var(--bg); justify-content: center; align-items: center; gap: 20px; }
+.loading-logo-wrap { display: flex; align-items: center; gap: 10px; animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:0.65} }
+.loading-logo-text { font-size: 16px; font-weight: 400; color: var(--text-muted); letter-spacing: -0.01em; }
+.spinner {
+  width: 40px; height: 40px;
+  border: 2px solid rgba(21,200,122,0.12);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-label { font-size: 13px; color: var(--text-muted); display: flex; gap: 1px; }
+.loading-dots span { animation: dotblink 1.3s infinite; opacity: 0; }
+.loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dotblink { 0%,80%,100%{opacity:0} 40%{opacity:1} }
+
+/* ════════════════════════════════════════════════
+   MAIN
+   ════════════════════════════════════════════════ */
+.t-body { max-width: 860px; width: 100%; margin: 0 auto; padding: 30px 24px 140px; }
+
+/* Header card */
+.session-head {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 18px 22px; margin-bottom: 18px;
+}
+.session-head h1 {
+  font-size: 21px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px;
+}
+.session-head .sub { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+.session-head .mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px; color: var(--text-dim);
+}
+
+/* Stats strip */
+.stats-strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.stat-tile {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 13px 15px;
+}
+.stat-tile .label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;
+}
+.stat-tile .value { font-size: 22px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+.stat-tile .value.small { font-size: 14px; font-weight: 500; line-height: 1.4; }
+.stat-tile .bucket { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.stat-tile .bucket b { font-size: 18px; font-weight: 600; }
+.b-hot { color: var(--green); }
+.b-bord { color: #E8C97E; }
+.b-cold { color: #F4A0A0; }
+
+/* A/B disclosure block */
+.ab-block {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px; margin-bottom: 22px;
+}
+.ab-block .label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
+}
+.ab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ab-arm {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 11px 13px; transition: border-color var(--ease), background var(--ease);
+}
+.ab-arm.better { border-color: var(--border-green); background: rgba(21,200,122,0.06); }
+.ab-arm .arm-name { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+.ab-arm .arm-rate { font-size: 19px; font-weight: 600; color: var(--text); }
+.ab-arm.better .arm-rate { color: var(--green); }
+.ab-arm .arm-detail { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+
+/* Suggestions */
+.sugg-section-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  margin: 26px 0 12px; display: flex; align-items: center; gap: 9px;
+}
+.sugg-section-title .count {
+  font-size: 11px; font-weight: 500; color: var(--text-muted);
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 20px; padding: 2px 9px;
+}
+
+.sugg-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 14px;
+  transition: background var(--ease), border-color var(--ease), opacity var(--ease);
+}
+.sugg-card:hover { background: var(--bg-card-hover); }
+.sugg-card.is-approve { border-color: var(--border-green); }
+.sugg-card.is-reject { opacity: 0.55; }
+.sugg-card.is-edit { border-color: rgba(232,201,126,0.4); }
+
+.sugg-section-chip {
+  display: inline-flex; max-width: 100%;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px; word-break: break-word; white-space: normal;
+  line-height: 1.4; padding: 4px 11px;
+}
+
+.snippet { margin-top: 12px; }
+.snippet-label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; margin-bottom: 5px;
+}
+.snippet-label.cur { color: #E89494; }
+.snippet-label.new { color: #7EE8B4; }
+.snippet-box {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.6; white-space: pre-wrap;
+  word-break: break-word; border-radius: var(--radius-sm);
+  padding: 11px 13px;
+}
+.snippet-box.cur { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.18); color: #F0C4C4; }
+.snippet-box.new { background: rgba(21,200,122,0.08); border: 1px solid rgba(21,200,122,0.22); color: #C4F0DC; }
+
+.rationale {
+  margin-top: 14px; font-size: 13px; color: var(--text-muted);
+  line-height: 1.6; padding-left: 12px; border-left: 2px solid var(--border);
+}
+
+/* Edit textarea */
+.edit-wrap { margin-top: 14px; display: none; }
+.edit-wrap.open { display: block; }
+.edit-wrap .edit-hint { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
+.edit-textarea {
+  width: 100%; min-height: 88px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border-green);
+  border-radius: var(--radius-sm); padding: 11px 13px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12.5px; color: var(--text); resize: vertical; line-height: 1.6;
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+.edit-textarea:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px rgba(21,200,122,0.12); }
+
+/* Decision controls */
+.sugg-controls { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.ctrl-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; min-height: 38px;
+  border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+  font-family: inherit; cursor: pointer;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); transition: all var(--ease);
+}
+.ctrl-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.18); }
+.ctrl-approve[aria-pressed="true"] { background: var(--green); color: #fff; border-color: var(--green); }
+.ctrl-reject[aria-pressed="true"] { background: rgba(239,68,68,0.14); color: #F4A0A0; border-color: rgba(239,68,68,0.4); }
+.ctrl-edit[aria-pressed="true"] { background: rgba(232,201,126,0.14); color: #E8C97E; border-color: rgba(232,201,126,0.45); }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 60px 24px; color: var(--text-muted);
+}
+.empty-state .em-icon { font-size: 34px; margin-bottom: 14px; opacity: 0.5; }
+.empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.empty-state p { font-size: 13.5px; line-height: 1.6; max-width: 380px; margin: 0 auto; }
+
+/* Sticky bottom bar */
+.t-bottombar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: rgba(9,16,13,0.92); backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+}
+.t-bottombar .summary { font-size: 12.5px; color: var(--text-muted); }
+.t-bottombar .summary b { color: var(--text); font-weight: 600; }
+.t-bottombar .actions { display: flex; gap: 10px; }
+
+@media (max-width: 560px) {
+  .ab-grid { grid-template-columns: 1fr; }
+  .t-bottombar { flex-direction: column; align-items: stretch; }
+  .t-bottombar .actions { justify-content: stretch; }
+  .t-bottombar .actions .btn { flex: 1; }
+}
+</style>
+</head>
+<body>
+
+<!-- ════ LOADING ════ -->
+<div id="screen-loading" class="screen active">
+  <div class="loading-logo-wrap">
+    <svg width="24" height="24" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="36" height="36" rx="8" fill="#15C87A"/>
+      <polyline points="3,18 8,18 11,12 14,24 17,8 20,28 23,18 33,18"
+        stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <span class="loading-logo-text">automatisierbar</span>
+  </div>
+  <div class="spinner"></div>
+  <div class="loading-label">
+    <span id="loading-text">Session wird geladen</span>
+    <span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
+  </div>
+</div>
+
+<!-- ════ MAIN ════ -->
+<div id="screen-tuner" class="screen">
+  <div class="t-topbar">
+    <a class="logo-mark" href="/">
+      <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="36" height="36" rx="8" fill="#15C87A"/>
+        <polyline points="3,18 8,18 11,12 14,24 17,8 20,28 23,18 33,18"
+          stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <span class="logo-text">automatisierbar</span>
+    </a>
+    <div class="t-topbar-right">
+      <span class="t-topbar-label">Script-Tuner</span>
+      <span class="chip" id="version-chip">v3</span>
+    </div>
+  </div>
+
+  <div class="t-body">
+    <div class="session-head">
+      <h1>Skript-Optimierung</h1>
+      <div class="sub" id="session-sub">—</div>
+      <div class="mono" id="session-meta" style="margin-top:6px;"></div>
+    </div>
+
+    <div class="stats-strip" id="stats-strip"></div>
+    <div class="ab-block" id="ab-block" style="display:none;">
+      <div class="label">A/B — KI-Offenlegung (Hot-Rate)</div>
+      <div class="ab-grid" id="ab-grid"></div>
+    </div>
+
+    <div class="sugg-section-title">
+      Vorschläge zur Skript-Verbesserung
+      <span class="count" id="sugg-count">0</span>
+    </div>
+    <div id="suggestions-list"></div>
+  </div>
+
+  <div class="t-bottombar" id="bottombar" style="display:none;">
+    <div class="summary" id="decision-summary">Keine Auswahl getroffen</div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="App.preview()">Vorschau (Diff)</button>
+      <button class="btn btn-primary" onclick="App.apply()">Skript aktualisieren</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL ════ -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)App.closeModal()">
+  <div class="modal">
+    <h3 id="modal-title">Vorschau</h3>
+    <div class="modal-body" id="modal-body"></div>
+    <button class="modal-close" onclick="App.closeModal()">Schliessen</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const App = {
+  sessionId: null,
+  apiKey: null,
+  session: null,
+  report: null,
+  decisions: {},            // { [suggestionId]: { action, edited_text } }
+  suggById: {},
+
+  UUID_RE: /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+
+  // ── Init ───────────────────────────────────────────────────────
+  init() {
+    const segs = location.pathname.split("/").filter(Boolean);
+    this.sessionId = segs[segs.length - 1] || "";
+    this.apiKey = new URLSearchParams(location.search).get("key") || "";
+
+    if (!this.UUID_RE.test(this.sessionId)) {
+      this.showScreen("screen-tuner");
+      this.renderError("Ungültige Session-ID in der URL.",
+        "Die URL muss die Form /voice/tuner/&lt;session-id&gt; haben.");
+      return;
+    }
+    this.showScreen("screen-loading");
+    this.load();
+  },
+
+  _hdr(extra) {
+    const h = this.apiKey ? { "X-API-Key": this.apiKey } : {};
+    return Object.assign(h, extra || {});
+  },
+
+  async load() {
+    let resp;
+    try {
+      resp = await fetch(`/api/voice/session/${this.sessionId}`, { headers: this._hdr() });
+    } catch (e) {
+      this._failScreen("Netzwerkfehler beim Laden der Session.", String(e));
+      return;
+    }
+    if (resp.status === 401) {
+      this._failScreen("Kein oder ungültiger API-Key.",
+        "Hänge <code>?key=&lt;API-Key&gt;</code> an die URL an, um auf die Session zuzugreifen.");
+      return;
+    }
+    if (resp.status === 404) {
+      this._failScreen("Session nicht gefunden.", "Diese Session existiert nicht (mehr).");
+      return;
+    }
+    if (!resp.ok) {
+      this._failScreen("Session konnte nicht geladen werden.", `Status ${resp.status}.`);
+      return;
+    }
+    this.session = await resp.json();
+
+    if (!Array.isArray(this.session.calls) || this.session.calls.length === 0) {
+      this.renderHeader();
+      this.showScreen("screen-tuner");
+      this.renderError("Keine Anrufe in dieser Session.",
+        "Sobald Anrufe per Workflow E eingehen, erscheinen hier die Optimierungs-Vorschläge.");
+      return;
+    }
+
+    if (this.session.report && this.session.report.suggestions) {
+      this.report = this.session.report;
+      this.renderAll();
+    } else {
+      await this.runReport();
+    }
+  },
+
+  async runReport() {
+    document.getElementById("loading-text").textContent = "Analysiere Anrufe & erstelle Vorschläge";
+    this.showScreen("screen-loading");
+    let resp;
+    try {
+      resp = await fetch(`/api/voice/session/${this.sessionId}/report`, {
+        method: "POST",
+        headers: this._hdr({ "Content-Type": "application/json" }),
+        body: JSON.stringify({}),
+      });
+    } catch (e) {
+      this._failScreen("Netzwerkfehler bei der Analyse.", String(e));
+      return;
+    }
+    if (resp.status === 401) {
+      this._failScreen("Kein oder ungültiger API-Key.",
+        "Hänge <code>?key=&lt;API-Key&gt;</code> an die URL an.");
+      return;
+    }
+    if (!resp.ok) {
+      let msg = `Status ${resp.status}.`;
+      try { const j = await resp.json(); if (j.error) msg = j.error; } catch (e) {}
+      this.renderHeader();
+      this.showScreen("screen-tuner");
+      this.renderError("Analyse fehlgeschlagen.", msg);
+      return;
+    }
+    this.report = await resp.json();
+    this.renderAll();
+  },
+
+  _failScreen(title, detail) {
+    this.showScreen("screen-tuner");
+    this.renderError(title, detail);
+  },
+
+  // ── Render ─────────────────────────────────────────────────────
+  renderAll() {
+    this.renderHeader();
+    this.renderStats(this.report.stats || {});
+    this.renderSuggestions(this.report.suggestions || []);
+    this.showScreen("screen-tuner");
+  },
+
+  renderHeader() {
+    const s = this.session || {};
+    const meta = s.batch_meta && typeof s.batch_meta === "object" ? s.batch_meta : {};
+    const parts = [];
+    if (meta.name) parts.push(this.esc(String(meta.name)));
+    if (meta.label) parts.push(this.esc(String(meta.label)));
+    if (meta.campaign) parts.push(this.esc(String(meta.campaign)));
+    const nCalls = Array.isArray(s.calls) ? s.calls.length : 0;
+    let created = "";
+    if (s.created_at) {
+      const d = new Date(s.created_at);
+      if (!isNaN(d)) created = d.toLocaleString("de-CH", { dateStyle: "medium", timeStyle: "short" });
+    }
+    const subBits = [];
+    if (parts.length) subBits.push(parts.join(" · "));
+    subBits.push(`${nCalls} ${nCalls === 1 ? "Anruf" : "Anrufe"}`);
+    if (created) subBits.push(created);
+    document.getElementById("session-sub").textContent = subBits.join("  ·  ");
+    document.getElementById("session-meta").textContent = `Session ${s.session_id || this.sessionId}`;
+
+    if (s.applied && s.applied.version) {
+      document.getElementById("version-chip").textContent = s.applied.version;
+    }
+  },
+
+  renderStats(stats) {
+    const fmtPct = (v) => (typeof v === "number" ? Math.round(v * 100) + "%" : "—");
+    const strip = document.getElementById("stats-strip");
+    const tiles = [
+      { label: "Calls", html: `<div class="value">${stats.calls ?? 0}</div>` },
+      { label: "Connect-Rate", html: `<div class="value">${fmtPct(stats.connect_rate)}</div>` },
+      { label: "Outcomes", html: `<div class="bucket">
+          <span class="b-hot"><b>${stats.hot ?? 0}</b> Hot</span>
+          <span class="b-bord"><b>${stats.borderline ?? 0}</b> Border</span>
+          <span class="b-cold"><b>${stats.cold ?? 0}</b> Cold</span>
+        </div>` },
+      { label: "Top-Failure-Mode", html: `<div class="value small">${this.esc(stats.top_failure_mode || "—")}</div>` },
+    ];
+    strip.innerHTML = tiles.map(t =>
+      `<div class="stat-tile"><div class="label">${t.label}</div>${t.html}</div>`
+    ).join("");
+
+    // A/B disclosure block
+    const ab = stats.disclose_ab || {};
+    const disc = ab.disclosed || { calls: 0, hot: 0, hot_rate: 0 };
+    const nondisc = ab.not_disclosed || { calls: 0, hot: 0, hot_rate: 0 };
+    const block = document.getElementById("ab-block");
+    if ((disc.calls || 0) === 0 && (nondisc.calls || 0) === 0) {
+      block.style.display = "none";
+    } else {
+      block.style.display = "block";
+      const discBetter = (disc.hot_rate || 0) > (nondisc.hot_rate || 0);
+      const nonBetter = (nondisc.hot_rate || 0) > (disc.hot_rate || 0);
+      const arm = (name, d, better) => `
+        <div class="ab-arm${better ? " better" : ""}">
+          <div class="arm-name">${name}</div>
+          <div class="arm-rate">${fmtPct(d.hot_rate)}</div>
+          <div class="arm-detail">${d.hot ?? 0} / ${d.calls ?? 0} Hot</div>
+        </div>`;
+      document.getElementById("ab-grid").innerHTML =
+        arm("Mit KI-Offenlegung", disc, discBetter) +
+        arm("Ohne Offenlegung", nondisc, nonBetter);
+    }
+  },
+
+  renderSuggestions(suggestions) {
+    this.suggById = {};
+    this.decisions = {};
+    const list = document.getElementById("suggestions-list");
+    document.getElementById("sugg-count").textContent = suggestions.length;
+
+    if (!suggestions.length) {
+      document.getElementById("bottombar").style.display = "none";
+      list.innerHTML = `
+        <div class="empty-state">
+          <div class="em-icon">✓</div>
+          <h3>Keine Vorschläge</h3>
+          <p>Die Analyse hat aus dieser Session keine klaren Verbesserungen abgeleitet. Das Skript bleibt unverändert.</p>
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = suggestions.map(s => {
+      this.suggById[s.id] = s;
+      this.decisions[s.id] = { action: null, edited_text: s.proposed || "" };
+      return this.cardHtml(s);
+    }).join("");
+
+    document.getElementById("bottombar").style.display = "";
+    this.updateSummary();
+  },
+
+  cardHtml(s) {
+    const id = this.esc(s.id);
+    return `
+      <div class="sugg-card" id="card-${id}" data-id="${id}">
+        <span class="chip sugg-section-chip">${this.esc(s.section || "Skript")}</span>
+        <div class="snippet">
+          <div class="snippet-label cur">Aktuell</div>
+          <div class="snippet-box cur">${this.esc(s.current || "")}</div>
+        </div>
+        <div class="snippet">
+          <div class="snippet-label new">Vorschlag</div>
+          <div class="snippet-box new">${this.esc(s.proposed || "")}</div>
+        </div>
+        ${s.rationale ? `<div class="rationale">${this.esc(s.rationale)}</div>` : ""}
+        <div class="edit-wrap" id="edit-${id}">
+          <div class="edit-hint">Bearbeite den Ersatztext — dieser wird statt des Vorschlags eingesetzt:</div>
+          <textarea class="edit-textarea" id="edit-ta-${id}"
+            oninput="App.onEditInput('${id}', this.value)">${this.esc(s.proposed || "")}</textarea>
+        </div>
+        <div class="sugg-controls">
+          <button class="ctrl-btn ctrl-approve" aria-pressed="false"
+            onclick="App.setDecision('${id}','approve')">Übernehmen</button>
+          <button class="ctrl-btn ctrl-reject" aria-pressed="false"
+            onclick="App.setDecision('${id}','reject')">Verwerfen</button>
+          <button class="ctrl-btn ctrl-edit" aria-pressed="false"
+            onclick="App.setDecision('${id}','edit')">Anpassen</button>
+        </div>
+      </div>`;
+  },
+
+  // ── Decisions ──────────────────────────────────────────────────
+  setDecision(id, action) {
+    const cur = this.decisions[id] || { action: null, edited_text: (this.suggById[id] || {}).proposed || "" };
+    cur.action = action;
+    if (action === "edit") {
+      const ta = document.getElementById(`edit-ta-${id}`);
+      cur.edited_text = ta ? ta.value : ((this.suggById[id] || {}).proposed || "");
+    }
+    this.decisions[id] = cur;
+
+    const card = document.getElementById(`card-${id}`);
+    card.classList.toggle("is-approve", action === "approve");
+    card.classList.toggle("is-reject", action === "reject");
+    card.classList.toggle("is-edit", action === "edit");
+
+    card.querySelector(".ctrl-approve").setAttribute("aria-pressed", String(action === "approve"));
+    card.querySelector(".ctrl-reject").setAttribute("aria-pressed", String(action === "reject"));
+    card.querySelector(".ctrl-edit").setAttribute("aria-pressed", String(action === "edit"));
+
+    const editWrap = document.getElementById(`edit-${id}`);
+    editWrap.classList.toggle("open", action === "edit");
+    if (action === "edit") {
+      const ta = document.getElementById(`edit-ta-${id}`);
+      if (ta) setTimeout(() => ta.focus(), 40);
+    }
+    this.updateSummary();
+  },
+
+  onEditInput(id, value) {
+    const cur = this.decisions[id] || { action: "edit", edited_text: "" };
+    cur.action = "edit";
+    cur.edited_text = value;
+    this.decisions[id] = cur;
+    this.updateSummary();
+  },
+
+  updateSummary() {
+    let a = 0, e = 0, r = 0;
+    for (const id in this.decisions) {
+      const act = this.decisions[id].action;
+      if (act === "approve") a++;
+      else if (act === "edit") e++;
+      else if (act === "reject") r++;
+    }
+    const el = document.getElementById("decision-summary");
+    if (a + e + r === 0) {
+      el.textContent = "Keine Auswahl getroffen";
+    } else {
+      el.innerHTML = `<b>${a}</b> übernehmen · <b>${e}</b> anpassen · <b>${r}</b> verwerfen`;
+    }
+  },
+
+  // Build the decisions array for the API (only entries with a chosen action).
+  buildDecisions() {
+    const out = [];
+    for (const id in this.decisions) {
+      const d = this.decisions[id];
+      if (!d.action) continue;
+      const entry = { suggestion_id: id, action: d.action };
+      if (d.action === "edit") {
+        const txt = (d.edited_text || "").trim();
+        entry.edited_text = txt.length ? d.edited_text : ((this.suggById[id] || {}).proposed || "");
+      }
+      out.push(entry);
+    }
+    return out;
+  },
+
+  // ── Apply (preview = dry_run true, apply = dry_run false) ───────
+  async _postApply(dryRun) {
+    const decisions = this.buildDecisions();
+    const resp = await fetch(`/api/voice/script/apply`, {
+      method: "POST",
+      headers: this._hdr({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ session_id: this.sessionId, decisions, dry_run: dryRun }),
+    });
+    let data = null;
+    try { data = await resp.json(); } catch (e) {}
+    return { resp, data, decisions };
+  },
+
+  async preview() {
+    if (this.buildDecisions().length === 0) {
+      this.showToast("Triff zuerst eine Auswahl (Übernehmen / Anpassen).");
+      return;
+    }
+    let res;
+    try {
+      res = await this._postApply(true);
+    } catch (e) {
+      this.showToast("Netzwerkfehler bei der Vorschau.");
+      return;
+    }
+    const { resp, data } = res;
+    if (resp.status === 401) { this.showToast("Kein/ungültiger API-Key — ?key=… an die URL hängen."); return; }
+    if (!resp.ok) { this.showToast((data && data.error) || `Fehler ${resp.status}.`); return; }
+    this.showDiffModal(data);
+  },
+
+  async apply() {
+    if (this.buildDecisions().length === 0) {
+      this.showToast("Triff zuerst eine Auswahl (Übernehmen / Anpassen).");
+      return;
+    }
+    if (!confirm("Dies aktualisiert das Live-Skript und deployt es auf den Vapi-Assistenten. Fortfahren?")) {
+      return;
+    }
+    let res;
+    try {
+      res = await this._postApply(false);
+    } catch (e) {
+      this.showToast("Netzwerkfehler beim Aktualisieren.");
+      return;
+    }
+    const { resp, data } = res;
+    if (resp.status === 401) { this.showToast("Kein/ungültiger API-Key — ?key=… an die URL hängen."); return; }
+    if (!resp.ok) { this.showToast((data && data.error) || `Fehler ${resp.status}.`); return; }
+
+    const version = (data && data.version) || "—";
+    document.getElementById("version-chip").textContent = version;
+    this.showAppliedModal(version, (data && data.skipped) || []);
+    this.showToast(`Skript auf ${version} aktualisiert`, "success");
+  },
+
+  // ── Modals ─────────────────────────────────────────────────────
+  showDiffModal(data) {
+    document.getElementById("modal-title").textContent = "Vorschau — Änderungen am Skript";
+    const diff = (data && data.diff) || "";
+    const body = document.getElementById("modal-body");
+    let html;
+    if (!diff.trim()) {
+      html = `<p class="empty-diff">Keine Änderungen — die ausgewählten Vorschläge ändern den aktuellen Skript-Text nicht (oder die Snippets wurden nicht gefunden).</p>`;
+    } else {
+      html = `<div class="diff-box">${this.renderDiff(diff)}</div>`;
+    }
+    html += this.skippedHtml((data && data.skipped) || []);
+    html += `<p style="margin-top:14px;font-size:12px;color:var(--text-dim);">Vorschau-Modus (dry_run) — noch nichts wurde geändert oder deployt.</p>`;
+    body.innerHTML = html;
+    this.openModal();
+  },
+
+  showAppliedModal(version, skipped) {
+    document.getElementById("modal-title").textContent = `Skript aktualisiert ✓`;
+    let html = `<p>Das Skript wurde auf <strong style="color:var(--green)">${this.esc(version)}</strong> aktualisiert und auf den Vapi-Assistenten deployt.</p>`;
+    html += this.skippedHtml(skipped);
+    html += `<p style="margin-top:14px;font-size:12px;color:var(--text-dim);">Hinweis: Der Prompt-Block und die „Current version"-Zeile in <code>voice_agent_conversation.md</code> müssen manuell nachgezogen werden (siehe Changelog).</p>`;
+    document.getElementById("modal-body").innerHTML = html;
+    this.openModal();
+  },
+
+  skippedHtml(skipped) {
+    if (!Array.isArray(skipped) || !skipped.length) return "";
+    const items = skipped.map(s =>
+      `<li><code>${this.esc(s.suggestion_id || "?")}</code> — ${this.esc(s.reason || "übersprungen")}</li>`
+    ).join("");
+    return `<div class="skipped-note"><strong>${skipped.length} Vorschlag/Vorschläge übersprungen:</strong>
+      <ul style="margin:6px 0 0 18px;">${items}</ul></div>`;
+  },
+
+  openModal() { document.getElementById("modal-overlay").classList.add("open"); },
+  closeModal() { document.getElementById("modal-overlay").classList.remove("open"); },
+
+  renderDiff(diff) {
+    return diff.split("\n").map(line => {
+      const e = this.esc(line);
+      let cls = "diff-line";
+      if (line.startsWith("+++") || line.startsWith("---")) cls += " diff-meta";
+      else if (line.startsWith("@@")) cls += " diff-hunk";
+      else if (line.startsWith("+")) cls += " diff-add";
+      else if (line.startsWith("-")) cls += " diff-del";
+      return `<span class="${cls}">${e || "&nbsp;"}</span>`;
+    }).join("");
+  },
+
+  renderError(title, detail) {
+    document.getElementById("stats-strip").innerHTML = "";
+    document.getElementById("ab-block").style.display = "none";
+    document.getElementById("sugg-count").textContent = "0";
+    document.getElementById("bottombar").style.display = "none";
+    document.getElementById("suggestions-list").innerHTML = `
+      <div class="empty-state">
+        <div class="em-icon">⚠</div>
+        <h3>${this.esc(title)}</h3>
+        <p>${detail}</p>
+      </div>`;
+  },
+
+  // ── Helpers ────────────────────────────────────────────────────
+  showScreen(id) {
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active", "fade-in"));
+    const el = document.getElementById(id);
+    el.classList.add("active");
+    requestAnimationFrame(() => el.classList.add("fade-in"));
+    window.scrollTo(0, 0);
+  },
+
+  showToast(msg, type = "error") {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = type === "success" ? "success" : "";
+    requestAnimationFrame(() => {
+      t.classList.add("show");
+      clearTimeout(this._toastTimer);
+      this._toastTimer = setTimeout(() => t.classList.remove("show"), 3600);
+    });
+  },
+
+  esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  },
+};
+
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") App.closeModal(); });
+window.addEventListener("DOMContentLoaded", () => App.init());
+</script>
+</body>
+</html>
