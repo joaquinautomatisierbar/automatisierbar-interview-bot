@@ -906,6 +906,178 @@ def validate_brief_completeness(
         "reasoning": str(parsed.get("reasoning", ""))[:500],
         "cost_usd": cost_usd,
     }
+# Script-Tuner — voice cold-call script suggestion generator
+# ---------------------------------------------------------------------------
+
+_SYSTEM_SCRIPT_SUGGESTIONS = """\
+Du bist Senior Sales-Coach und Conversation-Designer bei automatisierbar.ch (Schweizer KI-Automatisierungsberatung). Du optimierst das Telefon-Skript einer KI-Stimme ("Lena"), die KMU für einen kurzen Akquise-Anruf anruft.
+
+AUFGABE: Analysiere die echten Anruf-Transkripte einer Session zusammen mit den Outcomes und der Statistik. Finde die konkreten Stellen im aktuellen System-Prompt, die nachweislich Gespräche kosten — und schlage präzise, umsetzbare Verbesserungen vor.
+
+GROUNDING (kritisch):
+- Jeder Vorschlag MUSS sich auf ein beobachtbares Muster in den Transkripten stützen (z.B. "in X von Y Borderline-Calls brach das Gespräch genau nach Frage 2 ab"). Erfinde keine Probleme.
+- Nutze die mitgelieferte Statistik (connect_rate, hot/borderline/cold, A/B-Disclosure-Split) als Beleg. Wenn der disclose-Arm schlechter performt, sag es; wenn nicht, schlage keine Disclosure-Änderung vor.
+- Schlage NUR Änderungen am Skript-Text vor — keine Voice-/Modell-/Infrastruktur-Parameter.
+
+HARTE REGELN für jedes "current"-Feld:
+- Kopiere "current" als EXAKTEN, wörtlichen Teilstring aus dem aktuellen System-Prompt (Zeichen für Zeichen, inkl. Anführungszeichen und Umlaute). Es wird per literal-replace ersetzt — wenn dein "current" nicht exakt vorkommt, wird der Vorschlag verworfen.
+- Wähle den KLEINSTMÖGLICHEN eindeutigen Teilstring (ein Satz / eine Zeile), nicht ganze Abschnitte.
+- "proposed" behält denselben Ton: freundlich, "Sie"-Form durchgehend, kurz, kein aggressives Nachfassen, keine Preise/Zusagen. Compliance-Grenzen bleiben gewahrt (keine proaktive KI-Offenlegung erzwingen, ausser die Daten zeigen klar, dass Offenlegung hilft).
+- "rationale" auf Deutsch, 1–2 Sätze, nennt das Beleg-Muster + erwartete Wirkung.
+
+PRIORISIERE:
+1. Stellen, an denen Gespräche real abbrechen (Eröffnung, Frage 1, Überleitung).
+2. Formulierungen, die laut Transkripten Verwirrung/Schweigen auslösen.
+3. Die branchenspezifischen Hypothesen in Frage 1, wenn eine Branche schlecht konvertiert.
+
+Wenn die Daten keine klare Verbesserung hergeben, gib ein leeres Array zurück — erzwinge keine Vorschläge.
+
+Antworte NUR als gültiges JSON-Array (kein Markdown, kein Text davor/danach):
+[
+  {"id": "s1",
+   "section": "## 2. Die 3 Kernfragen → Frage 2",
+   "current": "exakter Teilstring aus dem aktuellen Prompt",
+   "proposed": "verbesserter Text",
+   "rationale": "deutsches Beleg-Argument mit Bezug auf die Transkripte/Statistik"}
+]
+Maximal 8 Vorschläge. Lieber 2 sehr gute als 8 schwache."""
+
+
+def _digest_voice_transcripts(transcripts: list, max_calls: int = 25) -> tuple[str, int, int]:
+    """Build a compact, token-bounded digest of the session's calls.
+
+    Prioritizes non-hot outcomes (borderline/cold/refusals) since those carry the
+    improvement signal. Caps to `max_calls` calls and ~1500 chars per transcript.
+
+    Returns (digest_text, n_summarized, total).
+    """
+    total = len(transcripts)
+
+    def _is_hot(c: dict) -> bool:
+        outcome = str(c.get("outcome", "")).lower()
+        analysis = c.get("analysis") or {}
+        return "hot" in outcome or str(analysis.get("interest_level", "")).lower() == "hot"
+
+    # Non-hot first (most informative), then hot, preserving order within each group.
+    non_hot = [c for c in transcripts if not _is_hot(c)]
+    hot = [c for c in transcripts if _is_hot(c)]
+    ordered = (non_hot + hot)[:max_calls]
+    n_summarized = len(ordered)
+
+    blocks = []
+    for i, c in enumerate(ordered, start=1):
+        firma = str(c.get("firma", "") or "?")
+        branche = str(c.get("branche", "") or "?")
+        disclose = bool(c.get("disclose_ai", False))
+        outcome = str(c.get("outcome", "") or "?")
+        analysis = c.get("analysis") or {}
+        a_bits = []
+        for k in ("interest_level", "pain_mentioned", "asked_if_ai"):
+            if k in analysis and analysis.get(k) not in (None, ""):
+                a_bits.append(f"{k}={analysis.get(k)}")
+        a_line = (" · analysis: " + ", ".join(a_bits)) if a_bits else ""
+        transcript = str(c.get("transcript", "") or "")[:1500]
+        blocks.append(
+            f"=== Call {i} — {firma} [{branche}] · disclose_ai={disclose} · "
+            f"outcome={outcome}{a_line} ===\n{transcript}"
+        )
+    return "\n\n".join(blocks), n_summarized, total
+
+
+def generate_script_suggestions(
+    transcripts: list,
+    current_system_prompt: str,
+    stats: dict,
+) -> list[dict]:
+    """Analyze cold-call transcripts + outcomes against the current Vapi system
+    prompt and propose CONCRETE, specific script edits.
+
+    Args:
+      transcripts: list of {firma, branche, disclose_ai, outcome, analysis, transcript}.
+      current_system_prompt: the verbatim deployed German system prompt (from
+        prompts/voice_agent_system.txt) — proposals must quote EXACT substrings of it
+        so the apply step's literal .replace() succeeds.
+      stats: the deterministic stats dict from _compute_voice_stats (gives the model
+        connect_rate / hot-borderline-cold counts / A-B disclosure split as grounding).
+
+    Returns: list of suggestion dicts:
+      [{"id": "s1",
+        "section": "human-readable location, e.g. '## 2. Die 3 Kernfragen → Frage 2'",
+        "current": "<EXACT substring copied verbatim from current_system_prompt>",
+        "proposed": "<replacement text>",
+        "rationale": "<German, evidence-grounded, references call patterns/stats>"}]
+      Returns [] on any failure (caller renders 'keine Vorschläge').
+    """
+    try:
+        if not transcripts or not (current_system_prompt or "").strip():
+            return []
+
+        digest, n_summarized, total = _digest_voice_transcripts(transcripts, max_calls=25)
+        stats_json = json.dumps(stats or {}, ensure_ascii=False, indent=2)
+
+        user_message = (
+            "AKTUELLER SYSTEM-PROMPT (Ziel der Optimierung — \"current\" muss exakt hieraus stammen):\n"
+            "<<<\n"
+            f"{current_system_prompt}\n"
+            ">>>\n\n"
+            "SESSION-STATISTIK:\n"
+            f"{stats_json}\n\n"
+            f"ANRUF-TRANSKRIPTE ({n_summarized} von {total} Calls, nicht-erfolgreiche zuerst):\n"
+            f"{digest}\n"
+        )
+
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        message = client.messages.create(
+            model=MODEL_FAST,
+            max_tokens=3000,
+            system=[{
+                "type": "text",
+                "text": _SYSTEM_SCRIPT_SUGGESTIONS,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": user_message}],
+        )
+        text = message.content[0].text
+        m = re.search(r"\[[\s\S]*\]", text)
+        if not m:
+            return []
+        parsed = json.loads(m.group())
+        if not isinstance(parsed, list):
+            return []
+
+        out = []
+        dropped = 0
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            current = str(entry.get("current", "") or "")
+            proposed = str(entry.get("proposed", "") or "")
+            if not current or not proposed:
+                continue
+            # Guarantee the apply .replace() will hit — drop snippets that don't
+            # appear verbatim in the current prompt.
+            if current not in current_system_prompt:
+                dropped += 1
+                continue
+            out.append({
+                "id": f"s{len(out) + 1}",
+                "section": str(entry.get("section", "") or "")[:200],
+                "current": current[:1000],
+                "proposed": proposed[:1000],
+                "rationale": str(entry.get("rationale", "") or "")[:500],
+            })
+            if len(out) >= 8:
+                break
+
+        print(
+            f"[claude-stats] label=script_suggestions kept={len(out)} dropped={dropped} "
+            f"calls={total} summarized={n_summarized}",
+            flush=True,
+        )
+        return out
+    except Exception as e:
+        print(f"[claude-stats] label=script_suggestions error={e!r}", flush=True)
+        return []
 
 
 # ---------------------------------------------------------------------------

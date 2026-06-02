@@ -1282,6 +1282,399 @@ def linkedin_setup_db():
 
 
 # ---------------------------------------------------------------------------
+# Script-Tuner — voice cold-call session store (file-based, self-contained)
+# ---------------------------------------------------------------------------
+import json as _json          # local alias to avoid colliding with lazy json imports
+from pathlib import Path as _Path
+
+VOICE_SESSIONS_DIR = _Path(__file__).resolve().parent / "data" / "voice_sessions"
+VOICE_SYSTEM_PROMPT_PATH = _Path(__file__).resolve().parent / "prompts" / "voice_agent_system.txt"
+VOICE_CHANGELOG_PATH = _Path(__file__).resolve().parent / "prompts" / "voice_agent_changelog.md"
+
+MAX_VOICE_TRANSCRIPT_CHARS = 20000   # per-call transcript hard cap
+MAX_VOICE_CALLS_PER_SESSION = 500    # sane upper bound per batch
+
+
+def _voice_session_path(session_id: str) -> _Path:
+    """Absolute path to a session's JSON file. Caller MUST have validated session_id
+    via _valid_session_id first (defends against path traversal — the UUID regex
+    forbids '/' and '.')."""
+    return VOICE_SESSIONS_DIR / f"{session_id}.json"
+
+
+def _load_voice_session(session_id: str) -> "dict | None":
+    """Read + parse a session file. Returns None if missing/corrupt."""
+    p = _voice_session_path(session_id)
+    if not p.exists():
+        return None
+    try:
+        return _json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        app.logger.error("voice session load failed (%s): %s", session_id, e)
+        return None
+
+
+def _save_voice_session(session: dict) -> None:
+    """Atomic write: tmp file + os.replace. Creates the dir on first use."""
+    VOICE_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    sid = session["session_id"]
+    p = _voice_session_path(sid)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(_json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def _read_voice_system_prompt() -> str:
+    """Current deployed system prompt (canonical machine-readable source)."""
+    if not VOICE_SYSTEM_PROMPT_PATH.exists():
+        raise RuntimeError(f"voice_agent_system.txt missing at {VOICE_SYSTEM_PROMPT_PATH}")
+    return VOICE_SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _current_voice_version() -> str:
+    """Parse the highest 'vN' from the changelog. Returns e.g. 'v3'. Falls back to
+    'v3' if unparseable."""
+    try:
+        text = VOICE_CHANGELOG_PATH.read_text(encoding="utf-8")
+        nums = [int(m) for m in re.findall(r"\*\*v(\d+)\b", text)]
+        if nums:
+            return f"v{max(nums)}"
+    except Exception:
+        pass
+    return "v3"
+
+
+def _append_voice_changelog(version, session_id, n_approve, n_edit, n_reject, n_skipped):
+    """Prepend a Script-Tuner apply entry to voice_agent_changelog.md (newest-first)."""
+    from datetime import date as _date
+    entry = (
+        f"- **{version} · {_date.today().isoformat()} · Script-Tuner apply · "
+        f"session {session_id[:8]}** — {n_approve} übernommen, {n_edit} bearbeitet, "
+        f"{n_reject} verworfen, {n_skipped} übersprungen. *Why:* operator review post-session. "
+        f"(voice_agent_conversation.md prompt block + Current-version line: manuell nachziehen.)\n"
+    )
+    text = VOICE_CHANGELOG_PATH.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    # Insert as the first '- **' bullet (newest-first). Find first existing bullet.
+    insert_at = next((i for i, ln in enumerate(lines) if ln.lstrip().startswith("- **")), len(lines))
+    lines.insert(insert_at, entry)
+    VOICE_CHANGELOG_PATH.write_text("".join(lines), encoding="utf-8")
+
+
+def _compute_voice_stats(calls: list) -> dict:
+    """Deterministic stats over the session's calls. Pure function — no LLM.
+
+    Buckets each call as hot / borderline / cold and computes connect_rate plus an
+    A/B split on disclose_ai. Never raises; tolerates missing keys.
+    """
+    total = len(calls)
+    if total == 0:
+        return {
+            "calls": 0,
+            "connect_rate": 0.0,
+            "hot": 0, "borderline": 0, "cold": 0,
+            "top_failure_mode": "—",
+            "disclose_ab": {
+                "disclosed":     {"calls": 0, "hot": 0, "hot_rate": 0.0},
+                "not_disclosed": {"calls": 0, "hot": 0, "hot_rate": 0.0},
+            },
+        }
+
+    _NOT_CONNECTED = {"direct-abwimmlung", "wrong-person", "no-answer", "voicemail"}
+
+    def _bucket(call):
+        outcome = str(call.get("outcome", "") or "").lower()
+        analysis = call.get("analysis") or {}
+        interest = str(analysis.get("interest_level", "") or "").lower()
+        # connected?
+        if analysis.get("connected") is True:
+            connected = True
+        elif analysis.get("connected") is False:
+            connected = False
+        else:
+            connected = outcome not in _NOT_CONNECTED
+        # bucket
+        if "hot" in outcome or interest == "hot":
+            bucket = "hot"
+        elif "cold" in outcome or "skep" in outcome or interest == "none":
+            bucket = "cold"
+        elif connected:
+            bucket = "borderline"
+        else:
+            # not connected and not clearly hot/cold → treat as cold (failure)
+            bucket = "cold"
+        return bucket, connected
+
+    hot = borderline = cold = connected_count = 0
+    failure_modes = {}
+    for call in calls:
+        bucket, connected = _bucket(call)
+        if connected:
+            connected_count += 1
+        if bucket == "hot":
+            hot += 1
+        elif bucket == "borderline":
+            borderline += 1
+        else:
+            cold += 1
+        if bucket in ("borderline", "cold"):
+            raw = str(call.get("outcome", "") or "").lower().strip()
+            if raw:
+                failure_modes[raw] = failure_modes.get(raw, 0) + 1
+
+    top_failure_mode = "—"
+    if failure_modes:
+        top_failure_mode = max(failure_modes.items(), key=lambda kv: kv[1])[0]
+
+    def _ab(partition):
+        n = len(partition)
+        h = sum(1 for c in partition if _bucket(c)[0] == "hot")
+        return {"calls": n, "hot": h, "hot_rate": round(h / n, 2) if n else 0.0}
+
+    disclosed = [c for c in calls if bool(c.get("disclose_ai"))]
+    not_disclosed = [c for c in calls if not bool(c.get("disclose_ai"))]
+
+    return {
+        "calls": total,
+        "connect_rate": round(connected_count / total, 2),
+        "hot": hot, "borderline": borderline, "cold": cold,
+        "top_failure_mode": top_failure_mode,
+        "disclose_ab": {
+            "disclosed": _ab(disclosed),
+            "not_disclosed": _ab(not_disclosed),
+        },
+    }
+
+
+@app.route("/api/voice/session/start", methods=["POST"])
+def voice_session_start():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    batch_meta = data.get("batch_meta") or {}
+    if not isinstance(batch_meta, dict):
+        return jsonify({"error": "batch_meta must be an object"}), 400
+    try:
+        import uuid
+        from datetime import datetime, timezone
+        session_id = str(uuid.uuid4())
+        session = {
+            "session_id": session_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "batch_meta": batch_meta,
+            "calls": [],
+            "report": None,
+        }
+        _save_voice_session(session)
+        return jsonify({"session_id": session_id})
+    except Exception as e:
+        app.logger.error("voice_session_start error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/voice/session/<session_id>/call", methods=["POST"])
+def voice_session_add_call(session_id):
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    data = request.get_json(silent=True) or {}
+    transcript = str(data.get("transcript") or "").strip()
+    if not transcript:
+        return jsonify({"error": "transcript required"}), 400
+    if len(transcript) > MAX_VOICE_TRANSCRIPT_CHARS:
+        transcript = transcript[:MAX_VOICE_TRANSCRIPT_CHARS]
+    try:
+        session = _load_voice_session(session_id)
+        if session is None:
+            return jsonify({"error": "session not found"}), 404
+        if len(session.get("calls", [])) >= MAX_VOICE_CALLS_PER_SESSION:
+            return jsonify({"error": "session full"}), 413
+        analysis = data.get("analysis")
+        if analysis is not None and not isinstance(analysis, dict):
+            analysis = None
+        call = {
+            "lead_id": str(data.get("lead_id") or "")[:128],
+            "firma": str(data.get("firma") or "")[:200],
+            "branche": str(data.get("branche") or "")[:120],
+            "disclose_ai": bool(data.get("disclose_ai", False)),
+            "transcript": transcript,
+            "outcome": str(data.get("outcome") or "")[:80],
+            "analysis": analysis or {},
+        }
+        session.setdefault("calls", []).append(call)
+        # Adding a call invalidates any cached report.
+        session["report"] = None
+        _save_voice_session(session)
+        return jsonify({"ok": True, "count": len(session["calls"])})
+    except Exception as e:
+        app.logger.error("voice_session_add_call error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/voice/session/<session_id>", methods=["GET"])
+def voice_session_get(session_id):
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    try:
+        session = _load_voice_session(session_id)
+        if session is None:
+            return jsonify({"error": "session not found"}), 404
+        return jsonify(session)
+    except Exception as e:
+        app.logger.error("voice_session_get error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/voice/session/<session_id>/report", methods=["POST"])
+def voice_session_report(session_id):
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    force = bool((request.get_json(silent=True) or {}).get("force"))
+    try:
+        session = _load_voice_session(session_id)
+        if session is None:
+            return jsonify({"error": "session not found"}), 404
+        calls = session.get("calls", [])
+        if not calls:
+            return jsonify({"error": "no calls in session"}), 409
+
+        # Return cached report unless force=true.
+        if session.get("report") and not force:
+            return jsonify(session["report"])
+
+        stats = _compute_voice_stats(calls)
+        current_prompt = _read_voice_system_prompt()
+        transcripts = [
+            {
+                "firma": c.get("firma", ""),
+                "branche": c.get("branche", ""),
+                "disclose_ai": c.get("disclose_ai", False),
+                "outcome": c.get("outcome", ""),
+                "analysis": c.get("analysis", {}),
+                "transcript": c.get("transcript", ""),
+            }
+            for c in calls
+        ]
+
+        from claude_client import generate_script_suggestions
+        suggestions = generate_script_suggestions(transcripts, current_prompt, stats)
+
+        report = {"stats": stats, "suggestions": suggestions}
+        session["report"] = report
+        _save_voice_session(session)
+        return jsonify(report)
+    except Exception as e:
+        app.logger.error("voice_session_report error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/voice/script/apply", methods=["POST"])
+def voice_script_apply():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    session_id = str(data.get("session_id") or "")
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    decisions = data.get("decisions") or []
+    if not isinstance(decisions, list):
+        return jsonify({"error": "decisions must be a list"}), 400
+    dry_run = data.get("dry_run", True)        # SAFETY: default True
+    dry_run = True if dry_run is None else bool(dry_run)
+    try:
+        import difflib
+        from datetime import datetime, timezone
+        session = _load_voice_session(session_id)
+        if session is None:
+            return jsonify({"error": "session not found"}), 404
+        report = session.get("report")
+        if not report or not report.get("suggestions"):
+            return jsonify({"error": "run report first"}), 409
+        sugg_by_id = {s["id"]: s for s in report["suggestions"]}
+
+        current = _read_voice_system_prompt()
+        new_prompt = current
+        skipped = []
+        n_approve = n_edit = n_reject = 0
+        for d in decisions:
+            sid = d.get("suggestion_id")
+            action = d.get("action")
+            sugg = sugg_by_id.get(sid)
+            if action == "reject":
+                n_reject += 1
+                continue
+            if not sugg:
+                skipped.append({"suggestion_id": sid, "reason": "unknown suggestion id"})
+                continue
+            target = sugg.get("current", "")
+            if action == "approve":
+                replacement = sugg.get("proposed", "")
+                n_approve += 1
+            elif action == "edit":
+                replacement = str(d.get("edited_text") or "")
+                n_edit += 1
+            else:
+                skipped.append({"suggestion_id": sid, "reason": f"unknown action {action!r}"})
+                continue
+            if target and target in new_prompt:
+                new_prompt = new_prompt.replace(target, replacement, 1)
+            else:
+                skipped.append({"suggestion_id": sid, "reason": "current snippet not found"})
+
+        diff = "".join(difflib.unified_diff(
+            current.splitlines(keepends=True),
+            new_prompt.splitlines(keepends=True),
+            fromfile="voice_agent_system.txt (current)",
+            tofile="voice_agent_system.txt (proposed)",
+        ))
+
+        if dry_run:
+            return jsonify({
+                "dry_run": True, "applied": False,
+                "new_prompt": new_prompt, "diff": diff, "skipped": skipped,
+            })
+
+        # ---- LIVE PATH (only when dry_run is explicitly False) ----
+        from vapi_client import update_system_prompt
+        try:
+            update_system_prompt(new_prompt)        # PATCHes live Vapi assistant
+        except Exception as ve:
+            app.logger.error("voice_script_apply: Vapi PATCH failed: %s", ve)
+            return jsonify({"error": f"Vapi update failed: {ve}"}), 502
+
+        # persist .txt atomically (only after the live PATCH succeeded)
+        tmp = VOICE_SYSTEM_PROMPT_PATH.with_suffix(".txt.tmp")
+        tmp.write_text(new_prompt, encoding="utf-8")
+        os.replace(tmp, VOICE_SYSTEM_PROMPT_PATH)
+
+        old = _current_voice_version()
+        new_version = "v" + str(int(old[1:]) + 1)
+        # prepend changelog entry (newest-first)
+        _append_voice_changelog(new_version, session_id, n_approve, n_edit, n_reject, len(skipped))
+
+        now = datetime.now(timezone.utc).isoformat()
+        session["applied"] = {"version": new_version, "at": now, "decisions": decisions}
+        session["report"] = report  # unchanged
+        _save_voice_session(session)
+        return jsonify({"version": new_version, "applied": True, "skipped": skipped})
+    except Exception as e:
+        app.logger.error("voice_script_apply error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/voice/tuner/<session_id>", methods=["GET"])
+def voice_tuner_page(session_id):
+    # No auth on the HTML shell (mirrors GET /). The page's JS authenticates its
+    # data fetches with X-API-Key. session_id is consumed client-side from the URL.
+    return send_from_directory("static", "tuner.html")
+
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 
