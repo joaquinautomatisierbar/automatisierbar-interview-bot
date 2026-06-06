@@ -6,9 +6,13 @@ locally, the __main__ block loads .env). Uses `requests` (already a dependency).
 Public API:
   get_assistant() -> dict
   update_system_prompt(text: str) -> dict
+  place_call(*, number, session_id, ...) -> dict   # POST /call (cockpit dialer)
+  get_call(call_id: str) -> dict                   # GET /call/{id} (live status)
 
 SAFETY: update_system_prompt PATCHes the LIVE assistant. It is invoked only from the
-dry_run=false branch of /api/voice/script/apply. get_assistant() is read-only.
+dry_run=false branch of /api/voice/script/apply. place_call PLACES A REAL OUTBOUND
+CALL — only the cockpit batch runner calls it, gated by eligibility + a budget cap.
+get_assistant()/get_call() are read-only.
 """
 
 from __future__ import annotations
@@ -103,6 +107,53 @@ def update_system_prompt(text: str) -> dict:
         json=patch_body,
         timeout=_TIMEOUT,
     )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _phone_number_id() -> str:
+    pid = os.environ.get("VAPI_PHONE_NUMBER_ID", "").strip()
+    if not pid:
+        raise RuntimeError("VAPI_PHONE_NUMBER_ID not set")
+    return pid
+
+
+def place_call(*, number: str, session_id: str, lead_id: str = "", firma: str = "",
+               branche: str = "", kontakt_nachname: str = "",
+               disclosure_line: str = "") -> dict:
+    """Place ONE outbound call via Vapi (POST /call). Returns the created call object
+    ({id, status, ...}). The conversation runs async on Vapi's side; poll get_call(id)
+    for status/cost/transcript. `metadata.session_id` lets Workflow E feed the same
+    voice session the cockpit batch uses. Raises on HTTP error.
+
+    WARNING: this dials a real phone. Callers must gate on eligibility + budget."""
+    if not number:
+        raise ValueError("number is required")
+    payload = {
+        "phoneNumberId": _phone_number_id(),
+        "assistantId": _assistant_id(),
+        "customer": {"number": number},
+        "assistantOverrides": {
+            "variableValues": {
+                "firma": firma or "",
+                "branche": branche or "",
+                "kontakt_nachname": kontakt_nachname or "",
+                "disclosure_line": disclosure_line or "",
+            }
+        },
+        "metadata": {"lead_id": lead_id or "", "session_id": session_id or ""},
+    }
+    resp = requests.post(f"{VAPI_BASE}/call", headers=_headers(), json=payload, timeout=_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_call(call_id: str) -> dict:
+    """GET a call's live state: {status, endedReason, cost, startedAt, endedAt,
+    transcript, analysis:{summary, structuredData}}. Read-only. Raises on HTTP error."""
+    if not call_id:
+        raise ValueError("call_id is required")
+    resp = requests.get(f"{VAPI_BASE}/call/{call_id}", headers=_headers(), timeout=_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 

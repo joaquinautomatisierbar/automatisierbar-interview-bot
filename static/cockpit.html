@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>automatisierbar · Cold-Call Cockpit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#15C87A; --green-dark:#0A8F54; --bg:#09100D;
+  --bg-card:rgba(255,255,255,0.04); --bg-card-hover:rgba(255,255,255,0.07);
+  --border:rgba(255,255,255,0.08); --text:#EEF5F1; --text-muted:rgba(238,245,241,0.45);
+  --text-dim:rgba(238,245,241,0.25);
+  --yellow:#EAB308; --orange:#F97316; --red:#EF4444; --grey:#6B7280; --blue:#38BDF8;
+  --radius:10px; --radius-sm:6px; --ease:0.2s ease;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:28px 20px 80px}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:22px;font-weight:700;letter-spacing:-0.3px}
+.sub{color:var(--text-muted);font-size:13px;margin-top:3px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-bottom:6px}
+input,select{background:#0d1714;border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;font-family:inherit;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--green)}
+button{font-family:inherit;font-weight:600;font-size:14px;border:none;border-radius:var(--radius-sm);padding:11px 18px;cursor:pointer;transition:var(--ease)}
+.btn-primary{background:var(--green);color:#04130c}
+.btn-primary:hover{background:#19e08a}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{background:var(--bg-card-hover)}
+.btn-red{background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#fca5a5}
+.btn-red:hover{background:rgba(239,68,68,0.25)}
+button:disabled{opacity:0.4;cursor:not-allowed}
+.muted{color:var(--text-muted)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.tile{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.tile .big{font-size:26px;font-weight:700;letter-spacing:-0.5px}
+.tile .lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-top:2px}
+/* barometer */
+.baro-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#0d1714;margin:14px 0 10px}
+.baro-seg{height:100%;transition:width 0.4s ease}
+.legend{display:flex;flex-wrap:wrap;gap:14px}
+.lg{display:flex;align-items:center;gap:7px;font-size:13px}
+.dot{width:11px;height:11px;border-radius:50%;flex:none}
+.c-hot{background:var(--green)} .c-followup{background:var(--yellow)} .c-cold{background:var(--orange)}
+.c-hangup{background:var(--red)} .c-noanswer{background:var(--grey)} .c-live{background:var(--blue)}
+/* table */
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--border)}
+td{padding:10px;border-bottom:1px solid var(--border)}
+tr.clk{cursor:pointer}
+tr.clk:hover td{background:var(--bg-card-hover)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:600}
+.pill .dot{width:8px;height:8px}
+.live-anim{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+.section-h{font-size:12px;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin:26px 0 4px}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.72);display:none;align-items:center;justify-content:center;padding:24px;z-index:50}
+.overlay.show{display:flex}
+.modal{background:#0c1512;border:1px solid var(--border);border-radius:var(--radius);max-width:720px;width:100%;max-height:85vh;overflow:auto;padding:22px 24px}
+.modal pre{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.55;color:var(--text);margin-top:10px}
+.x{float:right;cursor:pointer;color:var(--text-muted);font-size:20px;line-height:1}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(6px);background:var(--red);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;opacity:0;transition:0.2s;z-index:99}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{background:var(--green-dark)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Cold-Call Cockpit</h1>
+  <div class="sub">Batch starten · live mitverfolgen · stoppen / weiterfahren</div>
+
+  <!-- START -->
+  <div class="card" style="margin-top:18px" id="startCard">
+    <div class="row">
+      <div style="flex:0 0 120px"><label>Anzahl Leads</label><input id="nCalls" type="number" min="1" max="200" value="5"></div>
+      <div style="flex:0 0 200px"><label>Branche (optional)</label>
+        <select id="branche">
+          <option value="">Alle ICP</option>
+          <option>Treuhand</option><option>Immobilien</option><option>Rechtsbranche</option>
+          <option>Finanz</option><option>Coaching / Beratung</option><option>Marketing / Agentur</option>
+          <option>Architektur</option><option>Unternehmensberatung</option>
+        </select></div>
+      <div style="flex:0 0 120px"><label>Pause (Sek.)</label><input id="gap" type="number" min="0" max="120" value="30"></div>
+      <button class="btn-ghost" onclick="app.preview()">Vorschau</button>
+      <button class="btn-primary" id="startBtn" onclick="app.start()">▶ Start</button>
+    </div>
+    <div id="previewMsg" class="sub" style="margin-top:12px"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dash" class="hide">
+    <div class="tiles">
+      <div class="tile"><div class="big" id="tProgress">0 / 0</div><div class="lbl">Fortschritt</div></div>
+      <div class="tile"><div class="big" id="tConn">0</div><div class="lbl">Verbunden</div></div>
+      <div class="tile"><div class="big" id="tCost">0.00</div><div class="lbl">Kosten CHF</div></div>
+      <div class="tile"><div class="big" id="tBudget">700</div><div class="lbl">Budget übrig CHF</div></div>
+    </div>
+
+    <div class="section-h">Barometer</div>
+    <div class="card">
+      <div class="baro-bar" id="baroBar"></div>
+      <div class="legend" id="baroLegend"></div>
+    </div>
+
+    <div class="section-h" style="display:flex;justify-content:space-between;align-items:center">
+      <span id="statusLine">Status …</span>
+      <span>
+        <button class="btn-red hide" id="stopBtn" onclick="app.stop()">■ Stop</button>
+        <button class="btn-ghost hide" id="resumeBtn" onclick="app.resume()">▶ Weiter</button>
+        <a id="tunerLink" class="btn-ghost hide" style="text-decoration:none">Skript verbessern →</a>
+      </span>
+    </div>
+    <div class="card" style="padding:6px 8px">
+      <table>
+        <thead><tr><th>Firma</th><th>Branche</th><th>Status</th><th>Dauer</th><th>CHF</th><th>Ergebnis</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this)app.closeModal()">
+  <div class="modal">
+    <span class="x" onclick="app.closeModal()">×</span>
+    <div id="modalTitle" style="font-weight:600;font-size:15px"></div>
+    <div id="modalAnalysis" class="sub" style="margin-top:8px"></div>
+    <pre id="modalTranscript"></pre>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const BUCKETS = [
+  ["hot","Termin / Hot","c-hot","var(--green)"],
+  ["followup","Follow-up","c-followup","var(--yellow)"],
+  ["cold","Cold","c-cold","var(--orange)"],
+  ["hangup","Aufgelegt","c-hangup","var(--red)"],
+  ["noanswer","Nicht erreicht","c-noanswer","var(--grey)"],
+  ["live","Läuft","c-live","var(--blue)"],
+];
+const app = {
+  apiKey: new URLSearchParams(location.search).get("key") || "",
+  batchId: new URLSearchParams(location.search).get("batch") || "",
+  timer: null,
+  _hdr(extra){ const h = this.apiKey ? {"X-API-Key":this.apiKey} : {}; return Object.assign(h, extra||{}); },
+  toast(m, ok){ const t=document.getElementById("toast"); t.textContent=m; t.className="show"+(ok?" ok":""); setTimeout(()=>t.className="",2600); },
+
+  async preview(){
+    const body = {max_calls:+document.getElementById("nCalls").value, branche:this._br()};
+    let r; try{ r=await fetch("/api/cockpit/preview",{method:"POST",headers:this._hdr({"Content-Type":"application/json"}),body:JSON.stringify(body)});}catch(e){return this.toast("Netzwerkfehler");}
+    if(r.status===401)return this.toast("Kein/ungültiger API-Key (?key=…)");
+    const d=await r.json();
+    document.getElementById("previewMsg").textContent = `${d.eligible_count} Leads passen` + (d.sample&&d.sample.length?` — z.B. ${d.sample.slice(0,3).map(s=>s.firma).join(", ")}`:"");
+  },
+  _br(){ const v=document.getElementById("branche").value; return v||null; },
+
+  async start(){
+    document.getElementById("startBtn").disabled=true;
+    const body={max_calls:+document.getElementById("nCalls").value, branche:this._br(), gap_sec:+document.getElementById("gap").value};
+    let r; try{ r=await fetch("/api/cockpit/batch/start",{method:"POST",headers:this._hdr({"Content-Type":"application/json"}),body:JSON.stringify(body)});}catch(e){document.getElementById("startBtn").disabled=false;return this.toast("Netzwerkfehler");}
+    if(r.status===401){document.getElementById("startBtn").disabled=false;return this.toast("Kein/ungültiger API-Key");}
+    const d=await r.json();
+    if(d.error){document.getElementById("startBtn").disabled=false;return this.toast(d.error);}
+    if(!d.eligible_count){document.getElementById("startBtn").disabled=false;return this.toast("Keine passenden Leads.");}
+    this.batchId=d.batch_id;
+    history.replaceState(null,"",`?key=${encodeURIComponent(this.apiKey)}&batch=${d.batchId||d.batch_id}`);
+    document.getElementById("dash").classList.remove("hide");
+    this.poll(); this.timer=setInterval(()=>this.poll(),4000);
+  },
+
+  async poll(){
+    if(!this.batchId)return;
+    let r; try{ r=await fetch(`/api/cockpit/batch/${this.batchId}`,{headers:this._hdr()});}catch(e){return;}
+    if(!r.ok)return;
+    const s=await r.json();
+    this.render(s);
+    const live = s.calls.some(c=>c.bucket==="live") || (s.aggregates.fired<s.aggregates.target);
+    const running = s.status==="running" && s.thread_alive;
+    if(!running && !live){ clearInterval(this.timer); this.timer=null; }
+  },
+
+  render(s){
+    const a=s.aggregates;
+    document.getElementById("dash").classList.remove("hide");
+    document.getElementById("tProgress").textContent=`${a.fired} / ${a.target}`;
+    document.getElementById("tConn").textContent=a.connected;
+    document.getElementById("tCost").textContent=a.cost_chf.toFixed(2);
+    document.getElementById("tBudget").textContent=a.remaining_chf.toFixed(0);
+    // barometer
+    const b=s.barometers, tot=Object.values(b).reduce((x,y)=>x+y,0)||1;
+    document.getElementById("baroBar").innerHTML = BUCKETS.map(([k,,,col])=>
+      b[k]?`<div class="baro-seg" style="width:${b[k]/tot*100}%;background:${col}"></div>`:"").join("");
+    document.getElementById("baroLegend").innerHTML = BUCKETS.map(([k,lbl,cls])=>
+      `<span class="lg"><span class="dot ${cls}"></span>${lbl} <b style="margin-left:3px">${b[k]||0}</b></span>`).join("");
+    // status + controls
+    const st={running:"läuft …",done:"fertig ✓",stopped:"gestoppt",error:"Fehler"}[s.status]||s.status;
+    document.getElementById("statusLine").textContent = `Status: ${st}` + (s.note?` — ${s.note}`:"") + (s.thread_alive?"":(s.status==="running"?" (Thread beendet — ‚Weiter' drücken)":""));
+    document.getElementById("stopBtn").classList.toggle("hide", !(s.status==="running"&&s.thread_alive));
+    const canResume = (s.status==="stopped") || (s.status==="running"&&!s.thread_alive) || s.status==="error";
+    document.getElementById("resumeBtn").classList.toggle("hide", !canResume);
+    const tl=document.getElementById("tunerLink");
+    tl.classList.toggle("hide", a.fired===0);
+    tl.href=`/voice/tuner/${s.batch_id}?key=${encodeURIComponent(this.apiKey)}`;
+    // table
+    document.getElementById("tbody").innerHTML = s.calls.map(c=>{
+      const bk=BUCKETS.find(x=>x[0]===c.bucket)||BUCKETS[5];
+      const live=c.bucket==="live";
+      const dur=c.duration_s!=null?`${Math.floor(c.duration_s/60)}:${String(c.duration_s%60).padStart(2,"0")}`:"—";
+      const statusTxt=c.error?"Fehler":({queued:"wartet",ringing:"klingelt","in-progress":"läuft",ended:"beendet"}[c.status]||c.status);
+      return `<tr class="clk" onclick="app.openCall('${c.call_id||""}','${(c.firma||"").replace(/'/g,"")}')">
+        <td>${c.firma||"—"}</td><td class="muted">${c.branche||""}</td>
+        <td><span class="pill ${live?"live-anim":""}" style="background:rgba(255,255,255,0.06)"><span class="dot ${bk[2]}"></span>${statusTxt}</span></td>
+        <td class="muted">${dur}</td><td class="muted">${c.cost?(c.cost*0.9).toFixed(2):"—"}</td>
+        <td><span class="pill" style="background:rgba(255,255,255,0.05)"><span class="dot ${bk[2]}"></span>${bk[1]}</span></td></tr>`;
+    }).join("");
+  },
+
+  async stop(){ await fetch(`/api/cockpit/batch/${this.batchId}/stop`,{method:"POST",headers:this._hdr()}); this.toast("Stop angefordert — stoppt nach dem laufenden Call",true); this.poll(); },
+  async resume(){ await fetch(`/api/cockpit/batch/${this.batchId}/resume`,{method:"POST",headers:this._hdr()}); this.toast("Weiter…",true); if(!this.timer)this.timer=setInterval(()=>this.poll(),4000); this.poll(); },
+
+  async openCall(cid, firma){
+    if(!cid)return this.toast("Noch kein Transkript.");
+    document.getElementById("overlay").classList.add("show");
+    document.getElementById("modalTitle").textContent=firma||"Call";
+    document.getElementById("modalTranscript").textContent="Lade…";
+    document.getElementById("modalAnalysis").textContent="";
+    let r; try{ r=await fetch(`/api/cockpit/call/${cid}`,{headers:this._hdr()});}catch(e){return;}
+    const d=await r.json();
+    const sd=(d.analysis&&d.analysis.structuredData)||{};
+    document.getElementById("modalAnalysis").textContent =
+      `${d.status||""} · ${d.endedReason||""} · ${sd.interest_level?("Interesse: "+sd.interest_level):""}${sd.callback_availability?(" · Rückruf: "+sd.callback_availability):""}`;
+    document.getElementById("modalTranscript").textContent = d.transcript || "(kein Transkript)";
+  },
+  closeModal(){ document.getElementById("overlay").classList.remove("show"); },
+};
+if(app.batchId){ document.getElementById("dash").classList.remove("hide"); app.poll(); app.timer=setInterval(()=>app.poll(),4000); }
+</script>
+</body>
+</html>

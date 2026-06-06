@@ -1675,6 +1675,392 @@ def voice_tuner_page(session_id):
 
 
 # ---------------------------------------------------------------------------
+# Cold-Call Cockpit — live batch dialer + color barometers (Phase 1)
+# ---------------------------------------------------------------------------
+import threading as _threading
+
+COCKPIT_BUDGET_PATH = _Path(__file__).resolve().parent / "data" / "cockpit_budget.json"
+COLD_CALL_BUDGET_CHF = float(os.environ.get("COLD_CALL_BUDGET_CHF", "700") or 700)
+_USD_TO_CHF = 0.90                       # rough; Vapi reports cost in USD
+COCKPIT_DEFAULT_GAP_SEC = int(os.environ.get("COCKPIT_GAP_SEC", "30") or 30)
+COCKPIT_MAX_CALLS = 200                  # hard cap per batch
+WORKFLOW_D_DIAL_WEBHOOK = os.environ.get(
+    "COLD_CALL_DIAL_WEBHOOK", "https://oojoaquin.app.n8n.cloud/webhook/cold-call-dial")
+
+# Process-local cache of ENDED Vapi calls so status polls don't re-fetch finished calls.
+_CALL_CACHE: dict = {}
+
+
+def _now_iso() -> str:
+    from datetime import datetime as _dt, timezone as _tz
+    return _dt.now(_tz.utc).isoformat()
+
+
+# ---- budget -----------------------------------------------------------------
+
+def _cockpit_budget() -> dict:
+    try:
+        if COCKPIT_BUDGET_PATH.exists():
+            d = _json.loads(COCKPIT_BUDGET_PATH.read_text(encoding="utf-8"))
+            d.setdefault("spent_usd", 0.0)
+            d.setdefault("counted", [])
+            return d
+    except Exception as e:
+        app.logger.error("cockpit budget read failed: %s", e)
+    return {"spent_usd": 0.0, "counted": []}
+
+
+def _add_cockpit_spend(call_id: str, usd) -> None:
+    """Idempotent: add a call's cost to the running total ONCE (keyed by call_id)."""
+    if not call_id or not usd:
+        return
+    try:
+        b = _cockpit_budget()
+        if call_id in b["counted"]:
+            return
+        b["spent_usd"] = round(float(b["spent_usd"]) + float(usd), 4)
+        b["counted"].append(call_id)
+        COCKPIT_BUDGET_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = COCKPIT_BUDGET_PATH.with_suffix(".json.tmp")
+        tmp.write_text(_json.dumps(b), encoding="utf-8")
+        os.replace(tmp, COCKPIT_BUDGET_PATH)
+    except Exception as e:
+        app.logger.error("cockpit spend update failed: %s", e)
+
+
+def _budget_remaining_chf() -> float:
+    return round(COLD_CALL_BUDGET_CHF - _cockpit_budget()["spent_usd"] * _USD_TO_CHF, 2)
+
+
+# ---- eligibility (reuse Workflow D dry-run) + Notion mark-dialed -------------
+
+def _fetch_eligible(max_calls: int, branche) -> list:
+    """POST Workflow D's webhook in dry_run to reuse its exact eligibility logic.
+    Returns [{lead_id, firma, branche, phone, kontakt_nachname, disclosure_line}].
+    Best-effort; [] on failure (monkeypatched in tests)."""
+    try:
+        import requests as _rq
+        body = {"max_calls": max_calls, "dry_run": True}
+        if branche:
+            body["branche"] = branche if isinstance(branche, list) else [branche]
+        r = _rq.post(WORKFLOW_D_DIAL_WEBHOOK, json=body, timeout=60)
+        r.raise_for_status()
+        return r.json().get("eligible") or []
+    except Exception as e:
+        app.logger.error("cockpit _fetch_eligible failed: %s", e)
+        return []
+
+
+def _mark_lead_dialed(lead_id: str) -> None:
+    """Best-effort post-dial Notion update: Contacted, Last contacted=now,
+    Outreach Channel='AI Cold Call', Call Attempts +1. Non-fatal."""
+    if not lead_id:
+        return
+    try:
+        import requests as _rq
+        key = os.environ.get("NOTION_API_KEY", "").strip()
+        if not key:
+            return
+        h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
+             "Content-Type": "application/json"}
+        g = _rq.get(f"https://api.notion.com/v1/pages/{lead_id}", headers=h, timeout=20)
+        attempts = 0
+        if g.ok:
+            ca = ((g.json().get("properties") or {}).get("Call Attempts") or {}).get("number")
+            attempts = int(ca) if isinstance(ca, (int, float)) else 0
+        body = {"properties": {
+            "Contacted": {"checkbox": True},
+            "Last contacted": {"date": {"start": _now_iso()}},
+            "Outreach Channel": {"select": {"name": "AI Cold Call"}},
+            "Call Attempts": {"number": attempts + 1},
+        }}
+        _rq.patch(f"https://api.notion.com/v1/pages/{lead_id}", headers=h, json=body, timeout=20)
+    except Exception as e:
+        app.logger.error("_mark_lead_dialed failed (%s): %s", lead_id, e)
+
+
+# ---- live call status + barometer bucketing ---------------------------------
+
+def _call_duration_s(c: dict):
+    try:
+        s, e = c.get("startedAt"), c.get("endedAt")
+        if s and e:
+            from datetime import datetime as _dt
+            ds = _dt.fromisoformat(str(s).replace("Z", "+00:00"))
+            de = _dt.fromisoformat(str(e).replace("Z", "+00:00"))
+            return int((de - ds).total_seconds())
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_call_cached(call_id: str) -> dict:
+    if not call_id:
+        return {}
+    if call_id in _CALL_CACHE:
+        return _CALL_CACHE[call_id]
+    try:
+        from vapi_client import get_call
+        c = get_call(call_id)
+    except Exception as e:
+        app.logger.error("cockpit get_call failed (%s): %s", call_id, e)
+        return {"status": "unknown", "_error": str(e)}
+    if str(c.get("status")) == "ended":
+        _CALL_CACHE[call_id] = c
+        _add_cockpit_spend(call_id, c.get("cost"))
+    return c
+
+
+def _bucket_call(c: dict) -> str:
+    """Map a fetched Vapi call → barometer bucket. 'live' until ended."""
+    if str(c.get("status")) != "ended":
+        return "live"
+    sd = ((c.get("analysis") or {}).get("structuredData") or {})
+    ended = str(c.get("endedReason") or "").lower()
+    interest = str(sd.get("interest_level") or "").lower()
+    dur = _call_duration_s(c)
+    connected = sd.get("connected")
+    if connected is None:
+        connected = bool(c.get("transcript")) and (dur is None or dur >= 8)
+    if sd.get("interview_accepted") or interest == "hot":
+        return "hot"          # green
+    if sd.get("interview_proposed"):
+        return "followup"     # yellow
+    if (not connected) or "voicemail" in ended or "no-answer" in ended or "no_answer" in ended \
+            or "did-not-answer" in ended:
+        return "noanswer"     # grey
+    if (dur is not None and dur < 20) and "customer" in ended:
+        return "hangup"       # red — immediate hang-up
+    return "cold"             # orange — engaged, no interest
+
+
+def _batch_status(session: dict) -> dict:
+    ck = session.get("cockpit") or {}
+    fired = ck.get("fired") or []
+    buckets = {"hot": 0, "followup": 0, "cold": 0, "hangup": 0, "noanswer": 0, "live": 0}
+    rows, total_cost, connected = [], 0.0, 0
+    for f in fired:
+        cid = f.get("call_id")
+        c = _fetch_call_cached(cid) if cid else {}
+        status = str(c.get("status") or ("error" if f.get("error") else "queued"))
+        bucket = _bucket_call(c) if c else "live"
+        buckets[bucket] = buckets.get(bucket, 0) + 1
+        cost = float(c.get("cost") or 0)
+        total_cost += cost
+        sd = ((c.get("analysis") or {}).get("structuredData") or {})
+        if sd.get("connected") is True:
+            connected += 1
+        rows.append({
+            "firma": f.get("firma"), "phone": f.get("phone"), "branche": f.get("branche"),
+            "call_id": cid, "status": status, "bucket": bucket,
+            "duration_s": _call_duration_s(c), "cost": round(cost, 4),
+            "outcome": sd.get("interest_level") or "", "error": f.get("error"),
+        })
+    params = ck.get("params") or {}
+    eligible_total = len(ck.get("eligible") or [])
+    target = min(int(params.get("max_calls", 0)), eligible_total) if eligible_total else int(params.get("max_calls", 0))
+    return {
+        "batch_id": session.get("session_id"), "status": ck.get("status"),
+        "thread_alive": ck.get("thread_alive", False), "stop_requested": ck.get("stop_requested", False),
+        "note": ck.get("note"), "barometers": buckets,
+        "aggregates": {
+            "fired": len(fired), "target": target, "eligible_total": eligible_total,
+            "connected": connected, "cost_usd": round(total_cost, 2),
+            "cost_chf": round(total_cost * _USD_TO_CHF, 2),
+            "budget_chf": COLD_CALL_BUDGET_CHF, "remaining_chf": _budget_remaining_chf(),
+        },
+        "calls": rows,
+    }
+
+
+# ---- the batch runner (daemon) ----------------------------------------------
+
+def _run_cockpit_batch(batch_id: str) -> None:
+    """Fire eligible leads one at a time, paced, stoppable. State persisted to the
+    session file each step so status polls + stop/resume work across the thread."""
+    try:
+        from vapi_client import place_call
+        base = _load_voice_session(batch_id)
+        if not base:
+            return
+        eligible = (base["cockpit"].get("eligible") or [])
+        params = base["cockpit"].get("params") or {}
+        max_calls = min(int(params.get("max_calls", 0)), len(eligible))
+        gap = int(params.get("gap_sec", COCKPIT_DEFAULT_GAP_SEC))
+        while True:
+            fresh = _load_voice_session(batch_id)
+            if not fresh:
+                return
+            ck = fresh["cockpit"]
+            i = int(ck.get("cursor", 0))
+            if ck.get("stop_requested"):
+                ck["status"], ck["thread_alive"] = "stopped", False
+                _save_voice_session(fresh); return
+            if i >= max_calls:
+                ck["status"], ck["thread_alive"] = "done", False
+                _save_voice_session(fresh); return
+            if _budget_remaining_chf() <= 1.0:
+                ck["status"], ck["thread_alive"], ck["note"] = "stopped", False, "Budget erreicht"
+                _save_voice_session(fresh); return
+            lead = eligible[i]
+            entry = {"lead_id": lead.get("lead_id"), "firma": lead.get("firma"),
+                     "phone": lead.get("phone"), "branche": lead.get("branche"),
+                     "call_id": None, "fired_at": _now_iso(), "error": None}
+            try:
+                call = place_call(
+                    number=lead.get("phone"), session_id=batch_id, lead_id=lead.get("lead_id", ""),
+                    firma=lead.get("firma", ""), branche=lead.get("branche", ""),
+                    kontakt_nachname=lead.get("kontakt_nachname", ""),
+                    disclosure_line=lead.get("disclosure_line", ""))
+                entry["call_id"] = call.get("id")
+            except Exception as e:
+                entry["error"] = str(e)[:300]
+            # reload → append → advance cursor (preserves any stop flag set meanwhile)
+            fresh = _load_voice_session(batch_id)
+            fresh["cockpit"]["fired"].append(entry)
+            fresh["cockpit"]["cursor"] = i + 1
+            _save_voice_session(fresh)
+            if entry.get("call_id"):
+                _mark_lead_dialed(lead.get("lead_id"))
+            # pace, re-checking stop every ~2s
+            import time as _t
+            waited, stopped = 0, False
+            while waited < gap:
+                _t.sleep(min(2, gap - waited)); waited += 2
+                f2 = _load_voice_session(batch_id)
+                if f2 and f2["cockpit"].get("stop_requested"):
+                    stopped = True; break
+            if stopped:
+                fresh = _load_voice_session(batch_id)
+                fresh["cockpit"]["status"], fresh["cockpit"]["thread_alive"] = "stopped", False
+                _save_voice_session(fresh); return
+    except Exception as e:
+        app.logger.error("cockpit runner crashed (%s): %s", batch_id, e)
+        try:
+            fresh = _load_voice_session(batch_id)
+            if fresh:
+                fresh["cockpit"]["status"], fresh["cockpit"]["thread_alive"] = "error", False
+                fresh["cockpit"]["note"] = str(e)[:200]
+                _save_voice_session(fresh)
+        except Exception:
+            pass
+
+
+def _spawn_cockpit_runner(batch_id: str) -> None:
+    _threading.Thread(target=_run_cockpit_batch, args=(batch_id,),
+                      name=f"cockpit-{batch_id[:8]}", daemon=True).start()
+
+
+# ---- routes -----------------------------------------------------------------
+
+@app.route("/voice/cockpit", methods=["GET"])
+def voice_cockpit_page():
+    return send_from_directory("static", "cockpit.html")
+
+
+@app.route("/api/cockpit/preview", methods=["POST"])
+def cockpit_preview():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    max_calls = min(int(data.get("max_calls") or 5), COCKPIT_MAX_CALLS)
+    eligible = _fetch_eligible(max_calls, data.get("branche"))
+    return jsonify({
+        "eligible_count": len(eligible),
+        "sample": [{"firma": e.get("firma"), "branche": e.get("branche"), "phone": e.get("phone")}
+                   for e in eligible[:10]],
+    })
+
+
+@app.route("/api/cockpit/batch/start", methods=["POST"])
+def cockpit_batch_start():
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    max_calls = min(int(data.get("max_calls") or 1), COCKPIT_MAX_CALLS)
+    branche = data.get("branche")
+    gap_sec = int(data.get("gap_sec")) if data.get("gap_sec") is not None else COCKPIT_DEFAULT_GAP_SEC
+    try:
+        import uuid
+        eligible = _fetch_eligible(max_calls, branche)
+        batch_id = str(uuid.uuid4())
+        session = {
+            "session_id": batch_id, "created_at": _now_iso(),
+            "batch_meta": {"source": "cockpit", "branche": branche or None},
+            "calls": [], "report": None,
+            "cockpit": {"status": "running", "stop_requested": False,
+                        "params": {"max_calls": max_calls, "branche": branche,
+                                   "gap_sec": gap_sec, "disclose_ratio": 0},
+                        "cursor": 0, "eligible": eligible, "fired": [], "thread_alive": True},
+        }
+        _save_voice_session(session)
+        if eligible:
+            _spawn_cockpit_runner(batch_id)
+        else:
+            session["cockpit"]["status"], session["cockpit"]["thread_alive"] = "done", False
+            _save_voice_session(session)
+        return jsonify({"batch_id": batch_id, "eligible_count": len(eligible)})
+    except Exception as e:
+        app.logger.error("cockpit_batch_start error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cockpit/batch/<batch_id>", methods=["GET"])
+def cockpit_batch_status(batch_id):
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _valid_session_id(batch_id):
+        return jsonify({"error": "invalid batch id"}), 400
+    session = _load_voice_session(batch_id)
+    if not session or "cockpit" not in session:
+        return jsonify({"error": "batch not found"}), 404
+    return jsonify(_batch_status(session))
+
+
+@app.route("/api/cockpit/call/<call_id>", methods=["GET"])
+def cockpit_call_detail(call_id):
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        c = _fetch_call_cached(call_id)
+        return jsonify({"status": c.get("status"), "cost": c.get("cost"),
+                        "endedReason": c.get("endedReason"),
+                        "transcript": c.get("transcript") or "", "analysis": c.get("analysis") or {}})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cockpit/batch/<batch_id>/stop", methods=["POST"])
+def cockpit_batch_stop(batch_id):
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _valid_session_id(batch_id):
+        return jsonify({"error": "invalid batch id"}), 400
+    session = _load_voice_session(batch_id)
+    if not session or "cockpit" not in session:
+        return jsonify({"error": "batch not found"}), 404
+    session["cockpit"]["stop_requested"] = True
+    _save_voice_session(session)
+    return jsonify({"ok": True, "stop_requested": True})
+
+
+@app.route("/api/cockpit/batch/<batch_id>/resume", methods=["POST"])
+def cockpit_batch_resume(batch_id):
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _valid_session_id(batch_id):
+        return jsonify({"error": "invalid batch id"}), 400
+    session = _load_voice_session(batch_id)
+    if not session or "cockpit" not in session:
+        return jsonify({"error": "batch not found"}), 404
+    ck = session["cockpit"]
+    ck["stop_requested"], ck["status"], ck["thread_alive"] = False, "running", True
+    _save_voice_session(session)
+    _spawn_cockpit_runner(batch_id)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 
