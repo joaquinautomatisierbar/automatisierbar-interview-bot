@@ -1862,6 +1862,7 @@ def _batch_status(session: dict) -> dict:
     return {
         "batch_id": session.get("session_id"), "status": ck.get("status"),
         "thread_alive": ck.get("thread_alive", False), "stop_requested": ck.get("stop_requested", False),
+        "loading_eligible": ck.get("loading_eligible", False),
         "note": ck.get("note"), "barometers": buckets,
         "aggregates": {
             "fired": len(fired), "target": target, "eligible_total": eligible_total,
@@ -1883,8 +1884,20 @@ def _run_cockpit_batch(batch_id: str) -> None:
         base = _load_voice_session(batch_id)
         if not base:
             return
-        eligible = (base["cockpit"].get("eligible") or [])
         params = base["cockpit"].get("params") or {}
+        # Lazy-fetch eligibility OFF the request thread (Workflow D's dry-run is ~20s).
+        if base["cockpit"].get("loading_eligible"):
+            eligible = _fetch_eligible(int(params.get("max_calls", 0)), params.get("branche"))
+            fresh = _load_voice_session(batch_id)
+            fresh["cockpit"]["eligible"] = eligible
+            fresh["cockpit"]["loading_eligible"] = False
+            if not eligible:
+                fresh["cockpit"]["status"], fresh["cockpit"]["thread_alive"] = "done", False
+                _save_voice_session(fresh)
+                return
+            _save_voice_session(fresh)
+        base = _load_voice_session(batch_id)
+        eligible = (base["cockpit"].get("eligible") or [])
         max_calls = min(int(params.get("max_calls", 0)), len(eligible))
         gap = int(params.get("gap_sec", COCKPIT_DEFAULT_GAP_SEC))
         while True:
@@ -1982,7 +1995,6 @@ def cockpit_batch_start():
     gap_sec = int(data.get("gap_sec")) if data.get("gap_sec") is not None else COCKPIT_DEFAULT_GAP_SEC
     try:
         import uuid
-        eligible = _fetch_eligible(max_calls, branche)
         batch_id = str(uuid.uuid4())
         session = {
             "session_id": batch_id, "created_at": _now_iso(),
@@ -1991,15 +2003,12 @@ def cockpit_batch_start():
             "cockpit": {"status": "running", "stop_requested": False,
                         "params": {"max_calls": max_calls, "branche": branche,
                                    "gap_sec": gap_sec, "disclose_ratio": 0},
-                        "cursor": 0, "eligible": eligible, "fired": [], "thread_alive": True},
+                        "cursor": 0, "eligible": [], "loading_eligible": True,
+                        "fired": [], "thread_alive": True},
         }
         _save_voice_session(session)
-        if eligible:
-            _spawn_cockpit_runner(batch_id)
-        else:
-            session["cockpit"]["status"], session["cockpit"]["thread_alive"] = "done", False
-            _save_voice_session(session)
-        return jsonify({"batch_id": batch_id, "eligible_count": len(eligible)})
+        _spawn_cockpit_runner(batch_id)   # fetches eligibility off-thread, then dials
+        return jsonify({"batch_id": batch_id})
     except Exception as e:
         app.logger.error("cockpit_batch_start error: %s", e)
         return jsonify({"error": str(e)}), 500
