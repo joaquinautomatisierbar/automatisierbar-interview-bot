@@ -71,8 +71,13 @@ tr.clk:hover td{background:var(--bg-card-hover)}
 </head>
 <body>
 <div class="wrap">
-  <h1>Cold-Call Cockpit</h1>
-  <div class="sub">Batch starten · live mitverfolgen · stoppen / weiterfahren</div>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+    <div>
+      <h1>Cold-Call Cockpit</h1>
+      <div class="sub">Batch starten · live mitverfolgen · stoppen / weiterfahren</div>
+    </div>
+    <a id="histLink" class="btn-ghost" style="text-decoration:none;white-space:nowrap" href="/voice/sessions">📊 Verlauf &amp; Trends →</a>
+  </div>
 
   <!-- START -->
   <div class="card" style="margin-top:18px" id="startCard">
@@ -248,6 +253,7 @@ const app = {
   },
   closeModal(){ document.getElementById("overlay").classList.remove("show"); },
 };
+document.getElementById("histLink").href = "/voice/sessions?key=" + encodeURIComponent(app.apiKey);
 if(app.batchId){ document.getElementById("dash").classList.remove("hide"); app.poll(); app.timer=setInterval(()=>app.poll(),4000); }
 </script>
 </body>

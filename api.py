@@ -1692,6 +1692,11 @@ WORKFLOW_D_DIAL_WEBHOOK = os.environ.get(
     "COLD_CALL_DIAL_WEBHOOK", "https://oojoaquin.app.n8n.cloud/webhook/cold-call-dial")
 WORKFLOW_F_BOOK_WEBHOOK = os.environ.get(
     "COLD_CALL_BOOK_WEBHOOK", "https://oojoaquin.app.n8n.cloud/webhook/book-followup")
+# Phase 3 — durable per-batch analytics (survives Render restarts). Notion DB owned
+# by the same integration NOTION_API_KEY uses, so writes are guaranteed.
+VOICE_SESSIONS_DB_ID = os.environ.get(
+    "VOICE_SESSIONS_DB_ID", "377bebb0-c2f9-8109-ad8b-c6aab96640dd")
+CHANGELOG_PATH = _Path(__file__).resolve().parent / "prompts" / "voice_agent_changelog.md"
 
 # Process-local cache of ENDED Vapi calls so status polls don't re-fetch finished calls.
 _CALL_CACHE: dict = {}
@@ -1929,6 +1934,107 @@ def _batch_status(session: dict) -> dict:
     }
 
 
+# ---- Phase 3: durable session summaries (Notion) ----------------------------
+
+_SCRIPT_VERSION_CACHE = {"v": None}
+
+
+def _script_version() -> str:
+    """Current voice-agent script version (e.g. 'v7.1') from the changelog's newest
+    entry. Cached for the process lifetime. 'unbekannt' if the file isn't deployed."""
+    if _SCRIPT_VERSION_CACHE["v"] is not None:
+        return _SCRIPT_VERSION_CACHE["v"]
+    ver = "unbekannt"
+    try:
+        if CHANGELOG_PATH.exists():
+            for line in CHANGELOG_PATH.read_text(encoding="utf-8").splitlines():
+                m = re.match(r"^-\s*\*\*(v[\d.]+)", line.strip())
+                if m:
+                    ver = m.group(1)
+                    break
+    except Exception as e:
+        app.logger.error("_script_version parse failed: %s", e)
+    _SCRIPT_VERSION_CACHE["v"] = ver
+    return ver
+
+
+def _write_session_summary(batch_id: str) -> None:
+    """Upsert ONE durable row per cockpit batch into the Voice Sessions Notion DB
+    (survives Render's ephemeral disk). Called from the runner's finally. Skips
+    empty batches. Idempotent: stores the page_id on the session and PATCHes it on
+    later finalizations (e.g. after resume) instead of creating a duplicate."""
+    try:
+        session = _load_voice_session(batch_id)
+        if not session or "cockpit" not in session:
+            return
+        st = _batch_status(session)
+        a = st.get("aggregates") or {}
+        b = st.get("barometers") or {}
+        fired = int(a.get("fired") or 0)
+        if fired <= 0:
+            return                      # don't log empty/aborted-before-dial batches
+        key = os.environ.get("NOTION_API_KEY", "").strip()
+        if not key:
+            return
+        ck = session["cockpit"]
+        params = ck.get("params") or {}
+        connected = int(a.get("connected") or 0)
+        hot = int(b.get("hot") or 0)
+        followup = int(b.get("followup") or 0)
+
+        def _rate(x):
+            return round(x / fired, 4) if fired else 0
+
+        branche = params.get("branche")
+        branche_txt = ", ".join(branche) if isinstance(branche, list) else (branche or "Alle ICP")
+        created = session.get("created_at") or _now_iso()
+        ver = _script_version()
+        title = f"{created[:10]} · {branche_txt} · {fired} Calls"
+        props = {
+            "Session": {"title": [{"text": {"content": title[:200]}}]},
+            "Date": {"date": {"start": created}},
+            "Branche": {"rich_text": [{"text": {"content": branche_txt[:200]}}]},
+            "Script Version": {"select": {"name": ver}},
+            "Status": {"select": {"name": st.get("status") or "done"}},
+            "Max Calls": {"number": int(params.get("max_calls") or 0)},
+            "Fired": {"number": fired},
+            "Connected": {"number": connected},
+            "Hot": {"number": hot},
+            "Follow-up": {"number": followup},
+            "Cold": {"number": int(b.get("cold") or 0)},
+            "Hang-up": {"number": int(b.get("hangup") or 0)},
+            "No-Answer": {"number": int(b.get("noanswer") or 0)},
+            "Connect Rate": {"number": _rate(connected)},
+            "Hot Rate": {"number": _rate(hot)},
+            "Follow-up Rate": {"number": _rate(followup)},
+            "Cost CHF": {"number": float(a.get("cost_chf") or 0)},
+            "Disclose Ratio": {"number": float(params.get("disclose_ratio") or 0)},
+            "Batch ID": {"rich_text": [{"text": {"content": batch_id}}]},
+        }
+        import requests as _rq
+        h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
+             "Content-Type": "application/json"}
+        page_id = ck.get("summary_page_id")
+        if page_id:
+            _rq.patch(f"https://api.notion.com/v1/pages/{page_id}",
+                      headers=h, json={"properties": props}, timeout=25)
+        else:
+            r = _rq.post("https://api.notion.com/v1/pages", headers=h,
+                         json={"parent": {"database_id": VOICE_SESSIONS_DB_ID}, "properties": props},
+                         timeout=25)
+            if r.ok:
+                new_id = r.json().get("id")
+                fresh = _load_voice_session(batch_id)
+                if fresh and "cockpit" in fresh:
+                    fresh["cockpit"]["summary_page_id"] = new_id
+                    _save_voice_session(fresh)
+            else:
+                app.logger.error("voice session summary create failed: %s %s",
+                                 r.status_code, r.text[:200])
+    except Exception as e:
+        app.logger.error("_write_session_summary failed (%s): %s", batch_id, e)
+
+
 # ---- the batch runner (daemon) ----------------------------------------------
 
 def _run_cockpit_batch(batch_id: str) -> None:
@@ -2012,6 +2118,10 @@ def _run_cockpit_batch(batch_id: str) -> None:
                 _save_voice_session(fresh)
         except Exception:
             pass
+    finally:
+        # Terminal state reached (done / stopped / error) → persist a durable summary
+        # row to Notion. Safe on empty/missing batches (the writer no-ops).
+        _write_session_summary(batch_id)
 
 
 def _spawn_cockpit_runner(batch_id: str) -> None:
@@ -2122,6 +2232,65 @@ def cockpit_batch_resume(batch_id):
     _save_voice_session(session)
     _spawn_cockpit_runner(batch_id)
     return jsonify({"ok": True})
+
+
+@app.route("/voice/sessions", methods=["GET"])
+def voice_sessions_page():
+    return send_from_directory("static", "sessions.html")
+
+
+@app.route("/api/cockpit/sessions", methods=["GET"])
+def cockpit_sessions():
+    """Durable session history for the history + trends views. Reads the Voice
+    Sessions Notion DB, oldest-first (so the trends chart plots left→right)."""
+    if not _auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        key = os.environ.get("NOTION_API_KEY", "").strip()
+        if not key:
+            return jsonify({"sessions": []})
+        import requests as _rq
+        h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
+             "Content-Type": "application/json"}
+        body = {"sorts": [{"property": "Date", "direction": "ascending"}], "page_size": 100}
+        r = _rq.post(f"https://api.notion.com/v1/databases/{VOICE_SESSIONS_DB_ID}/query",
+                     headers=h, json=body, timeout=30)
+        r.raise_for_status()
+
+        def _num(p, n):
+            v = (p.get(n) or {}).get("number")
+            return v if v is not None else 0
+
+        def _txt(p, n):
+            return "".join(x.get("plain_text", "") for x in ((p.get(n) or {}).get("rich_text") or []))
+
+        def _sel(p, n):
+            return ((p.get(n) or {}).get("select") or {}).get("name")
+
+        def _date(p, n):
+            return ((p.get(n) or {}).get("date") or {}).get("start")
+
+        sessions = []
+        for pg in r.json().get("results", []):
+            p = pg.get("properties", {})
+            sessions.append({
+                "date": _date(p, "Date"), "branche": _txt(p, "Branche"),
+                "script_version": _sel(p, "Script Version"), "status": _sel(p, "Status"),
+                "max_calls": _num(p, "Max Calls"), "fired": _num(p, "Fired"),
+                "connected": _num(p, "Connected"),
+                "barometers": {
+                    "hot": _num(p, "Hot"), "followup": _num(p, "Follow-up"),
+                    "cold": _num(p, "Cold"), "hangup": _num(p, "Hang-up"),
+                    "noanswer": _num(p, "No-Answer"),
+                },
+                "connect_rate": _num(p, "Connect Rate"), "hot_rate": _num(p, "Hot Rate"),
+                "followup_rate": _num(p, "Follow-up Rate"), "cost_chf": _num(p, "Cost CHF"),
+                "batch_id": _txt(p, "Batch ID"),
+            })
+        return jsonify({"sessions": sessions})
+    except Exception as e:
+        app.logger.error("cockpit_sessions failed: %s", e)
+        return jsonify({"sessions": [], "error": str(e)}), 200
 
 
 # ---------------------------------------------------------------------------

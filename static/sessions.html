@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>automatisierbar · Cold-Call Verlauf & Trends</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#15C87A; --green-dark:#0A8F54; --bg:#09100D;
+  --bg-card:rgba(255,255,255,0.04); --bg-card-hover:rgba(255,255,255,0.07);
+  --border:rgba(255,255,255,0.08); --text:#EEF5F1; --text-muted:rgba(238,245,241,0.45);
+  --text-dim:rgba(238,245,241,0.25);
+  --yellow:#EAB308; --orange:#F97316; --red:#EF4444; --grey:#6B7280; --blue:#38BDF8;
+  --radius:10px; --radius-sm:6px; --ease:0.2s ease;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:28px 20px 80px}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:22px;font-weight:700;letter-spacing:-0.3px}
+.sub{color:var(--text-muted);font-size:13px;margin-top:3px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:9px 14px;font-size:13px;font-weight:600;text-decoration:none;display:inline-block;cursor:pointer;transition:var(--ease)}
+.btn-ghost:hover{background:var(--bg-card-hover)}
+.muted{color:var(--text-muted)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}
+.tile{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.tile .big{font-size:26px;font-weight:700;letter-spacing:-0.5px}
+.tile .lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-muted);margin-top:2px}
+.section-h{font-size:12px;text-transform:uppercase;letter-spacing:0.7px;color:var(--text-muted);margin:26px 0 8px}
+.legend{display:flex;flex-wrap:wrap;gap:14px}
+.lg{display:flex;align-items:center;gap:7px;font-size:13px}
+.dot{width:11px;height:11px;border-radius:50%;flex:none}
+.baro-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:#0d1714}
+.baro-seg{height:100%}
+/* history cards */
+.shist{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:var(--ease)}
+.shist:hover{background:var(--bg-card-hover)}
+.srow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+.ver{display:inline-block;background:rgba(56,189,248,0.14);color:#7dd3fc;font-size:11px;font-weight:600;padding:1px 7px;border-radius:20px;margin-left:5px}
+.srates{display:flex;gap:16px;margin-top:9px;font-size:12.5px;color:var(--text-muted)}
+.srates b{color:var(--text)}
+.stat-pill{font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px}
+.stat-done{background:rgba(21,200,122,0.14);color:#5ee0a6}
+.stat-stopped{background:rgba(234,179,8,0.14);color:#facc15}
+.stat-error{background:rgba(239,68,68,0.14);color:#fca5a5}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.72);display:none;align-items:center;justify-content:center;padding:24px;z-index:50}
+.overlay.show{display:flex}
+.modal{background:#0c1512;border:1px solid var(--border);border-radius:var(--radius);max-width:560px;width:100%;max-height:85vh;overflow:auto;padding:22px 24px}
+.x{float:right;cursor:pointer;color:var(--text-muted);font-size:20px;line-height:1}
+.kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13.5px}
+.kv .k{color:var(--text-muted)}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(6px);background:var(--red);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;opacity:0;transition:0.2s;z-index:99}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.empty{padding:40px 20px;text-align:center;color:var(--text-muted)}
+svg text{font-family:'Inter',sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+    <div>
+      <h1>Verlauf &amp; Trends</h1>
+      <div class="sub">Wie sich der Agent über die Sessions verbessert</div>
+    </div>
+    <a id="backLink" class="btn-ghost" href="/voice/cockpit">← Cockpit</a>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="section-h">Performance-Trend über Sessions</div>
+  <div class="card"><div id="chart"></div></div>
+
+  <div class="section-h">Sessions</div>
+  <div id="history"></div>
+</div>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this)app.close()">
+  <div class="modal">
+    <span class="x" onclick="app.close()">×</span>
+    <div id="mTitle" style="font-weight:600;font-size:15px;margin-bottom:6px"></div>
+    <div class="baro-bar" id="mBaro" style="margin:12px 0 8px"></div>
+    <div class="legend" id="mLegend" style="margin-bottom:14px"></div>
+    <div id="mKv"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const BUCKETS = [
+  ["hot","Termin / Hot","#15C87A"],
+  ["followup","Follow-up","#EAB308"],
+  ["cold","Cold","#F97316"],
+  ["hangup","Aufgelegt","#EF4444"],
+  ["noanswer","Nicht erreicht","#6B7280"],
+];
+const SERIES = [
+  ["connect_rate","Verbindungsrate","#38BDF8"],
+  ["hot_rate","Hot-Rate","#15C87A"],
+  ["followup_rate","Follow-up-Rate","#EAB308"],
+];
+const COL = {border:"rgba(255,255,255,0.12)", muted:"rgba(238,245,241,0.45)", dim:"rgba(238,245,241,0.3)"};
+const pct = v => `${Math.round((v||0)*100)}%`;
+
+const app = {
+  apiKey: new URLSearchParams(location.search).get("key") || "",
+  sessions: [],
+  _hdr(){ return this.apiKey ? {"X-API-Key":this.apiKey} : {}; },
+  toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.className="show"; setTimeout(()=>t.className="",2600); },
+
+  async load(){
+    document.getElementById("backLink").href = "/voice/cockpit?key=" + encodeURIComponent(this.apiKey);
+    let r; try{ r=await fetch("/api/cockpit/sessions",{headers:this._hdr()});}catch(e){return this.toast("Netzwerkfehler");}
+    if(r.status===401)return this.toast("Kein/ungültiger API-Key (?key=…)");
+    const d=await r.json();
+    if(d.error)this.toast(d.error);
+    this.sessions = (d.sessions||[]).filter(s=>s.fired>0);
+    this.renderTiles(); this.renderChart(); this.renderHistory();
+  },
+
+  renderTiles(){
+    const ss=this.sessions, n=ss.length;
+    const calls=ss.reduce((a,s)=>a+(s.fired||0),0);
+    const cost=ss.reduce((a,s)=>a+(s.cost_chf||0),0);
+    const totHot=ss.reduce((a,s)=>a+((s.barometers||{}).hot||0),0);
+    const avgHot=calls? totHot/calls : 0;
+    const tiles=[
+      [n, "Sessions"],
+      [calls, "Calls total"],
+      [pct(avgHot), "Ø Hot-Rate"],
+      [cost.toFixed(2), "Kosten CHF"],
+    ];
+    document.getElementById("tiles").innerHTML = tiles.map(([v,l])=>
+      `<div class="tile"><div class="big">${v}</div><div class="lbl">${l}</div></div>`).join("");
+  },
+
+  renderChart(){
+    const ss=this.sessions, n=ss.length, el=document.getElementById("chart");
+    if(!n){ el.innerHTML='<div class="empty">Noch keine Sessions. Starte einen Batch im Cockpit — danach erscheint hier der Trend.</div>'; return; }
+    const W=900,H=280,P={l:38,r:14,t:18,b:38}, iw=W-P.l-P.r, ih=H-P.t-P.b;
+    const x = i => P.l + (n===1 ? iw/2 : iw*i/(n-1));
+    const y = v => P.t + ih*(1-Math.max(0,Math.min(1,v)));
+    let grid="";
+    [0,0.25,0.5,0.75,1].forEach(v=>{
+      grid+=`<line x1="${P.l}" y1="${y(v)}" x2="${W-P.r}" y2="${y(v)}" stroke="${COL.border}" stroke-width="1"/>`;
+      grid+=`<text x="${P.l-6}" y="${y(v)+3}" text-anchor="end" font-size="10" fill="${COL.muted}">${Math.round(v*100)}%</text>`;
+    });
+    let markers="";
+    for(let i=1;i<n;i++){
+      const v=ss[i].script_version;
+      if(v && v!==ss[i-1].script_version){
+        const xx=x(i);
+        markers+=`<line x1="${xx}" y1="${P.t}" x2="${xx}" y2="${H-P.b}" stroke="${COL.dim}" stroke-dasharray="3 3" stroke-width="1"/>`;
+        markers+=`<text x="${xx}" y="${P.t-5}" text-anchor="middle" font-size="9" fill="${COL.muted}">${v}</text>`;
+      }
+    }
+    let xl=""; const every=Math.max(1,Math.ceil(n/8));
+    ss.forEach((s,i)=>{ if(i%every===0||i===n-1){ const d=(s.date||"").slice(5,10); xl+=`<text x="${x(i)}" y="${H-P.b+16}" text-anchor="middle" font-size="9" fill="${COL.muted}">${d}</text>`; } });
+    let paths="";
+    SERIES.forEach(([k,,c])=>{
+      const pts=ss.map((s,i)=>`${x(i)},${y(s[k]||0)}`).join(" ");
+      paths+=`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round"/>`;
+      paths+=ss.map((s,i)=>`<circle cx="${x(i)}" cy="${y(s[k]||0)}" r="3" fill="${c}"/>`).join("");
+    });
+    el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">${grid}${markers}${paths}${xl}</svg>`
+      + `<div class="legend" style="margin-top:10px">`+SERIES.map(([,l,c])=>`<span class="lg"><span class="dot" style="background:${c}"></span>${l}</span>`).join("")+`</div>`;
+  },
+
+  renderHistory(){
+    const ss=this.sessions.slice().reverse(), el=document.getElementById("history");
+    if(!ss.length){ el.innerHTML='<div class="card empty">Noch keine Sessions.</div>'; return; }
+    el.innerHTML = ss.map((s)=>{
+      const b=s.barometers||{}, tot=BUCKETS.reduce((a,[k])=>a+(b[k]||0),0)||1;
+      const segs=BUCKETS.map(([k,,c])=> b[k]?`<div class="baro-seg" style="width:${b[k]/tot*100}%;background:${c}"></div>`:"").join("");
+      const stc={done:"stat-done",stopped:"stat-stopped",error:"stat-error"}[s.status]||"stat-done";
+      const idx=this.sessions.indexOf(s);
+      return `<div class="shist" onclick="app.detail(${idx})">
+        <div class="srow">
+          <div><b>${(s.date||"").slice(0,10)}</b> · ${s.branche||"Alle ICP"}${s.script_version?`<span class="ver">${s.script_version}</span>`:""}</div>
+          <div class="muted">${s.fired} Calls · ${(s.cost_chf||0).toFixed(2)} CHF <span class="stat-pill ${stc}">${s.status||""}</span></div>
+        </div>
+        <div class="baro-bar">${segs}</div>
+        <div class="srates">
+          <span>Verbunden <b>${pct(s.connect_rate)}</b></span>
+          <span>Hot <b style="color:#5ee0a6">${pct(s.hot_rate)}</b></span>
+          <span>Follow-up <b style="color:#facc15">${pct(s.followup_rate)}</b></span>
+        </div>
+      </div>`;
+    }).join("");
+  },
+
+  detail(i){
+    const s=this.sessions[i]; if(!s)return;
+    document.getElementById("overlay").classList.add("show");
+    document.getElementById("mTitle").textContent=`${(s.date||"").slice(0,10)} · ${s.branche||"Alle ICP"} · ${s.script_version||""}`;
+    const b=s.barometers||{}, tot=BUCKETS.reduce((a,[k])=>a+(b[k]||0),0)||1;
+    document.getElementById("mBaro").innerHTML=BUCKETS.map(([k,,c])=> b[k]?`<div class="baro-seg" style="width:${b[k]/tot*100}%;background:${c}"></div>`:"").join("");
+    document.getElementById("mLegend").innerHTML=BUCKETS.map(([k,l,c])=>`<span class="lg"><span class="dot" style="background:${c}"></span>${l} <b style="margin-left:3px">${b[k]||0}</b></span>`).join("");
+    const kv=[
+      ["Status", s.status||""],
+      ["Calls gewählt", s.fired],
+      ["Verbunden", `${s.connected} (${pct(s.connect_rate)})`],
+      ["Hot / Termin", `${b.hot||0} (${pct(s.hot_rate)})`],
+      ["Follow-ups", `${b.followup||0} (${pct(s.followup_rate)})`],
+      ["Kosten", `${(s.cost_chf||0).toFixed(2)} CHF`],
+      ["Skript-Version", s.script_version||"—"],
+    ];
+    document.getElementById("mKv").innerHTML=kv.map(([k,v])=>`<div class="kv"><span class="k">${k}</span><span>${v}</span></div>`).join("");
+  },
+  close(){ document.getElementById("overlay").classList.remove("show"); },
+};
+app.load();
+</script>
+</body>
+</html>
