@@ -148,6 +148,7 @@ const BUCKETS = [
   ["noanswer","Nicht erreicht","c-noanswer","var(--grey)"],
   ["live","Läuft","c-live","var(--blue)"],
 ];
+const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const app = {
   apiKey: new URLSearchParams(location.search).get("key") || "",
   batchId: new URLSearchParams(location.search).get("batch") || "",
@@ -178,6 +179,7 @@ const app = {
     if(d.error){sb.disabled=false;sb.textContent="▶ Start";return this.toast(d.error);}
     this.batchId=d.batch_id;
     history.replaceState(null,"",`?key=${encodeURIComponent(this.apiKey)}&batch=${d.batch_id}`);
+    if(this.timer)clearInterval(this.timer);
     this.poll(); this.timer=setInterval(()=>this.poll(),4000);
   },
 
@@ -227,9 +229,9 @@ const app = {
       const live=c.bucket==="live";
       const dur=c.duration_s!=null?`${Math.floor(c.duration_s/60)}:${String(c.duration_s%60).padStart(2,"0")}`:"—";
       const statusTxt=c.error?"Fehler":({queued:"wartet",ringing:"klingelt","in-progress":"läuft",ended:"beendet"}[c.status]||c.status);
-      return `<tr class="clk" onclick="app.openCall('${c.call_id||""}','${(c.firma||"").replace(/'/g,"")}')">
-        <td>${c.firma||"—"}</td><td class="muted">${c.branche||""}</td>
-        <td><span class="pill ${live?"live-anim":""}" style="background:rgba(255,255,255,0.06)"><span class="dot ${bk[2]}"></span>${statusTxt}</span></td>
+      return `<tr class="clk" data-cid="${esc(c.call_id||"")}" data-firma="${esc(c.firma||"")}" onclick="app.openCall(this)">
+        <td>${esc(c.firma||"—")}</td><td class="muted">${esc(c.branche||"")}</td>
+        <td><span class="pill ${live?"live-anim":""}" style="background:rgba(255,255,255,0.06)"><span class="dot ${bk[2]}"></span>${esc(statusTxt)}</span></td>
         <td class="muted">${dur}</td><td class="muted">${c.cost?(c.cost*0.9).toFixed(2):"—"}</td>
         <td><span class="pill" style="background:rgba(255,255,255,0.05)"><span class="dot ${bk[2]}"></span>${bk[1]}</span></td></tr>`;
     }).join("");
@@ -238,7 +240,8 @@ const app = {
   async stop(){ await fetch(`/api/cockpit/batch/${this.batchId}/stop`,{method:"POST",headers:this._hdr()}); this.toast("Stop angefordert — stoppt nach dem laufenden Call",true); this.poll(); },
   async resume(){ await fetch(`/api/cockpit/batch/${this.batchId}/resume`,{method:"POST",headers:this._hdr()}); this.toast("Weiter…",true); if(!this.timer)this.timer=setInterval(()=>this.poll(),4000); this.poll(); },
 
-  async openCall(cid, firma){
+  async openCall(el){
+    const cid=el.dataset.cid, firma=el.dataset.firma;
     if(!cid)return this.toast("Noch kein Transkript.");
     document.getElementById("overlay").classList.add("show");
     document.getElementById("modalTitle").textContent=firma||"Call";
