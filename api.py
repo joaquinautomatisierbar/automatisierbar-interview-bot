@@ -1505,8 +1505,12 @@ def voice_session_add_call(session_id):
         session.setdefault("calls", []).append(call)
         # Adding a call invalidates any cached report.
         session["report"] = None
+        # If Lena booked a meeting on this call, fire Workflow F (calendar + team
+        # Telegram + Notion). Idempotent per lead; fire-and-forget.
+        followup_booked = _maybe_book_followup(session, call)
         _save_voice_session(session)
-        return jsonify({"ok": True, "count": len(session["calls"])})
+        return jsonify({"ok": True, "count": len(session["calls"]),
+                        "followup_booked": followup_booked})
     except Exception as e:
         app.logger.error("voice_session_add_call error: %s", e)
         return jsonify({"error": str(e)}), 500
@@ -1686,6 +1690,8 @@ COCKPIT_DEFAULT_GAP_SEC = int(os.environ.get("COCKPIT_GAP_SEC", "30") or 30)
 COCKPIT_MAX_CALLS = 200                  # hard cap per batch
 WORKFLOW_D_DIAL_WEBHOOK = os.environ.get(
     "COLD_CALL_DIAL_WEBHOOK", "https://oojoaquin.app.n8n.cloud/webhook/cold-call-dial")
+WORKFLOW_F_BOOK_WEBHOOK = os.environ.get(
+    "COLD_CALL_BOOK_WEBHOOK", "https://oojoaquin.app.n8n.cloud/webhook/book-followup")
 
 # Process-local cache of ENDED Vapi calls so status polls don't re-fetch finished calls.
 _CALL_CACHE: dict = {}
@@ -1749,6 +1755,55 @@ def _fetch_eligible(max_calls: int, branche) -> list:
     except Exception as e:
         app.logger.error("cockpit _fetch_eligible failed: %s", e)
         return []
+
+
+# ---- follow-up booking (fire Workflow F when Lena books a meeting) -----------
+
+def _booking_availability(analysis: dict) -> str:
+    """Best concrete slot text for Workflow F's German-date parser. Prefers the
+    free-text callback_availability; falls back to appointment_day + time."""
+    avail = str((analysis or {}).get("callback_availability") or "").strip()
+    if avail:
+        return avail
+    day = str((analysis or {}).get("appointment_day") or "").strip()
+    tm = str((analysis or {}).get("appointment_time") or "").strip()
+    return (day + " " + tm).strip()
+
+
+def _fire_followup_booking(lead_id: str, availability: str, transcript_link: str = "") -> None:
+    """POST Workflow F's webhook to book the follow-up (calendar + team Telegram +
+    Notion). Fire-and-forget; swallow errors so a booking hiccup never breaks the
+    call-ingest path."""
+    try:
+        import requests as _rq
+        _rq.post(WORKFLOW_F_BOOK_WEBHOOK, json={
+            "lead_id": lead_id,
+            "callback_availability": availability,
+            "transcript_link": transcript_link or "",
+        }, timeout=20)
+    except Exception as e:
+        app.logger.error("followup booking POST failed: %s", e)
+
+
+def _maybe_book_followup(session: dict, call: dict) -> bool:
+    """If a call's analysis says Lena booked a meeting (appointment_booked or
+    interview_accepted), trigger Workflow F once per lead per session. Returns True
+    if a booking was fired. Idempotent via session['booked_followups']."""
+    analysis = call.get("analysis") or {}
+    if not (analysis.get("appointment_booked") is True
+            or analysis.get("interview_accepted") is True):
+        return False
+    lead_id = (call.get("lead_id") or "").strip()
+    if not lead_id:
+        return False
+    booked = session.setdefault("booked_followups", [])
+    if lead_id in booked:
+        return False
+    booked.append(lead_id)
+    availability = _booking_availability(analysis)
+    _threading.Thread(target=_fire_followup_booking, args=(lead_id, availability),
+                      name=f"book-{lead_id[:8]}", daemon=True).start()
+    return True
 
 
 def _mark_lead_dialed(lead_id: str) -> None:
