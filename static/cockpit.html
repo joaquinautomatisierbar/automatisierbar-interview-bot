@@ -151,25 +151,28 @@ const app = {
   toast(m, ok){ const t=document.getElementById("toast"); t.textContent=m; t.className="show"+(ok?" ok":""); setTimeout(()=>t.className="",2600); },
 
   async preview(){
+    const pm=document.getElementById("previewMsg");
+    pm.textContent="⏳ Prüfe passende Leads … (kann ~20 Sek. dauern)";
     const body = {max_calls:+document.getElementById("nCalls").value, branche:this._br()};
-    let r; try{ r=await fetch("/api/cockpit/preview",{method:"POST",headers:this._hdr({"Content-Type":"application/json"}),body:JSON.stringify(body)});}catch(e){return this.toast("Netzwerkfehler");}
-    if(r.status===401)return this.toast("Kein/ungültiger API-Key (?key=…)");
+    let r; try{ r=await fetch("/api/cockpit/preview",{method:"POST",headers:this._hdr({"Content-Type":"application/json"}),body:JSON.stringify(body)});}catch(e){pm.textContent="";return this.toast("Netzwerkfehler");}
+    if(r.status===401){pm.textContent="";return this.toast("Kein/ungültiger API-Key (?key=…)");}
     const d=await r.json();
-    document.getElementById("previewMsg").textContent = `${d.eligible_count} Leads passen` + (d.sample&&d.sample.length?` — z.B. ${d.sample.slice(0,3).map(s=>s.firma).join(", ")}`:"");
+    if(d.error){pm.textContent="";return this.toast(d.error);}
+    pm.textContent = `${d.eligible_count} Leads passen` + (d.sample&&d.sample.length?` — z.B. ${d.sample.slice(0,3).map(s=>s.firma).join(", ")}`:"");
   },
   _br(){ const v=document.getElementById("branche").value; return v||null; },
 
   async start(){
-    document.getElementById("startBtn").disabled=true;
-    const body={max_calls:+document.getElementById("nCalls").value, branche:this._br(), gap_sec:+document.getElementById("gap").value};
-    let r; try{ r=await fetch("/api/cockpit/batch/start",{method:"POST",headers:this._hdr({"Content-Type":"application/json"}),body:JSON.stringify(body)});}catch(e){document.getElementById("startBtn").disabled=false;return this.toast("Netzwerkfehler");}
-    if(r.status===401){document.getElementById("startBtn").disabled=false;return this.toast("Kein/ungültiger API-Key");}
-    const d=await r.json();
-    if(d.error){document.getElementById("startBtn").disabled=false;return this.toast(d.error);}
-    if(!d.eligible_count){document.getElementById("startBtn").disabled=false;return this.toast("Keine passenden Leads.");}
-    this.batchId=d.batch_id;
-    history.replaceState(null,"",`?key=${encodeURIComponent(this.apiKey)}&batch=${d.batchId||d.batch_id}`);
+    const sb=document.getElementById("startBtn"); sb.disabled=true; sb.textContent="… läuft";
     document.getElementById("dash").classList.remove("hide");
+    document.getElementById("statusLine").textContent="⏳ Lade passende Leads …";
+    const body={max_calls:+document.getElementById("nCalls").value, branche:this._br(), gap_sec:+document.getElementById("gap").value};
+    let r; try{ r=await fetch("/api/cockpit/batch/start",{method:"POST",headers:this._hdr({"Content-Type":"application/json"}),body:JSON.stringify(body)});}catch(e){sb.disabled=false;sb.textContent="▶ Start";return this.toast("Netzwerkfehler");}
+    if(r.status===401){sb.disabled=false;sb.textContent="▶ Start";return this.toast("Kein/ungültiger API-Key");}
+    const d=await r.json();
+    if(d.error){sb.disabled=false;sb.textContent="▶ Start";return this.toast(d.error);}
+    this.batchId=d.batch_id;
+    history.replaceState(null,"",`?key=${encodeURIComponent(this.apiKey)}&batch=${d.batch_id}`);
     this.poll(); this.timer=setInterval(()=>this.poll(),4000);
   },
 
@@ -179,9 +182,9 @@ const app = {
     if(!r.ok)return;
     const s=await r.json();
     this.render(s);
-    const live = s.calls.some(c=>c.bucket==="live") || (s.aggregates.fired<s.aggregates.target);
-    const running = s.status==="running" && s.thread_alive;
-    if(!running && !live){ clearInterval(this.timer); this.timer=null; }
+    const terminal = ["done","stopped","error"].includes(s.status) && !s.loading_eligible;
+    const liveCalls = (s.calls||[]).some(c=>c.bucket==="live");
+    if(terminal && !liveCalls){ clearInterval(this.timer); this.timer=null; }
   },
 
   render(s){
@@ -198,8 +201,15 @@ const app = {
     document.getElementById("baroLegend").innerHTML = BUCKETS.map(([k,lbl,cls])=>
       `<span class="lg"><span class="dot ${cls}"></span>${lbl} <b style="margin-left:3px">${b[k]||0}</b></span>`).join("");
     // status + controls
-    const st={running:"läuft …",done:"fertig ✓",stopped:"gestoppt",error:"Fehler"}[s.status]||s.status;
-    document.getElementById("statusLine").textContent = `Status: ${st}` + (s.note?` — ${s.note}`:"") + (s.thread_alive?"":(s.status==="running"?" (Thread beendet — ‚Weiter' drücken)":""));
+    let statusTxt;
+    if(s.loading_eligible){ statusTxt="⏳ Lade passende Leads …"; }
+    else if(s.status==="done" && a.fired===0){ statusTxt="Keine passenden Leads gefunden."; }
+    else { const st={running:"läuft …",done:"fertig ✓",stopped:"gestoppt",error:"Fehler"}[s.status]||s.status;
+      statusTxt = `Status: ${st}` + (s.note?` — ${s.note}`:"") + (s.thread_alive?"":(s.status==="running"?" (Thread beendet — ‚Weiter' drücken)":"")); }
+    document.getElementById("statusLine").textContent = statusTxt;
+    if(["done","stopped","error"].includes(s.status) && !s.loading_eligible){
+      const sb=document.getElementById("startBtn"); sb.disabled=false; sb.textContent="▶ Start";
+    }
     document.getElementById("stopBtn").classList.toggle("hide", !(s.status==="running"&&s.thread_alive));
     const canResume = (s.status==="stopped") || (s.status==="running"&&!s.thread_alive) || s.status==="error";
     document.getElementById("resumeBtn").classList.toggle("hide", !canResume);
