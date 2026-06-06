@@ -1772,28 +1772,36 @@ def _booking_availability(analysis: dict) -> str:
         return avail
     day = str((analysis or {}).get("appointment_day") or "").strip()
     tm = str((analysis or {}).get("appointment_time") or "").strip()
-    return (day + " " + tm).strip()
+    combined = (day + " " + tm).strip()
+    # Sentinel so Workflow F falls back to a tentative ≥2-day hold AND the team sees
+    # that no concrete slot was captured (rather than a blank availability line).
+    return combined or "(kein Slot genannt)"
 
 
-def _fire_followup_booking(lead_id: str, availability: str, transcript_link: str = "") -> None:
+def _fire_followup_booking(lead_id: str, availability: str, transcript_link: str = "") -> bool:
     """POST Workflow F's webhook to book the follow-up (calendar + team Telegram +
-    Notion). Fire-and-forget; swallow errors so a booking hiccup never breaks the
-    call-ingest path."""
+    Notion). Returns True ONLY on a confirmed 2xx, so the caller marks the lead
+    booked only when it really succeeded; a failure is logged loudly and left
+    un-booked so the next end-of-call delivery retries instead of silently losing it."""
     try:
         import requests as _rq
-        _rq.post(WORKFLOW_F_BOOK_WEBHOOK, json={
+        r = _rq.post(WORKFLOW_F_BOOK_WEBHOOK, json={
             "lead_id": lead_id,
             "callback_availability": availability,
             "transcript_link": transcript_link or "",
-        }, timeout=20)
+        }, timeout=25)
+        r.raise_for_status()
+        return True
     except Exception as e:
-        app.logger.error("followup booking POST failed: %s", e)
+        app.logger.error("followup booking POST failed (%s): %s", lead_id, e)
+        return False
 
 
 def _maybe_book_followup(session: dict, call: dict) -> bool:
     """If a call's analysis says Lena booked a meeting (appointment_booked or
-    interview_accepted), trigger Workflow F once per lead per session. Returns True
-    if a booking was fired. Idempotent via session['booked_followups']."""
+    interview_accepted), trigger Workflow F once per lead per session, synchronously.
+    Returns True only when the booking was confirmed. Idempotent via
+    session['booked_followups'] (a lead is marked booked only on success)."""
     analysis = call.get("analysis") or {}
     if not (analysis.get("appointment_booked") is True
             or analysis.get("interview_accepted") is True):
@@ -1804,11 +1812,14 @@ def _maybe_book_followup(session: dict, call: dict) -> bool:
     booked = session.setdefault("booked_followups", [])
     if lead_id in booked:
         return False
-    booked.append(lead_id)
     availability = _booking_availability(analysis)
-    _threading.Thread(target=_fire_followup_booking, args=(lead_id, availability),
-                      name=f"book-{lead_id[:8]}", daemon=True).start()
-    return True
+    # Fire SYNCHRONOUSLY and mark booked only on confirmed success, so a transient
+    # Workflow F failure is retried on the next end-of-call delivery rather than
+    # being permanently lost behind the idempotency guard.
+    if _fire_followup_booking(lead_id, availability):
+        booked.append(lead_id)
+        return True
+    return False
 
 
 def _mark_lead_dialed(lead_id: str) -> None:
@@ -1866,6 +1877,11 @@ def _fetch_call_cached(call_id: str) -> dict:
         app.logger.error("cockpit get_call failed (%s): %s", call_id, e)
         return {"status": "unknown", "_error": str(e)}
     if str(c.get("status")) == "ended":
+        if len(_CALL_CACHE) >= 5000:           # bound memory; evict oldest (FIFO)
+            try:
+                _CALL_CACHE.pop(next(iter(_CALL_CACHE)))
+            except StopIteration:
+                pass
         _CALL_CACHE[call_id] = c
         _add_cockpit_spend(call_id, c.get("cost"))
     return c
@@ -1908,7 +1924,11 @@ def _batch_status(session: dict) -> dict:
         cost = float(c.get("cost") or 0)
         total_cost += cost
         sd = ((c.get("analysis") or {}).get("structuredData") or {})
-        if sd.get("connected") is True:
+        _conn = sd.get("connected")
+        if _conn is None:                       # mirror _bucket_call's inference
+            _dur = _call_duration_s(c)
+            _conn = bool(c.get("transcript")) and (_dur is None or _dur >= 8)
+        if _conn:
             connected += 1
         rows.append({
             "firma": f.get("firma"), "phone": f.get("phone"), "branche": f.get("branche"),
@@ -1936,14 +1956,11 @@ def _batch_status(session: dict) -> dict:
 
 # ---- Phase 3: durable session summaries (Notion) ----------------------------
 
-_SCRIPT_VERSION_CACHE = {"v": None}
-
-
 def _script_version() -> str:
     """Current voice-agent script version (e.g. 'v7.1') from the changelog's newest
-    entry. Cached for the process lifetime. 'unbekannt' if the file isn't deployed."""
-    if _SCRIPT_VERSION_CACHE["v"] is not None:
-        return _SCRIPT_VERSION_CACHE["v"]
+    entry. Read fresh each call (the file is tiny and this runs once per batch
+    finalization) so it stays correct after a changelog redeploy. 'unbekannt' if the
+    file isn't deployed."""
     ver = "unbekannt"
     try:
         if CHANGELOG_PATH.exists():
@@ -1954,7 +1971,6 @@ def _script_version() -> str:
                     break
     except Exception as e:
         app.logger.error("_script_version parse failed: %s", e)
-    _SCRIPT_VERSION_CACHE["v"] = ver
     return ver
 
 
@@ -2119,14 +2135,33 @@ def _run_cockpit_batch(batch_id: str) -> None:
         except Exception:
             pass
     finally:
+        with _RUNNER_LOCK:
+            if _RUNNER_THREADS.get(batch_id) is _threading.current_thread():
+                _RUNNER_THREADS.pop(batch_id, None)
         # Terminal state reached (done / stopped / error) → persist a durable summary
         # row to Notion. Safe on empty/missing batches (the writer no-ops).
         _write_session_summary(batch_id)
 
 
-def _spawn_cockpit_runner(batch_id: str) -> None:
-    _threading.Thread(target=_run_cockpit_batch, args=(batch_id,),
-                      name=f"cockpit-{batch_id[:8]}", daemon=True).start()
+# Real thread handles per batch (the persisted thread_alive flag is NOT a sync
+# primitive). Guards against a second runner being spawned by a double-click on
+# Weiter/resume or a stop→resume race → which would double-dial real leads.
+_RUNNER_THREADS: dict = {}
+_RUNNER_LOCK = _threading.Lock()
+
+
+def _spawn_cockpit_runner(batch_id: str) -> bool:
+    """Start the runner for batch_id unless one is already alive. Returns True if a
+    new thread was started, False if an existing live runner blocked the spawn."""
+    with _RUNNER_LOCK:
+        existing = _RUNNER_THREADS.get(batch_id)
+        if existing is not None and existing.is_alive():
+            return False
+        t = _threading.Thread(target=_run_cockpit_batch, args=(batch_id,),
+                              name=f"cockpit-{batch_id[:8]}", daemon=True)
+        _RUNNER_THREADS[batch_id] = t
+        t.start()
+        return True
 
 
 # ---- routes -----------------------------------------------------------------
@@ -2252,10 +2287,19 @@ def cockpit_sessions():
         import requests as _rq
         h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
              "Content-Type": "application/json"}
-        body = {"sorts": [{"property": "Date", "direction": "ascending"}], "page_size": 100}
-        r = _rq.post(f"https://api.notion.com/v1/databases/{VOICE_SESSIONS_DB_ID}/query",
-                     headers=h, json=body, timeout=30)
-        r.raise_for_status()
+        results, cursor = [], None
+        while True:
+            body = {"sorts": [{"property": "Date", "direction": "ascending"}], "page_size": 100}
+            if cursor:
+                body["start_cursor"] = cursor
+            r = _rq.post(f"https://api.notion.com/v1/databases/{VOICE_SESSIONS_DB_ID}/query",
+                         headers=h, json=body, timeout=30)
+            r.raise_for_status()
+            data = r.json()
+            results.extend(data.get("results", []))
+            cursor = data.get("next_cursor")
+            if not (data.get("has_more") and cursor):
+                break
 
         def _num(p, n):
             v = (p.get(n) or {}).get("number")
@@ -2271,7 +2315,7 @@ def cockpit_sessions():
             return ((p.get(n) or {}).get("date") or {}).get("start")
 
         sessions = []
-        for pg in r.json().get("results", []):
+        for pg in results:
             p = pg.get("properties", {})
             sessions.append({
                 "date": _date(p, "Date"), "branche": _txt(p, "Branche"),
