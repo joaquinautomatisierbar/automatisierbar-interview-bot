@@ -129,6 +129,16 @@ tr.clk:hover td{background:var(--bg-card-hover)}
   </div>
 </div>
 
+<div class="overlay" id="loginOverlay">
+  <div class="modal" style="max-width:340px;text-align:center">
+    <div style="font-weight:600;font-size:16px;margin-bottom:4px">🔒 Cockpit-Login</div>
+    <div class="sub" style="margin-bottom:16px">Bitte Passwort eingeben</div>
+    <input id="pw" type="password" placeholder="Passwort" autocomplete="current-password" style="margin-bottom:12px" onkeydown="if(event.key==='Enter')app.login()">
+    <button class="btn-primary" style="width:100%" onclick="app.login()">Login</button>
+    <div id="loginErr" class="sub" style="color:#fca5a5;margin-top:10px;min-height:16px"></div>
+  </div>
+</div>
+
 <div class="overlay" id="overlay" onclick="if(event.target===this)app.closeModal()">
   <div class="modal">
     <span class="x" onclick="app.closeModal()">×</span>
@@ -255,9 +265,23 @@ const app = {
     document.getElementById("modalTranscript").textContent = d.transcript || "(kein Transkript)";
   },
   closeModal(){ document.getElementById("overlay").classList.remove("show"); },
+
+  async checkAuth(){ try{ const r=await fetch("/api/cockpit/auth",{headers:this._hdr()}); return (await r.json()).authed; }catch(e){ return false; } },
+  async login(){
+    const pw=document.getElementById("pw").value, el=document.getElementById("loginErr"); el.textContent="";
+    let r; try{ r=await fetch("/api/cockpit/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})});}catch(e){el.textContent="Netzwerkfehler";return;}
+    if(r.ok){ document.getElementById("loginOverlay").classList.remove("show"); this.init(); }
+    else { el.textContent="Falsches Passwort"; document.getElementById("pw").value=""; }
+  },
+  init(){
+    document.getElementById("histLink").href = "/voice/sessions";
+    if(this.batchId){ document.getElementById("dash").classList.remove("hide"); this.poll(); this.timer=setInterval(()=>this.poll(),4000); }
+  },
 };
-document.getElementById("histLink").href = "/voice/sessions?key=" + encodeURIComponent(app.apiKey);
-if(app.batchId){ document.getElementById("dash").classList.remove("hide"); app.poll(); app.timer=setInterval(()=>app.poll(),4000); }
+(async ()=>{
+  if(app.apiKey || await app.checkAuth()){ app.init(); }
+  else { document.getElementById("loginOverlay").classList.add("show"); document.getElementById("pw").focus(); }
+})();
 </script>
 </body>
 </html>

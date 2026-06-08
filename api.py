@@ -24,13 +24,21 @@ import os
 import re
 import sys
 
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, send_from_directory, session
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "tools"))
 
 app = Flask(__name__, static_folder="static")
 
 PDF_API_KEY = os.environ.get("PDF_API_KEY", "")
+
+# Cockpit operator login (password gate → signed session cookie, no key in the URL).
+COCKPIT_PASSWORD = os.environ.get("COCKPIT_PASSWORD", "Operations2026$")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or ("ab-cockpit-secret-" + (PDF_API_KEY or "dev"))
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# HTTPS-only cookie on Render (prod); plain http for local test_client.
+app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RENDER"))
 
 MAX_CONTEXT_CHARS = 8000  # Notion rich_text safe upper bound for State JSON
 MAX_ANSWER_CHARS = 4000   # per-answer cap; 8 answers × 4000 = 32k headroom
@@ -57,6 +65,13 @@ def _auth_ok() -> bool:
         app.logger.warning("PDF_API_KEY not set — auth-required routes refused")
         return False
     return request.headers.get("X-API-Key") == PDF_API_KEY
+
+
+def _cockpit_auth_ok() -> bool:
+    """Cockpit/operator routes accept EITHER a valid password session cookie (the
+    /api/cockpit/login flow) OR the X-API-Key header (scripts, n8n). Keeps the API
+    key out of the browser URL while leaving programmatic access intact."""
+    return bool(session.get("cockpit_auth")) or _auth_ok()
 
 
 # ---------------------------------------------------------------------------
@@ -1692,6 +1707,9 @@ WORKFLOW_D_DIAL_WEBHOOK = os.environ.get(
     "COLD_CALL_DIAL_WEBHOOK", "https://oojoaquin.app.n8n.cloud/webhook/cold-call-dial")
 WORKFLOW_F_BOOK_WEBHOOK = os.environ.get(
     "COLD_CALL_BOOK_WEBHOOK", "https://oojoaquin.app.n8n.cloud/webhook/book-followup")
+# Shared secret so only this app can trigger a booking (Workflow F drops requests
+# whose body.secret doesn't match). Set the same value in F's Parse Slot node.
+WORKFLOW_F_WEBHOOK_SECRET = os.environ.get("WORKFLOW_F_WEBHOOK_SECRET", "ab-followup-2026-x7k2")
 # Phase 3 — durable per-batch analytics (survives Render restarts). Notion DB owned
 # by the same integration NOTION_API_KEY uses, so writes are guaranteed.
 VOICE_SESSIONS_DB_ID = os.environ.get(
@@ -1709,6 +1727,37 @@ def _now_iso() -> str:
 
 # ---- budget -----------------------------------------------------------------
 
+def _seed_budget_from_notion() -> float:
+    """Sum 'Cost CHF' across all Voice Sessions rows → USD, so the budget cap can
+    survive Render's ephemeral disk (the local budget file is wiped on restart)."""
+    try:
+        key = os.environ.get("NOTION_API_KEY", "").strip()
+        if not key:
+            return 0.0
+        import requests as _rq
+        h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
+             "Content-Type": "application/json"}
+        total_chf, cursor = 0.0, None
+        while True:
+            body = {"page_size": 100}
+            if cursor:
+                body["start_cursor"] = cursor
+            r = _rq.post(f"https://api.notion.com/v1/databases/{VOICE_SESSIONS_DB_ID}/query",
+                         headers=h, json=body, timeout=20)
+            r.raise_for_status()
+            data = r.json()
+            for pg in data.get("results", []):
+                v = (pg.get("properties", {}).get("Cost CHF") or {}).get("number")
+                total_chf += float(v or 0)
+            cursor = data.get("next_cursor")
+            if not (data.get("has_more") and cursor):
+                break
+        return round(total_chf / _USD_TO_CHF, 4) if _USD_TO_CHF else 0.0
+    except Exception as e:
+        app.logger.error("budget seed from Notion failed: %s", e)
+        return 0.0
+
+
 def _cockpit_budget() -> dict:
     try:
         if COCKPIT_BUDGET_PATH.exists():
@@ -1718,7 +1767,15 @@ def _cockpit_budget() -> dict:
             return d
     except Exception as e:
         app.logger.error("cockpit budget read failed: %s", e)
-    return {"spent_usd": 0.0, "counted": []}
+    # File missing (fresh process after a Render restart) → reseed spent from the
+    # durable Notion session totals, then persist so we don't re-query every read.
+    b = {"spent_usd": _seed_budget_from_notion(), "counted": []}
+    try:
+        COCKPIT_BUDGET_PATH.parent.mkdir(parents=True, exist_ok=True)
+        COCKPIT_BUDGET_PATH.write_text(_json.dumps(b), encoding="utf-8")
+    except Exception as e:
+        app.logger.error("cockpit budget seed-write failed: %s", e)
+    return b
 
 
 def _add_cockpit_spend(call_id: str, usd) -> None:
@@ -1789,6 +1846,7 @@ def _fire_followup_booking(lead_id: str, availability: str, transcript_link: str
             "lead_id": lead_id,
             "callback_availability": availability,
             "transcript_link": transcript_link or "",
+            "secret": WORKFLOW_F_WEBHOOK_SECRET,
         }, timeout=25)
         r.raise_for_status()
         return True
@@ -2171,9 +2229,30 @@ def voice_cockpit_page():
     return send_from_directory("static", "cockpit.html")
 
 
+@app.route("/api/cockpit/login", methods=["POST"])
+def cockpit_login():
+    data = request.get_json(silent=True) or {}
+    if str(data.get("password") or "") == COCKPIT_PASSWORD:
+        session["cockpit_auth"] = True
+        session.permanent = True
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "Falsches Passwort"}), 401
+
+
+@app.route("/api/cockpit/logout", methods=["POST"])
+def cockpit_logout():
+    session.pop("cockpit_auth", None)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/cockpit/auth", methods=["GET"])
+def cockpit_auth_status():
+    return jsonify({"authed": _cockpit_auth_ok()})
+
+
 @app.route("/api/cockpit/preview", methods=["POST"])
 def cockpit_preview():
-    if not _auth_ok():
+    if not _cockpit_auth_ok():
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json(silent=True) or {}
     max_calls = min(int(data.get("max_calls") or 5), COCKPIT_MAX_CALLS)
@@ -2187,7 +2266,7 @@ def cockpit_preview():
 
 @app.route("/api/cockpit/batch/start", methods=["POST"])
 def cockpit_batch_start():
-    if not _auth_ok():
+    if not _cockpit_auth_ok():
         return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json(silent=True) or {}
     max_calls = min(int(data.get("max_calls") or 1), COCKPIT_MAX_CALLS)
@@ -2216,7 +2295,7 @@ def cockpit_batch_start():
 
 @app.route("/api/cockpit/batch/<batch_id>", methods=["GET"])
 def cockpit_batch_status(batch_id):
-    if not _auth_ok():
+    if not _cockpit_auth_ok():
         return jsonify({"error": "Unauthorized"}), 401
     if not _valid_session_id(batch_id):
         return jsonify({"error": "invalid batch id"}), 400
@@ -2228,7 +2307,7 @@ def cockpit_batch_status(batch_id):
 
 @app.route("/api/cockpit/call/<call_id>", methods=["GET"])
 def cockpit_call_detail(call_id):
-    if not _auth_ok():
+    if not _cockpit_auth_ok():
         return jsonify({"error": "Unauthorized"}), 401
     try:
         c = _fetch_call_cached(call_id)
@@ -2241,7 +2320,7 @@ def cockpit_call_detail(call_id):
 
 @app.route("/api/cockpit/batch/<batch_id>/stop", methods=["POST"])
 def cockpit_batch_stop(batch_id):
-    if not _auth_ok():
+    if not _cockpit_auth_ok():
         return jsonify({"error": "Unauthorized"}), 401
     if not _valid_session_id(batch_id):
         return jsonify({"error": "invalid batch id"}), 400
@@ -2255,7 +2334,7 @@ def cockpit_batch_stop(batch_id):
 
 @app.route("/api/cockpit/batch/<batch_id>/resume", methods=["POST"])
 def cockpit_batch_resume(batch_id):
-    if not _auth_ok():
+    if not _cockpit_auth_ok():
         return jsonify({"error": "Unauthorized"}), 401
     if not _valid_session_id(batch_id):
         return jsonify({"error": "invalid batch id"}), 400
@@ -2278,7 +2357,7 @@ def voice_sessions_page():
 def cockpit_sessions():
     """Durable session history for the history + trends views. Reads the Voice
     Sessions Notion DB, oldest-first (so the trends chart plots left→right)."""
-    if not _auth_ok():
+    if not _cockpit_auth_ok():
         return jsonify({"error": "Unauthorized"}), 401
     try:
         key = os.environ.get("NOTION_API_KEY", "").strip()

@@ -77,6 +77,16 @@ svg text{font-family:'Inter',sans-serif}
   <div id="history"></div>
 </div>
 
+<div class="overlay" id="loginOverlay">
+  <div class="modal" style="max-width:340px;text-align:center">
+    <div style="font-weight:600;font-size:16px;margin-bottom:4px">🔒 Cockpit-Login</div>
+    <div class="sub" style="margin-bottom:16px">Bitte Passwort eingeben</div>
+    <input id="pw" type="password" placeholder="Passwort" autocomplete="current-password" style="margin-bottom:12px" onkeydown="if(event.key==='Enter')app.login()">
+    <button class="btn-ghost" style="width:100%;background:var(--green);color:#04130c;border:none" onclick="app.login()">Login</button>
+    <div id="loginErr" class="sub" style="color:#fca5a5;margin-top:10px;min-height:16px"></div>
+  </div>
+</div>
+
 <div class="overlay" id="overlay" onclick="if(event.target===this)app.close()">
   <div class="modal">
     <span class="x" onclick="app.close()">×</span>
@@ -111,8 +121,15 @@ const app = {
   _hdr(){ return this.apiKey ? {"X-API-Key":this.apiKey} : {}; },
   toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.className="show"; setTimeout(()=>t.className="",2600); },
 
+  async checkAuth(){ try{ const r=await fetch("/api/cockpit/auth",{headers:this._hdr()}); return (await r.json()).authed; }catch(e){ return false; } },
+  async login(){
+    const pw=document.getElementById("pw").value, el=document.getElementById("loginErr"); el.textContent="";
+    let r; try{ r=await fetch("/api/cockpit/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})});}catch(e){el.textContent="Netzwerkfehler";return;}
+    if(r.ok){ document.getElementById("loginOverlay").classList.remove("show"); this.load(); }
+    else { el.textContent="Falsches Passwort"; document.getElementById("pw").value=""; }
+  },
   async load(){
-    document.getElementById("backLink").href = "/voice/cockpit?key=" + encodeURIComponent(this.apiKey);
+    document.getElementById("backLink").href = "/voice/cockpit";
     let r; try{ r=await fetch("/api/cockpit/sessions",{headers:this._hdr()});}catch(e){return this.toast("Netzwerkfehler");}
     if(r.status===401)return this.toast("Kein/ungültiger API-Key (?key=…)");
     const d=await r.json();
@@ -212,7 +229,10 @@ const app = {
   },
   close(){ document.getElementById("overlay").classList.remove("show"); },
 };
-app.load();
+(async ()=>{
+  if(app.apiKey || await app.checkAuth()){ app.load(); }
+  else { document.getElementById("loginOverlay").classList.add("show"); document.getElementById("pw").focus(); }
+})();
 </script>
 </body>
 </html>
