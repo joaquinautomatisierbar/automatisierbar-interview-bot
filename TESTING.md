@@ -158,3 +158,122 @@ Wenn alles ✅: Engineer-Branch `feature/aut-37-validation-textbox-fix` lokal in
 `main` mergen → `git push origin main` → Render deployt automatisch in 2-3 Min.
 
 Wenn ein Punkt ✗: Issue auf QA zurückreichen mit `TEST_FAIL: <welcher Check>`.
+
+---
+
+# Testing — AUT-156 — Interviewer Selector + Re-evaluate Button
+
+INTERNAL change to the Interview-Bot at `automatisierbar-interview-bot.onrender.com`.
+Zwei unabhängige Änderungen. **Beide testen**, bevor du den Merge auf `main` freigibst.
+
+**Branch:** `build/AUT-156-interviewer-selector-reevaluate`
+
+## Was du brauchst
+
+- Lokal das Repo auf der Branch `build/AUT-156-interviewer-selector-reevaluate`:
+  ```bash
+  git fetch && git checkout build/AUT-156-interviewer-selector-reevaluate
+  ```
+- `.env` mit `ANTHROPIC_API_KEY` und `NOTION_API_KEY` (bei Joaquin schon drin).
+- Python 3.11+ im Repo-`venv`.
+- Chrome mit DevTools.
+
+## Quick-Check — Server startet sauber (1 Min)
+
+```bash
+.venv/bin/python api.py
+```
+
+Erwartet: `Running on http://127.0.0.1:5001`. Keine Tracebacks.
+Server laufen lassen — alle weiteren Tests gegen `http://127.0.0.1:5001`.
+
+---
+
+## Change 1 — Interviewer Selector (3 Min)
+
+1. Öffne `http://127.0.0.1:5001/static/index.html`.
+2. Auf dem Start-Screen (Kontextfeld): Scroll runter, direkt **über dem "Weiter"-Button** sollte ein Label "Interviewer" mit 4 Buttons sein: **Joaquin · Nico · Tej · Patrik**.
+3. **Standardwert prüfen:** Joaquin ist grün/aktiv (anderer Hintergrund als die anderen drei).
+4. Klick auf **"Nico"** → Nico wird aktiv (grün), Joaquin verliert den aktiven Stil.
+5. Klick auf **"Tej"** → Tej aktiv, Nico inaktiv.
+6. Jetzt Interview starten: Schreib einen kurzen Kontext rein (z.B. "Treuhandbüro, Belegverarbeitung"), klick **"Weiter"**.
+7. Im Browser-DevTools-Tab "Network": Das `POST /api/session/start`-Request anklicken → **Payload** ansehen.
+8. **Erwartet:** `"interviewer": "Tej"` ist im Request-Body.
+
+Wenn die Buttons fehlen oder kein `interviewer`-Feld im POST → `TEST_FAIL: Change 1`.
+
+---
+
+## Change 2 — Re-evaluate Button (10 Min)
+
+### Voraussetzung
+
+Du brauchst eine Session, die bis zum **ROI-Screen** läuft (Balken "Heute" / "Mit Automatisierung"). Führe dafür ein kurzes Interview durch:
+1. Kontextfeld ausfüllen, "Weiter" klicken.
+2. 1-2 Fragerunden beantworten (kurze Antworten reichen).
+3. Prozess-Map ausfüllen (eine Zeile genügt).
+4. Warten bis der ROI-Screen erscheint.
+
+### Test A — Panel öffnen & schliessen
+
+5. Unter den "Offene Annahmen" (Assumptions-Liste) sollte ein Button **"Angaben korrigieren"** sichtbar sein.
+6. Klick darauf → ein Textbereich klappt auf (Label: "Was war falsch oder unvollständig?", Buttons: "Abbrechen" / "Neu auswerten →").
+7. Klick **"Abbrechen"** → Panel schließt sich wieder. Button "Angaben korrigieren" bleibt sichtbar.
+
+### Test B — Leeres Feld wird abgelehnt
+
+8. Klick wieder auf "Angaben korrigieren" → Panel öffnet.
+9. Lass das Textarea **leer** und klick **"Neu auswerten →"**.
+10. **Erwartet:** Das Textarea "wackelt" kurz (shake-Animation) oder es erscheint eine Fehlermeldung. Es wird **kein** API-Call abgeschickt (im Network-Tab: kein `/reevaluate`-Request).
+
+### Test C — Korrektur führt zu neuem Ergebnis
+
+11. Schreib eine konkrete Korrektur ins Textarea, z.B.:
+    `Der Trigger ist ein täglicher Cronjob um 08:00 Uhr, nicht manuell.`
+12. Klick **"Neu auswerten →"**.
+13. **Erwartet:**
+    - Button schaltet auf "Lädt…" (disabled, nicht nochmals klickbar).
+    - Nach ~10-20s: Entweder neue Fragen erscheinen (→ Fragen-Screen) **oder** der ROI-Screen aktualisiert sich mit neuen Annahmen.
+    - Kein `500`-Fehler in der Browser-Konsole.
+    - Im Terminal (`python api.py`): keine Tracebacks.
+
+### Test D — Loading Lock verhindert Doppelklick
+
+14. Warte nach Test C, bis "Lädt…" erscheint.
+15. Klick sofort nochmals auf den Button (er ist disabled — nichts passiert).
+16. **Erwartet:** Nur **ein einziger** `/reevaluate`-Request im Network-Tab. Kein doppelter Claude-API-Call.
+
+### Test E — Extra-Context wird ANGEHÄNGT, nicht überschrieben (Backend-Check)
+
+17. Führe **zweimal** eine Re-evaluate-Korrektur durch (Schritt 11-13 zweimal).
+18. Öffne die zugehörige Notion-Session-Seite (falls du Notion-Zugang hast):
+    - Im `extra_context`-Feld sollten **beide** `[RE-EVALUATE NOTE]: …`-Einträge stehen — nicht nur der letzte.
+19. Falls kein Notion-Zugang: Im Terminal prüfen, dass kein `TypeError` oder `extra_context overwrite`-Warning erscheint.
+
+---
+
+## Edge-Case — Reset beim "Nochmals starten"
+
+20. Nach dem ROI-Screen: Falls ein "Zurücksetzen"- oder Neu-Starten-Button vorhanden ist, diesen klicken.
+21. **Erwartet:** Der "Angaben korrigieren"-Button ist auf dem Start-Screen **nicht** sichtbar (er gehört nur zum ROI-Screen). Kein `reevaluate-panel` ist offen.
+
+---
+
+## Checkliste vor Merge auf `main`
+
+- [ ] Change 1: Pill-Selector erscheint korrekt auf dem Start-Screen.
+- [ ] Change 1: Standardwert "Joaquin" ist aktiv beim ersten Laden.
+- [ ] Change 1: Klick auf anderen Interviewer → aktiv-Stil wechselt korrekt.
+- [ ] Change 1: POST `/api/session/start` enthält `"interviewer": "<gewählter Name>"`.
+- [ ] Change 2: "Angaben korrigieren"-Button erscheint auf dem ROI-Screen.
+- [ ] Change 2: Leeres Textarea → kein API-Call (Shake oder Fehlermeldung).
+- [ ] Change 2: Korrektur mit Text → `/reevaluate`-Call läuft, kein 500.
+- [ ] Change 2: Button zeigt "Lädt…" während des Calls (loading state).
+- [ ] Change 2: Doppelklick während "Lädt…" schickt keinen zweiten Call ab.
+- [ ] Change 2: Nach dem Call kommt entweder neuer Fragen-Screen oder aktualisierter ROI-Screen.
+- [ ] Change 2: Kein Traceback im Terminal (`python api.py`).
+- [ ] Edge-Case: ROI-Screen reset — "Angaben korrigieren" nicht auf Start-Screen sichtbar.
+
+Wenn alles ✅: Branch `build/AUT-156-interviewer-selector-reevaluate` in `main` mergen → `git push origin main` → Render deployt automatisch.
+
+Wenn ein Punkt ✗: Issue auf QA zurückreichen mit `TEST_FAIL: <welcher Check>`.
