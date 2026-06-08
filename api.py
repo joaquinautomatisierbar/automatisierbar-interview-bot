@@ -2382,7 +2382,21 @@ def cockpit_batch_status(batch_id):
     session = _load_voice_session(batch_id)
     if not session or "cockpit" not in session:
         return jsonify({"error": "batch not found"}), 404
-    return jsonify(_batch_status(session))
+    status = _batch_status(session)
+    # The runner's finally wrote an in-flight snapshot (calls were still ringing →
+    # all-zero barometers). Re-write the durable summary (upsert) the moment every
+    # call has reached a terminal state, so history/trends reflect real outcomes.
+    ck = session.get("cockpit") or {}
+    if (status["status"] in ("done", "stopped", "error")
+            and status["aggregates"]["fired"] > 0
+            and not any(c.get("bucket") == "live" for c in status.get("calls", []))
+            and not ck.get("summary_finalized")):
+        _write_session_summary(batch_id)
+        fresh = _load_voice_session(batch_id)
+        if fresh and "cockpit" in fresh:
+            fresh["cockpit"]["summary_finalized"] = True
+            _save_voice_session(fresh)
+    return jsonify(status)
 
 
 @app.route("/api/cockpit/call/<call_id>", methods=["GET"])
