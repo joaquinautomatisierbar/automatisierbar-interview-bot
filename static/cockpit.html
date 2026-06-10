@@ -12,7 +12,7 @@
   --bg-card:rgba(255,255,255,0.04); --bg-card-hover:rgba(255,255,255,0.07);
   --border:rgba(255,255,255,0.08); --text:#EEF5F1; --text-muted:rgba(238,245,241,0.45);
   --text-dim:rgba(238,245,241,0.25);
-  --yellow:#EAB308; --orange:#F97316; --red:#EF4444; --grey:#6B7280; --blue:#38BDF8;
+  --yellow:#EAB308; --orange:#F97316; --red:#EF4444; --grey:#6B7280; --blue:#38BDF8; --purple:#A78BFA;
   --radius:10px; --radius-sm:6px; --ease:0.2s ease;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -45,7 +45,7 @@ button:disabled{opacity:0.4;cursor:not-allowed}
 .lg{display:flex;align-items:center;gap:7px;font-size:13px}
 .dot{width:11px;height:11px;border-radius:50%;flex:none}
 .c-hot{background:var(--green)} .c-followup{background:var(--yellow)} .c-cold{background:var(--orange)}
-.c-hangup{background:var(--red)} .c-noanswer{background:var(--grey)} .c-live{background:var(--blue)}
+.c-hangup{background:var(--red)} .c-noanswer{background:var(--grey)} .c-live{background:var(--blue)} .c-auswerten{background:var(--purple)}
 /* table */
 table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--border)}
@@ -118,6 +118,7 @@ tr.clk:hover td{background:var(--bg-card-hover)}
         <button class="btn-red hide" id="stopBtn" onclick="app.stop()">■ Stop</button>
         <button class="btn-ghost hide" id="resumeBtn" onclick="app.resume()">▶ Weiter</button>
         <a id="tunerLink" class="btn-ghost hide" style="text-decoration:none">Skript verbessern →</a>
+        <button class="btn-ghost" id="newSessionBtn" onclick="app.newSession()">＋ Neue Session</button>
       </span>
     </div>
     <div class="card" style="padding:6px 8px">
@@ -156,12 +157,13 @@ const BUCKETS = [
   ["cold","Cold","c-cold","var(--orange)"],
   ["hangup","Aufgelegt","c-hangup","var(--red)"],
   ["noanswer","Nicht erreicht","c-noanswer","var(--grey)"],
+  ["auswerten","Wird ausgewertet","c-auswerten","var(--purple)"],
   ["live","Läuft","c-live","var(--blue)"],
 ];
 const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const app = {
   apiKey: new URLSearchParams(location.search).get("key") || "",
-  batchId: new URLSearchParams(location.search).get("batch") || "",
+  batchId: new URLSearchParams(location.search).get("batch") || sessionStorage.getItem("cockpit_batch") || "",
   timer: null,
   _hdr(extra){ const h = this.apiKey ? {"X-API-Key":this.apiKey} : {}; return Object.assign(h, extra||{}); },
   toast(m, ok){ const t=document.getElementById("toast"); t.textContent=m; t.className="show"+(ok?" ok":""); setTimeout(()=>t.className="",2600); },
@@ -188,7 +190,8 @@ const app = {
     const d=await r.json();
     if(d.error){sb.disabled=false;sb.textContent="▶ Start";return this.toast(d.error);}
     this.batchId=d.batch_id;
-    history.replaceState(null,"",`?key=${encodeURIComponent(this.apiKey)}&batch=${d.batch_id}`);
+    sessionStorage.setItem("cockpit_batch", d.batch_id);   // survive cockpit↔sessions navigation
+    history.replaceState(null,"",(this.apiKey?`?key=${encodeURIComponent(this.apiKey)}&`:"?")+`batch=${d.batch_id}`);
     if(this.timer)clearInterval(this.timer);
     this.poll(); this.timer=setInterval(()=>this.poll(),4000);
   },
@@ -196,11 +199,12 @@ const app = {
   async poll(){
     if(!this.batchId)return;
     let r; try{ r=await fetch(`/api/cockpit/batch/${this.batchId}`,{headers:this._hdr()});}catch(e){return;}
+    if(r.status===404){ this._clearBatch(); return; }   // stale batch (worker restarted) → reset to start form
     if(!r.ok)return;
     const s=await r.json();
     this.render(s);
     const terminal = ["done","stopped","error"].includes(s.status) && !s.loading_eligible;
-    const liveCalls = (s.calls||[]).some(c=>c.bucket==="live");
+    const liveCalls = (s.calls||[]).some(c=>c.bucket==="live"||c.bucket==="auswerten");
     if(terminal && !liveCalls){ clearInterval(this.timer); this.timer=null; }
   },
 
@@ -235,8 +239,8 @@ const app = {
     tl.href=`/voice/tuner/${s.batch_id}?key=${encodeURIComponent(this.apiKey)}`;
     // table
     document.getElementById("tbody").innerHTML = s.calls.map(c=>{
-      const bk=BUCKETS.find(x=>x[0]===c.bucket)||BUCKETS[5];
-      const live=c.bucket==="live";
+      const bk=BUCKETS.find(x=>x[0]===c.bucket)||BUCKETS.find(x=>x[0]==="live");
+      const live=c.bucket==="live"||c.bucket==="auswerten";
       const dur=c.duration_s!=null?`${Math.floor(c.duration_s/60)}:${String(c.duration_s%60).padStart(2,"0")}`:"—";
       const statusTxt=c.error?"Fehler":({queued:"wartet",ringing:"klingelt","in-progress":"läuft",ended:"beendet"}[c.status]||c.status);
       return `<tr class="clk" data-cid="${esc(c.call_id||"")}" data-firma="${esc(c.firma||"")}" onclick="app.openCall(this)">
@@ -265,6 +269,16 @@ const app = {
     document.getElementById("modalTranscript").textContent = d.transcript || "(kein Transkript)";
   },
   closeModal(){ document.getElementById("overlay").classList.remove("show"); },
+
+  _clearBatch(){
+    if(this.timer){ clearInterval(this.timer); this.timer=null; }
+    this.batchId="";
+    sessionStorage.removeItem("cockpit_batch");
+    history.replaceState(null,"", this.apiKey?`?key=${encodeURIComponent(this.apiKey)}`:location.pathname);
+    document.getElementById("dash").classList.add("hide");
+    const sb=document.getElementById("startBtn"); sb.disabled=false; sb.textContent="▶ Start";
+  },
+  newSession(){ this._clearBatch(); window.scrollTo(0,0); try{ document.getElementById("nCalls").focus(); }catch(e){} },
 
   async checkAuth(){ try{ const r=await fetch("/api/cockpit/auth",{headers:this._hdr()}); return (await r.json()).authed; }catch(e){ return false; } },
   async login(){
