@@ -1612,6 +1612,10 @@ def voice_session_add_call(session_id):
         call["eval"] = cls
         _apply_classification_to_fired(session, call["lead_id"], cls)
         followup_booked = _book_followup_from_eval(session, call["lead_id"], cls)
+        # Write the extracted info back to the Lead-DB record (reached/interview flags,
+        # top problem, schmerzscore, payment, summary, + advance Pipeline Stage by
+        # outcome → which is also what the dedup filter reads).
+        _enrich_lead(call["lead_id"], cls)
         _save_voice_session(session)
         return jsonify({"ok": True, "count": len(session["calls"]),
                         "bucket": cls.get("bucket"), "followup_booked": followup_booked})
@@ -1885,8 +1889,50 @@ def _add_cockpit_spend(call_id: str, usd) -> None:
         app.logger.error("cockpit spend update failed: %s", e)
 
 
+_SPEND_CACHE = {"usd": None, "ts": 0.0}
+_SPEND_TTL = 60
+
+
+def _cockpit_spent_usd() -> float:
+    """Total USD spent on the campaign = sum of every Vapi call's cost. Vapi is the
+    source of truth — it survives Render restarts and counts calls the cockpit never
+    polled (the old file/Notion tracker undercounted ~15×). Cached ~60s so the 4s
+    poll + the runner's per-call budget check don't hammer the API."""
+    import time as _t
+    now = _t.time()
+    if _SPEND_CACHE["usd"] is not None and (now - _SPEND_CACHE["ts"]) < _SPEND_TTL:
+        return _SPEND_CACHE["usd"]
+    try:
+        import requests as _rq
+        key = os.environ.get("VAPI_API_KEY", "").strip()
+        if not key:
+            return _SPEND_CACHE["usd"] or 0.0
+        h = {"Authorization": f"Bearer {key}"}
+        params = {"limit": 1000}
+        total = 0.0
+        for _ in range(20):                       # cap 20 pages (~20k calls)
+            r = _rq.get("https://api.vapi.ai/call", headers=h, params=params, timeout=20)
+            r.raise_for_status()
+            calls = r.json()
+            if not isinstance(calls, list) or not calls:
+                break
+            for c in calls:
+                total += float(c.get("cost") or 0)
+            if len(calls) < 1000:
+                break
+            oldest = min((c.get("createdAt") for c in calls if c.get("createdAt")), default=None)
+            if not oldest:
+                break
+            params = {"limit": 1000, "createdAtLt": oldest}
+        _SPEND_CACHE["usd"], _SPEND_CACHE["ts"] = round(total, 4), now
+        return _SPEND_CACHE["usd"]
+    except Exception as e:
+        app.logger.error("_cockpit_spent_usd (Vapi) failed: %s", e)
+        return _SPEND_CACHE["usd"] or 0.0
+
+
 def _budget_remaining_chf() -> float:
-    return round(COLD_CALL_BUDGET_CHF - _cockpit_budget()["spent_usd"] * _USD_TO_CHF, 2)
+    return round(COLD_CALL_BUDGET_CHF - _cockpit_spent_usd() * _USD_TO_CHF, 2)
 
 
 # ---- eligibility (reuse Workflow D dry-run) + Notion mark-dialed -------------
@@ -2057,6 +2103,52 @@ def _mark_lead_dialed(lead_id: str) -> None:
         app.logger.error("_mark_lead_dialed failed (%s): %s", lead_id, e)
 
 
+# Pipeline-Stage advancement by call outcome (also the dedup "done" marker D reads).
+# followup → leave at "Problem Interview" (the booking handles the human callback;
+# Outreach Gemacht?=true already removes it from the auto-dial pool).
+_BUCKET_TO_STAGE = {"hot": "Workflow Interview", "cold": "OUT", "hangup": "OUT"}
+
+
+def _enrich_lead(lead_id: str, cls: dict, call_start: str = None) -> None:
+    """Best-effort post-call write-back to the Lead-DB record from the transcript
+    evaluation: reached/interview flags, extracted problem/score, and the Pipeline
+    Stage by outcome (which doubles as the dedup 'done' marker). Non-fatal. Does NOT
+    touch Fit / Fit Score (separate workflow). Runs only for connected calls (a
+    transcript reached the handler)."""
+    if not lead_id:
+        return
+    try:
+        import requests as _rq
+        key = os.environ.get("NOTION_API_KEY", "").strip()
+        if not key:
+            return
+        h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
+             "Content-Type": "application/json"}
+        props = {
+            "Outreach Gemacht?": {"checkbox": True},                       # they picked up
+            "Interview Abgeschlossen": {"checkbox": bool(cls.get("interview_completed"))},
+            "Gesprächsdatum": {"date": {"start": call_start or _now_iso()}},
+        }
+        tp = str(cls.get("top_problem") or "").strip()
+        if tp:
+            props["Top Problem"] = {"rich_text": [{"text": {"content": tp[:1900]}}]}
+        sc = cls.get("schmerzscore")
+        if isinstance(sc, (int, float)):
+            props["Schmnerzscore (1-5)"] = {"number": sc}
+        if cls.get("payment_discussed") is True:
+            props["Zahlungsindikator"] = {"checkbox": True}
+        summ = str(cls.get("summary") or "").strip()
+        if summ:
+            props["Context"] = {"rich_text": [{"text": {"content": summ[:1900]}}]}
+        stage = _BUCKET_TO_STAGE.get(cls.get("bucket"))
+        if stage:
+            props["Pipeline Stage"] = {"status": {"name": stage}}
+        _rq.patch(f"https://api.notion.com/v1/pages/{lead_id}", headers=h,
+                  json={"properties": props}, timeout=20)
+    except Exception as e:
+        app.logger.error("_enrich_lead failed (%s): %s", lead_id, e)
+
+
 # ---- live call status + barometer bucketing ---------------------------------
 
 def _call_duration_s(c: dict):
@@ -2090,7 +2182,6 @@ def _fetch_call_cached(call_id: str) -> dict:
             except StopIteration:
                 pass
         _CALL_CACHE[call_id] = c
-        _add_cockpit_spend(call_id, c.get("cost"))
     return c
 
 

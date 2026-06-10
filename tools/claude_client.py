@@ -1215,7 +1215,9 @@ def classify_call_outcome(transcript: str, *, ended_reason: str = "",
     returns {bucket: 'cold', appointment_agreed: False, ...} — so a failure never
     invents a follow-up bucket or a booking."""
     safe = {"bucket": "cold", "appointment_agreed": False,
-            "appointment_day": "", "appointment_time": "", "summary": ""}
+            "appointment_day": "", "appointment_time": "", "summary": "",
+            "top_problem": "", "schmerzscore": None,
+            "interview_completed": False, "payment_discussed": False}
     transcript = (transcript or "").strip()
     if not transcript:
         return safe
@@ -1228,7 +1230,7 @@ def classify_call_outcome(transcript: str, *, ended_reason: str = "",
                 f"Dauer: {duration_s if duration_s is not None else '?'}s")
         msg = client.messages.create(
             model=model,
-            max_tokens=400,
+            max_tokens=600,
             system=system,
             messages=[{"role": "user", "content": f"{meta}\n\nTranskript:\n{transcript[:12000]}"}],
         )
@@ -1240,12 +1242,21 @@ def classify_call_outcome(transcript: str, *, ended_reason: str = "",
         bucket = str(d.get("bucket", "")).lower().strip()
         if bucket not in _VALID_CALL_BUCKETS:
             bucket = "cold"
+        try:
+            _sc = float(d.get("schmerzscore"))
+            score = int(round(_sc)) if 1 <= _sc <= 5 else None
+        except (TypeError, ValueError):
+            score = None
         return {
             "bucket": bucket,
             "appointment_agreed": d.get("appointment_agreed") is True,
             "appointment_day": str(d.get("appointment_day") or "")[:120],
             "appointment_time": str(d.get("appointment_time") or "")[:20],
             "summary": str(d.get("summary") or "")[:400],
+            "top_problem": str(d.get("top_problem") or "")[:300],
+            "schmerzscore": score,
+            "interview_completed": d.get("interview_completed") is True,
+            "payment_discussed": d.get("payment_discussed") is True,
         }
     except Exception:
         return safe
