@@ -21,11 +21,21 @@ APPOINTMENT:
 - appointment_day: der genannte Tag, wörtlich wie gesagt (z.B. "Dienstag", "nächste Woche Mittwoch", "morgen"). "" wenn keiner.
 - appointment_time: Uhrzeit in 24h falls genannt (z.B. "14:00"), sonst "".
 
+EXTRAKTION (für die Lead-Datenbank):
+- top_problem: Der grösste Zeitfresser / Schmerz, den der Kunde nennt — mit Quantifizierung wenn möglich (z.B. "E-Mails (~4h/Tag)"). "" wenn nichts genannt.
+- schmerzscore: 1-5 wenn der Kunde explizit eine Zahl nennt ODER klar aus dem Tonfall ableitbar (1=keine Belastung, 5=akut). null wenn nicht thematisiert.
+- interview_completed: true NUR wenn das vollständige Screening (die 3 Kernfragen: (1) was frisst am meisten Zeit, (2) wie mühsam 1-5, (3) wie viele Stunden/Woche) von Anfang bis Ende gestellt UND beantwortet wurde. false wenn das Gespräch vorher abbrach.
+- payment_discussed: true wenn Budget/Preis/Kosten/Bezahlung im Gespräch vorkamen.
+
 OUTPUT (strict JSON):
 {
   "bucket": "hot" | "followup" | "cold" | "hangup",
   "appointment_agreed": true | false,
   "appointment_day": "<Tag wie gesagt oder ''>",
   "appointment_time": "<HH:MM 24h oder ''>",
-  "summary": "<1-2 Sätze: was passierte und warum dieser Bucket>"
+  "summary": "<1-2 Sätze: was passierte und warum dieser Bucket>",
+  "top_problem": "<grösster Schmerz/Zeitfresser oder ''>",
+  "schmerzscore": <1-5 oder null>,
+  "interview_completed": true | false,
+  "payment_discussed": true | false
 }
