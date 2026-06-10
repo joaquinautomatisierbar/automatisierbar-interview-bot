@@ -1600,12 +1600,21 @@ def voice_session_add_call(session_id):
         session.setdefault("calls", []).append(call)
         # Adding a call invalidates any cached report.
         session["report"] = None
-        # If Lena booked a meeting on this call, fire Workflow F (calendar + team
-        # Telegram + Notion). Idempotent per lead; fire-and-forget.
-        followup_booked = _maybe_book_followup(session, call)
+        # Deliberate transcript-based evaluation drives BOTH the cockpit bucket and the
+        # follow-up booking — instead of trusting Vapi's live structuredData (which
+        # over-extracts interview_proposed/appointment on polite rejections).
+        from claude_client import classify_call_outcome
+        cls = classify_call_outcome(
+            transcript,
+            ended_reason=str(data.get("endedReason") or ""),
+            duration_s=data.get("duration_s"))
+        call["classified"] = cls.get("bucket")
+        call["eval"] = cls
+        _apply_classification_to_fired(session, call["lead_id"], cls)
+        followup_booked = _book_followup_from_eval(session, call["lead_id"], cls)
         _save_voice_session(session)
         return jsonify({"ok": True, "count": len(session["calls"]),
-                        "followup_booked": followup_booked})
+                        "bucket": cls.get("bucket"), "followup_booked": followup_booked})
     except Exception as e:
         app.logger.error("voice_session_add_call error: %s", e)
         return jsonify({"error": str(e)}), 500
@@ -1901,18 +1910,31 @@ def _fetch_eligible(max_calls: int, branche) -> list:
 
 # ---- follow-up booking (fire Workflow F when Lena books a meeting) -----------
 
-def _booking_availability(analysis: dict) -> str:
-    """Best concrete slot text for Workflow F's German-date parser. Prefers the
-    free-text callback_availability; falls back to appointment_day + time."""
-    avail = str((analysis or {}).get("callback_availability") or "").strip()
-    if avail:
-        return avail
-    day = str((analysis or {}).get("appointment_day") or "").strip()
-    tm = str((analysis or {}).get("appointment_time") or "").strip()
-    combined = (day + " " + tm).strip()
-    # Sentinel so Workflow F falls back to a tentative ≥2-day hold AND the team sees
-    # that no concrete slot was captured (rather than a blank availability line).
-    return combined or "(kein Slot genannt)"
+_CLASSIFYING: set = set()   # call_ids being classified by the poll fallback (process-local dedup)
+
+
+def _apply_classification_to_fired(session: dict, lead_id: str, cls: dict) -> None:
+    """Store the deliberate transcript classification on the matching cockpit fired
+    entry (by lead_id, the most recent still-unclassified one). No-op for non-cockpit
+    sessions; the barometer reads fired[i]['classified']."""
+    ck = session.get("cockpit")
+    if not ck:
+        return
+    lead_id = (lead_id or "").strip()
+    target = None
+    for f in (ck.get("fired") or []):
+        if (f.get("lead_id") or "").strip() == lead_id and not f.get("classified"):
+            target = f          # most recent unclassified match for this lead
+    if target is None:
+        for f in (ck.get("fired") or []):
+            if (f.get("lead_id") or "").strip() == lead_id:
+                target = f
+    if target is not None:
+        target["classified"] = cls.get("bucket")
+        target["appt"] = {"agreed": cls.get("appointment_agreed") is True,
+                          "day": cls.get("appointment_day") or "",
+                          "time": cls.get("appointment_time") or ""}
+        target["eval_summary"] = cls.get("summary") or ""
 
 
 def _fire_followup_booking(lead_id: str, availability: str, transcript_link: str = "") -> bool:
@@ -1935,29 +1957,76 @@ def _fire_followup_booking(lead_id: str, availability: str, transcript_link: str
         return False
 
 
-def _maybe_book_followup(session: dict, call: dict) -> bool:
-    """If a call's analysis says Lena booked a meeting (appointment_booked or
-    interview_accepted), trigger Workflow F once per lead per session, synchronously.
-    Returns True only when the booking was confirmed. Idempotent via
-    session['booked_followups'] (a lead is marked booked only on success)."""
-    analysis = call.get("analysis") or {}
-    if not (analysis.get("appointment_booked") is True
-            or analysis.get("interview_accepted") is True):
+def _book_followup_from_eval(session: dict, lead_id: str, cls: dict) -> bool:
+    """Book a follow-up ONLY when the deliberate transcript evaluation confirms a real
+    agreed appointment (cls['appointment_agreed']) — never off Vapi's raw live signal.
+    Synchronous + success-gated; idempotent per lead via session['booked_followups']."""
+    if cls.get("appointment_agreed") is not True:
         return False
-    lead_id = (call.get("lead_id") or "").strip()
+    lead_id = (lead_id or "").strip()
     if not lead_id:
         return False
     booked = session.setdefault("booked_followups", [])
     if lead_id in booked:
         return False
-    availability = _booking_availability(analysis)
-    # Fire SYNCHRONOUSLY and mark booked only on confirmed success, so a transient
-    # Workflow F failure is retried on the next end-of-call delivery rather than
-    # being permanently lost behind the idempotency guard.
+    availability = (str(cls.get("appointment_day") or "").strip() + " "
+                    + str(cls.get("appointment_time") or "").strip()).strip() or "(kein Slot genannt)"
     if _fire_followup_booking(lead_id, availability):
         booked.append(lead_id)
         return True
     return False
+
+
+def _call_ended_seconds_ago(c: dict):
+    e = c.get("endedAt")
+    if not e:
+        return None
+    try:
+        from datetime import datetime as _dt, timezone as _tz
+        de = _dt.fromisoformat(str(e).replace("Z", "+00:00"))
+        return (_dt.now(_tz.utc) - de).total_seconds()
+    except Exception:
+        return None
+
+
+def _classify_fired_async(batch_id: str, call_id: str, lead_id: str,
+                          transcript: str, ended_reason: str, dur) -> None:
+    """Fallback classification (when the E webhook never delivered the transcript):
+    classify from get_call's transcript, apply to the fired entry, gate booking,
+    persist. Process-local dedup via _CLASSIFYING (cleared in finally)."""
+    try:
+        from claude_client import classify_call_outcome
+        cls = classify_call_outcome(transcript, ended_reason=ended_reason, duration_s=dur)
+        session = _load_voice_session(batch_id)
+        if not session:
+            return
+        _apply_classification_to_fired(session, lead_id, cls)
+        _book_followup_from_eval(session, lead_id, cls)
+        _save_voice_session(session)
+    except Exception as e:
+        app.logger.error("fallback classify failed (%s): %s", call_id, e)
+    finally:
+        _CLASSIFYING.discard(call_id)
+
+
+def _maybe_spawn_fallback_classify(batch_id: str, f: dict, c: dict) -> None:
+    """If a connected call has been ended >25s with a transcript but the E-webhook
+    classification never arrived, classify it here so it doesn't sit on 'auswerten'."""
+    call_id = f.get("call_id")
+    if not call_id or f.get("classified") or call_id in _CLASSIFYING:
+        return
+    transcript = (c.get("transcript") or "").strip()
+    if not transcript:
+        return
+    secs = _call_ended_seconds_ago(c)
+    if secs is not None and secs < 25:
+        return                      # give the E webhook a head start
+    _CLASSIFYING.add(call_id)
+    _threading.Thread(
+        target=_classify_fired_async,
+        args=(batch_id, call_id, f.get("lead_id") or "", transcript,
+              str(c.get("endedReason") or ""), _call_duration_s(c)),
+        name=f"classify-{call_id[:8]}", daemon=True).start()
 
 
 def _mark_lead_dialed(lead_id: str) -> None:
@@ -2025,39 +2094,47 @@ def _fetch_call_cached(call_id: str) -> dict:
     return c
 
 
-def _bucket_call(c: dict) -> str:
-    """Map a fetched Vapi call → barometer bucket. 'live' until ended."""
+def _bucket_call(c: dict, f: dict = None) -> str:
+    """Barometer bucket for a fired call. The deliberate transcript classification
+    (f['classified']) is the source of truth for connected calls; Vapi flags are only
+    used to detect 'not reached' (no transcript to evaluate).
+      not ended              → live
+      place_call errored     → noanswer (not reached)
+      not connected / VM / NA→ noanswer (immediate; no transcript)
+      connected + classified → hot | followup | cold | hangup
+      connected, unclassified→ auswerten (evaluating)"""
+    f = f or {}
+    if f.get("error"):
+        return "noanswer"
     if str(c.get("status")) != "ended":
         return "live"
     sd = ((c.get("analysis") or {}).get("structuredData") or {})
     ended = str(c.get("endedReason") or "").lower()
-    interest = str(sd.get("interest_level") or "").lower()
     dur = _call_duration_s(c)
     connected = sd.get("connected")
     if connected is None:
         connected = bool(c.get("transcript")) and (dur is None or dur >= 8)
-    if sd.get("interview_accepted") or interest == "hot":
-        return "hot"          # green
-    if sd.get("interview_proposed"):
-        return "followup"     # yellow
     if (not connected) or "voicemail" in ended or "no-answer" in ended or "no_answer" in ended \
             or "did-not-answer" in ended:
-        return "noanswer"     # grey
-    if (dur is not None and dur < 20) and "customer" in ended:
-        return "hangup"       # red — immediate hang-up
-    return "cold"             # orange — engaged, no interest
+        return "noanswer"     # grey — not reached
+    classified = f.get("classified")
+    if classified in ("hot", "followup", "cold", "hangup"):
+        return classified     # the deliberate transcript evaluation
+    return "auswerten"        # purple — connected + ended, transcript not yet evaluated
 
 
 def _batch_status(session: dict) -> dict:
     ck = session.get("cockpit") or {}
     fired = ck.get("fired") or []
-    buckets = {"hot": 0, "followup": 0, "cold": 0, "hangup": 0, "noanswer": 0, "live": 0}
+    buckets = {"hot": 0, "followup": 0, "cold": 0, "hangup": 0, "noanswer": 0, "auswerten": 0, "live": 0}
     rows, total_cost, connected = [], 0.0, 0
     for f in fired:
         cid = f.get("call_id")
         c = _fetch_call_cached(cid) if cid else {}
         status = str(c.get("status") or ("error" if f.get("error") else "queued"))
-        bucket = _bucket_call(c) if c else "live"
+        bucket = _bucket_call(c, f)
+        if bucket == "auswerten":               # transcript ready but no classification yet → fallback
+            _maybe_spawn_fallback_classify(session.get("session_id"), f, c)
         buckets[bucket] = buckets.get(bucket, 0) + 1
         cost = float(c.get("cost") or 0)
         total_cost += cost
@@ -2072,7 +2149,7 @@ def _batch_status(session: dict) -> dict:
             "firma": f.get("firma"), "phone": f.get("phone"), "branche": f.get("branche"),
             "call_id": cid, "status": status, "bucket": bucket,
             "duration_s": _call_duration_s(c), "cost": round(cost, 4),
-            "outcome": sd.get("interest_level") or "", "error": f.get("error"),
+            "outcome": f.get("classified") or sd.get("interest_level") or "", "error": f.get("error"),
         })
     params = ck.get("params") or {}
     eligible_total = len(ck.get("eligible") or [])
@@ -2389,7 +2466,7 @@ def cockpit_batch_status(batch_id):
     ck = session.get("cockpit") or {}
     if (status["status"] in ("done", "stopped", "error")
             and status["aggregates"]["fired"] > 0
-            and not any(c.get("bucket") == "live" for c in status.get("calls", []))
+            and not any(c.get("bucket") in ("live", "auswerten") for c in status.get("calls", []))
             and not ck.get("summary_finalized")):
         _write_session_summary(batch_id)
         fresh = _load_voice_session(batch_id)

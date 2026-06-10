@@ -13,6 +13,7 @@ import anthropic
 
 MODEL = "claude-opus-4-7"       # reserved (not currently used at runtime — Render's 30s gunicorn timeout would kill it)
 MODEL_FAST = "claude-sonnet-4-6"  # used for all interactive endpoints (round eval, prompt, spec)
+MODEL_CLASSIFY = "claude-haiku-4-5-20251001"  # fast/cheap — cold-call outcome bucketing in the cockpit
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -1185,3 +1186,66 @@ def generate_linkedin_brief(signals: dict[str, Any], *, model: str = MODEL_FAST,
 
     # Unreachable but keep for safety.
     raise LinkedInBriefError(f"synthesis exhausted retries: {last_err}")
+
+
+# ---------------------------------------------------------------------------
+# Cold-Call Cockpit — deliberate transcript-based outcome classification.
+# Replaces trusting Vapi's live structuredData (which over-extracts
+# interview_proposed on polite rejections → wrong "followup" bucket + bogus booking).
+# ---------------------------------------------------------------------------
+
+_VALID_CALL_BUCKETS = ("hot", "followup", "cold", "hangup")
+
+
+def _load_call_classification_prompt() -> str:
+    path = _PROMPTS_DIR / "cockpit_call_classification.md"
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def classify_call_outcome(transcript: str, *, ended_reason: str = "",
+                          duration_s=None, model: str = MODEL_CLASSIFY) -> dict:
+    """Classify a finished cold call from its TRANSCRIPT into a cockpit barometer
+    bucket + extract any genuinely-agreed follow-up appointment. One fast Claude
+    (Haiku) call, strict JSON.
+
+    Returns: {bucket: 'hot'|'followup'|'cold'|'hangup', appointment_agreed: bool,
+              appointment_day: str, appointment_time: str, summary: str}
+
+    Fails SAFE: on empty transcript, missing prompt/key, or any parse/API error it
+    returns {bucket: 'cold', appointment_agreed: False, ...} — so a failure never
+    invents a follow-up bucket or a booking."""
+    safe = {"bucket": "cold", "appointment_agreed": False,
+            "appointment_day": "", "appointment_time": "", "summary": ""}
+    transcript = (transcript or "").strip()
+    if not transcript:
+        return safe
+    system = _load_call_classification_prompt()
+    if not system or not os.environ.get("ANTHROPIC_API_KEY"):
+        return safe
+    try:
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        meta = (f"endedReason: {ended_reason or 'unbekannt'} · "
+                f"Dauer: {duration_s if duration_s is not None else '?'}s")
+        msg = client.messages.create(
+            model=model,
+            max_tokens=400,
+            system=system,
+            messages=[{"role": "user", "content": f"{meta}\n\nTranskript:\n{transcript[:12000]}"}],
+        )
+        text = msg.content[0].text
+        m = re.search(r"\{[\s\S]*\}", text)
+        if not m:
+            return safe
+        d = json.loads(m.group())
+        bucket = str(d.get("bucket", "")).lower().strip()
+        if bucket not in _VALID_CALL_BUCKETS:
+            bucket = "cold"
+        return {
+            "bucket": bucket,
+            "appointment_agreed": d.get("appointment_agreed") is True,
+            "appointment_day": str(d.get("appointment_day") or "")[:120],
+            "appointment_time": str(d.get("appointment_time") or "")[:20],
+            "summary": str(d.get("summary") or "")[:400],
+        }
+    except Exception:
+        return safe
