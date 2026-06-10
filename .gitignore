@@ -13,3 +13,10 @@ n8n-skills/
 # paperclip orchestrator runtime artifacts
 tools/paperclip/.orchestrator-state.json
 tools/paperclip/.pipeline-events.log
+
+# transient scheduler lock — never commit
+.claude/scheduled_tasks.lock
+
+# Script-Tuner voice session store (customer-PII-adjacent transcripts — never commit)
+data/voice_sessions/*
+!data/voice_sessions/.gitkeep

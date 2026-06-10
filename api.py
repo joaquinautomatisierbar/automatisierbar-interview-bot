@@ -1064,6 +1064,15 @@ def delete_attachment(session_id, idx):
 
 # ---------------------------------------------------------------------------
 # LinkedIn Engagement Bot
+#
+# DELIBERATE FALLBACK — DO NOT DELETE. The live engagement path runs entirely
+# inside the n8n LinkedIn Engagement Bot (voice prompt embedded in a Code node).
+# These /api/linkedin/* endpoints are kept as a backup for when n8n cloud is
+# unavailable; they are smoke-tested but not on the production hot path. See
+# decisions/log.md (2026-05-02 "LinkedIn Engagement Bot: full n8n architecture,
+# Render endpoints kept as backup"). prompts/linkedin_voice.md is the canonical
+# prompt source for both this path and the n8n copy
+# (drift guard: tools/check_linkedin_prompt_sync.py).
 # ---------------------------------------------------------------------------
 
 @app.route("/api/linkedin/comments", methods=["POST"])
