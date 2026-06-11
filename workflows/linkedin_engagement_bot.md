@@ -1,3 +1,10 @@
+---
+autonomy-level: L2
+bike-method-phase: 2
+kpi-bucket: more-customers
+kpi-metric: time-per-engagement (target: <5min from post-paste to comment posted, vs. ~15min manual baseline) + leads-from-LinkedIn-engagement-per-month (track via Notion LinkedIn Activity DB outcome field)
+---
+
 # Workflow: LinkedIn Engagement Bot
 
 > **Architektur-Update (Phase 2)**: Der Bot läuft **vollständig in n8n** ohne Render-Abhängigkeit. Die Render-Endpoints unter `/api/linkedin/*` existieren noch (Phase-1-Smoke-Tests, optional als Backup), werden aber vom Telegram-Bot nicht benutzt. Voice-Prompt ist im n8n-Code-Node embedded; Repo-Datei [`prompts/linkedin_voice.md`](../prompts/linkedin_voice.md) bleibt Master-Quelle für Reviews.

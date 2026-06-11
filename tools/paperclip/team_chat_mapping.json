@@ -1,0 +1,26 @@
+{
+  "7971390512": {
+    "name": "Joaquin",
+    "chat_id": "7971390512",
+    "issue_id": "0ca0cbc0-805c-4ff1-b746-ec5bfbf4c357",
+    "identifier": "AUT-25"
+  },
+  "5825500432": {
+    "name": "Patrik",
+    "chat_id": "5825500432",
+    "issue_id": "e69499ae-62c1-4249-84a9-e20c21627f52",
+    "identifier": "AUT-26"
+  },
+  "8669629745": {
+    "name": "Nicolas",
+    "chat_id": "8669629745",
+    "issue_id": "560db3c9-d0ea-4e82-95b0-871f40c21923",
+    "identifier": "AUT-27"
+  },
+  "7591546669": {
+    "name": "Tej",
+    "chat_id": "7591546669",
+    "issue_id": "20f91674-a89d-4785-9365-0e4f37e9924b",
+    "identifier": "AUT-28"
+  }
+}

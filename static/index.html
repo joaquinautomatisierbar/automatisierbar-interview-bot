@@ -1023,6 +1023,16 @@ body.with-sidebar { padding-right: 320px; }
       </div>
     </div>
 
+    <!-- Build-Pipeline Dispatch — manual confirmation before sending to the autonomous build team -->
+    <div id="dispatch-section" style="margin-top:18px;padding:16px;background:rgba(21,200,122,0.06);border:1px solid rgba(21,200,122,0.25);border-radius:10px;display:none;">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;">🤖 An das Build-Team senden</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;">
+        Schickt diesen Prompt direkt an das autonome Build-Pipeline-Team in paperclip. CTO plant, Engineer baut, QA testet, Product Engineer reviewed gegen Customer-Intent, Release Engineer ship't. Du kriegst eine Telegram-Nachricht wenn die Automation produktionsbereit ist.
+      </div>
+      <button id="dispatch-btn" class="btn btn-primary" onclick="App.dispatchBuild()" style="font-size:13px;padding:10px 20px;width:100%;">An Build-Team senden →</button>
+      <div id="dispatch-status" style="margin-top:10px;font-size:12px;line-height:1.5;display:none;"></div>
+    </div>
+
     <!-- Actions -->
     <div class="roi-actions">
       <a id="pdf-btn" href="#" class="btn btn-ghost" target="_blank" style="font-size:13px;">PDF herunterladen ↓</a>
@@ -1795,6 +1805,15 @@ const App = {
 
     this.showScreen("screen-roi");
 
+    // Auto-load the Claude Code prompt in the background so the "An Build-Team senden"
+    // CTA reveals itself without requiring the user to expand the prompt panel first.
+    if (!this.promptText) {
+      this.loadPrompt().catch(() => {});
+    } else {
+      const ds = document.getElementById("dispatch-section");
+      if (ds) ds.style.display = "block";
+    }
+
     requestAnimationFrame(() => {
       const MAX = Math.min(window.innerHeight * 0.28, 160);
       const nowEl = document.getElementById("bar-now");
@@ -1870,6 +1889,9 @@ const App = {
       pre.textContent = this.promptText;
       pre.style.display = "block";
       document.getElementById("prompt-copy").style.display = "flex";
+      // Prompt is ready → reveal the "An Build-Team senden" CTA
+      const ds = document.getElementById("dispatch-section");
+      if (ds) ds.style.display = "block";
     } catch (e) {
       const ld = document.getElementById("prompt-loading");
       ld.classList.add("error");
@@ -1882,6 +1904,55 @@ const App = {
     navigator.clipboard.writeText(this.promptText)
       .then(() => this.showToast("Prompt kopiert!", "success"))
       .catch(() => this.showToast("Kopieren fehlgeschlagen."));
+  },
+
+  async dispatchBuild() {
+    const btn = document.getElementById("dispatch-btn");
+    const statusEl = document.getElementById("dispatch-status");
+    if (!btn || !statusEl) return;
+    if (!this.sessionId) {
+      statusEl.style.display = "block";
+      statusEl.style.color = "#EF4444";
+      statusEl.textContent = "Keine Session-ID — bitte Seite neu laden.";
+      return;
+    }
+    btn.disabled = true;
+    const origLabel = btn.textContent;
+    btn.textContent = "Wird gesendet…";
+    statusEl.style.display = "none";
+    try {
+      const r = await fetch(`/api/session/${this.sessionId}/dispatch_build`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const msg = d.error || `Fehler ${r.status}`;
+        statusEl.style.display = "block";
+        statusEl.style.color = "#EF4444";
+        statusEl.textContent = `❌ ${msg}` + (d.detail ? `\n${d.detail}` : "");
+        btn.disabled = false;
+        btn.textContent = origLabel;
+        return;
+      }
+      const issueRef = d.build_issue_identifier || d.build_issue_id || "?";
+      statusEl.style.display = "block";
+      statusEl.style.color = "#15C87A";
+      if (d.status === "already_dispatched") {
+        statusEl.innerHTML = `✓ Bereits gesendet (${issueRef}) — am ${new Date(d.dispatched_at).toLocaleString("de-CH")}`;
+      } else {
+        statusEl.innerHTML = `✓ An Build-Team gesendet — Issue <strong>${issueRef}</strong>${d.interviewer ? `, du kriegst die Telegram-Notif (Interviewer: ${d.interviewer})` : ""}.`;
+      }
+      btn.textContent = "✓ Gesendet";
+      btn.style.opacity = "0.7";
+    } catch (e) {
+      statusEl.style.display = "block";
+      statusEl.style.color = "#EF4444";
+      statusEl.textContent = `❌ Netzwerkfehler: ${e.message}`;
+      btn.disabled = false;
+      btn.textContent = origLabel;
+    }
   },
 
   // ── Resume ─────────────────────────────────────────────────────

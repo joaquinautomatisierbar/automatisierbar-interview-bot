@@ -36,9 +36,9 @@ def extract_from_path(pdf_path: str) -> str:
     return "\n\n".join(pages)
 
 
-def extract_from_base64(b64: str) -> str:
+def extract_from_base64(b64: str, suffix: str = ".pdf") -> str:
     raw = base64.b64decode(b64)
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(raw)
         tmp_path = tmp.name
     try:
@@ -48,17 +48,25 @@ def extract_from_base64(b64: str) -> str:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("ERROR: provide a file path or --base64 <data>", file=sys.stderr)
+    args = sys.argv[1:]
+    suffix = ".pdf"
+    if "--format" in args:
+        i = args.index("--format")
+        fmt = args[i + 1].lstrip(".")
+        suffix = f".{fmt}"
+        del args[i:i + 2]
+
+    if not args:
+        print("ERROR: provide a file path or --base64 <data> [--format epub|pdf|mobi]", file=sys.stderr)
         sys.exit(1)
 
-    if sys.argv[1] == "--base64":
-        if len(sys.argv) < 3:
+    if args[0] == "--base64":
+        if len(args) < 2:
             print("ERROR: --base64 requires a data argument", file=sys.stderr)
             sys.exit(1)
-        text = extract_from_base64(sys.argv[2])
+        text = extract_from_base64(args[1], suffix=suffix)
     else:
-        path = sys.argv[1]
+        path = args[0]
         if not Path(path).exists():
             print(f"ERROR: file not found: {path}", file=sys.stderr)
             sys.exit(1)

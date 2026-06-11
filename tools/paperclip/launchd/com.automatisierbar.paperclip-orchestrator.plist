@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.automatisierbar.paperclip-orchestrator</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/sexyjoaquin/.nvm/versions/node/v24.15.0/bin/node</string>
+    <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview/tools/paperclip/orchestrator.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+    <key>NetworkState</key>
+    <true/>
+  </dict>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/sexyjoaquin/.paperclip/logs/orchestrator.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/sexyjoaquin/.paperclip/logs/orchestrator.err</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/sexyjoaquin/.nvm/versions/node/v24.15.0/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>/Users/sexyjoaquin</string>
+  </dict>
+</dict>
+</plist>
