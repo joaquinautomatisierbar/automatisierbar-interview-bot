@@ -15,6 +15,7 @@ WICHTIGE REGELN:
 - "followup" NUR bei echtem weichem Ja (Kunde will Kontakt in der Zukunft).
 - Ein im Gespräch ERWÄHNTER, aber vom Kunden ABGELEHNTER Termin ist KEIN vereinbarter Termin → appointment_agreed=false.
 - Im Zweifel zwischen followup und cold: wenn der Kunde keinen echten Zukunfts-Kontakt zugesagt hat, wähle COLD.
+- COLD vs HANGUP: Wenn die Person sich zuerst auf das Gespräch eingelassen hat (auf Fragen geantwortet, etwas erzählt, mitdiskutiert) und ERST DANN das Interesse verliert, genervt ist oder auflegt → das ist COLD, NICHT hangup. "hangup" gilt NUR, wenn von Anfang an gar kein inhaltliches Gespräch zustande kam (Sofort-Ablehnung direkt nach dem Opener, keine einzige inhaltliche Antwort).
 
 APPOINTMENT:
 - appointment_agreed: true NUR wenn ein konkreter Folge-Zeitpunkt vereinbart wurde (mindestens ein Tag genannt und vom Kunden bestätigt). Sonst false.
