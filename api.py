@@ -2191,7 +2191,8 @@ def _run_cockpit_batch(batch_id: str) -> None:
                     number=lead.get("phone"), session_id=batch_id, lead_id=lead.get("lead_id", ""),
                     firma=lead.get("firma", ""), branche=lead.get("branche", ""),
                     kontakt_nachname=lead.get("kontakt_nachname", ""),
-                    disclosure_line=lead.get("disclosure_line", ""))
+                    disclosure_line=lead.get("disclosure_line", ""),
+                    context=lead.get("context", ""))
                 entry["call_id"] = call.get("id")
             except Exception as e:
                 entry["error"] = str(e)[:300]
@@ -2261,6 +2262,11 @@ def voice_cockpit_page():
     return send_from_directory("static", "cockpit.html")
 
 
+@app.route("/voice/overview", methods=["GET"])
+def voice_overview_page():
+    return send_from_directory("static", "overview.html")
+
+
 @app.route("/api/cockpit/login", methods=["POST"])
 def cockpit_login():
     data = request.get_json(silent=True) or {}
@@ -2280,6 +2286,17 @@ def cockpit_logout():
 @app.route("/api/cockpit/auth", methods=["GET"])
 def cockpit_auth_status():
     return jsonify({"authed": _cockpit_auth_ok()})
+
+
+@app.route("/api/cockpit/budget", methods=["GET"])
+def cockpit_budget_status():
+    """Read-only budget snapshot for the always-visible sidebar gauge.
+    Reuses _budget_remaining_chf() so spent/cap/remaining stay consistent."""
+    if not _cockpit_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    remaining = _budget_remaining_chf()
+    spent = round(max(0.0, COLD_CALL_BUDGET_CHF - remaining), 2)
+    return jsonify({"spent_chf": spent, "cap_chf": COLD_CALL_BUDGET_CHF, "remaining_chf": remaining})
 
 
 @app.route("/api/cockpit/preview", methods=["POST"])
