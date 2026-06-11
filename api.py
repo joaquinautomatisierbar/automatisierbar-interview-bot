@@ -2048,6 +2048,7 @@ def _classify_fired_async(batch_id: str, call_id: str, lead_id: str,
             return
         _apply_classification_to_fired(session, lead_id, cls)
         _book_followup_from_eval(session, lead_id, cls)
+        _enrich_lead(lead_id, cls)   # write-back here too (not just via E) so it's not single-point-of-failure
         _save_voice_session(session)
     except Exception as e:
         app.logger.error("fallback classify failed (%s): %s", call_id, e)
