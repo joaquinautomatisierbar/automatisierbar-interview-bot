@@ -2334,6 +2334,45 @@ def _write_session_summary(batch_id: str) -> None:
             "Disclose Ratio": {"number": float(params.get("disclose_ratio") or 0)},
             "Batch ID": {"rich_text": [{"text": {"content": batch_id}}]},
         }
+        # --- Beta->V1 gate metrics: per-call quality aggregates (call_metrics) ---
+        try:
+            import call_metrics as _cmx
+            import statistics as _stt
+            healths, p95s = [], []
+            hc = {"agent_fault": 0, "lead_choice": 0, "no_contact": 0}
+            g_bad = g_tot = survived = screened = booked_n = scored = 0
+            for f in (ck.get("fired") or []):
+                cid = f.get("call_id")
+                if not cid:
+                    continue
+                c = _fetch_call_cached(cid)
+                if not c:
+                    continue
+                sc = _cmx.score_call(c)
+                scored += 1
+                if sc["health"] is not None:
+                    healths.append(sc["health"])
+                if sc["lat_p95"] is not None:
+                    p95s.append(sc["lat_p95"])
+                hc[sc["hangup_cause"]] = hc.get(sc["hangup_cause"], 0) + 1
+                g_bad += sc["stt_garbled"]; g_tot += sc["stt_total"]
+                survived += 1 if sc["opener_survived"] else 0
+                screened += 1 if sc["screening_completed"] else 0
+                booked_n += 1 if sc["booked"] else 0
+            reached = scored - hc.get("no_contact", 0)
+            conf = "high" if connected >= 30 else ("mid" if connected >= 10 else "low")
+            props.update({
+                "Median Health": {"number": round(_stt.median(healths), 1) if healths else None},
+                "p95 Latenz s": {"number": round(_stt.median(p95s), 2) if p95s else None},
+                "STT-Fehlerrate": {"number": round(g_bad / g_tot, 3) if g_tot else None},
+                "Agent-Fault Hangup Rate": {"number": round(hc.get("agent_fault", 0) / reached, 3) if reached else None},
+                "Sample Confidence": {"select": {"name": conf}},
+                "Opener-Survival Rate": {"number": round(survived / connected, 3) if connected else None},
+                "Screening-Complete Rate": {"number": round(screened / connected, 3) if connected else None},
+                "Booking Rate": {"number": round(booked_n / connected, 3) if connected else None},
+            })
+        except Exception as _qe:
+            app.logger.error("session quality aggregates failed (%s): %s", batch_id, _qe)
         import requests as _rq
         h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
              "Content-Type": "application/json"}
