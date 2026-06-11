@@ -163,6 +163,23 @@ svg text{font-family:'Inter',sans-serif}
 .hbar .track .f{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--green-dark),var(--green));transition:width .5s ease}
 .hbar .val{font-size:12.5px;color:var(--text-muted);text-align:right;font-variant-numeric:tabular-nums}
 
+/* ---------- Heatmap (Beste Anrufzeit) ---------- */
+.heatmap{display:grid;grid-template-columns:34px repeat(24,1fr);gap:3px;align-items:center}
+.hm-corner{}
+.hm-hd{font-size:9px;color:var(--text-dim);text-align:center}
+.hm-day{font-size:10.5px;color:var(--text-muted);font-weight:600}
+.hm-cell{aspect-ratio:1;min-height:13px;border-radius:3px;background:var(--surface-2);transition:var(--ease)}
+.hm-cell[data-tip]{cursor:default}
+.hm-cell[data-tip]:hover{outline:1.5px solid var(--text);outline-offset:-1px}
+.hm-scale{display:flex;align-items:center;gap:7px;margin-top:14px;font-size:11px;color:var(--text-dim)}
+.hm-scale .grad{height:9px;width:120px;border-radius:5px;background:linear-gradient(90deg,var(--surface-2),var(--green))}
+
+/* ---------- Schmerzscore histogram ---------- */
+.sz-wrap{display:flex;align-items:flex-end;gap:16px;height:140px;padding:0 12px}
+.sz-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:7px}
+.sz-bar{width:100%;max-width:48px;background:linear-gradient(180deg,var(--green),var(--green-dark));border-radius:6px 6px 0 0;min-height:3px;transition:height .45s ease}
+.sz-lbl{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+
 /* ---------- Barometer ---------- */
 .baro-bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#0d1714;gap:1px}
 .baro-seg{height:100%;transition:width .45s ease}

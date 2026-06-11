@@ -1393,7 +1393,8 @@ def voice_session_add_call(session_id):
             duration_s=data.get("duration_s"))
         call["classified"] = cls.get("bucket")
         call["eval"] = cls
-        _apply_classification_to_fired(session, call["lead_id"], cls)
+        _apply_classification_to_fired(session, call["lead_id"], cls,
+                                       call_id=str(data.get("call_id") or "")[:128])
         followup_booked = _book_followup_from_eval(session, call["lead_id"], cls)
         # Write the extracted info back to the Lead-DB record (reached/interview flags,
         # top problem, schmerzscore, payment, summary, + advance Pipeline Stage by
@@ -1590,6 +1591,9 @@ WORKFLOW_F_WEBHOOK_SECRET = os.environ.get("WORKFLOW_F_WEBHOOK_SECRET", "ab-foll
 # by the same integration NOTION_API_KEY uses, so writes are guaranteed.
 VOICE_SESSIONS_DB_ID = os.environ.get(
     "VOICE_SESSIONS_DB_ID", "377bebb0-c2f9-8109-ad8b-c6aab96640dd")
+# Phase 4 — durable per-call store (one row per fired call) feeding the Analyse page.
+VOICE_CALLS_DB_ID = os.environ.get(
+    "VOICE_CALLS_DB_ID", "37cbebb0-c2f9-818b-8c77-d635fbfd61cc")
 CHANGELOG_PATH = _Path(__file__).resolve().parent / "prompts" / "voice_agent_changelog.md"
 
 # Process-local cache of ENDED Vapi calls so status polls don't re-fetch finished calls.
@@ -1741,29 +1745,69 @@ def _fetch_eligible(max_calls: int, branche) -> list:
 
 _CLASSIFYING: set = set()   # call_ids being classified by the poll fallback (process-local dedup)
 
+# Per-session write locks: serialize the load->modify->save cycle so concurrent
+# fallback-classify threads (and the runner appending fired entries) can't stomp each
+# other's writes. _save_voice_session is atomic per-write but NOT serialized, so two
+# threads that each load → change one row → save will silently lose one update.
+_SESSION_LOCKS: dict = {}
+_SESSION_LOCKS_GUARD = _threading.Lock()
 
-def _apply_classification_to_fired(session: dict, lead_id: str, cls: dict) -> None:
+
+def _session_lock(batch_id: str):
+    """Return the (lazily created) write lock for one session/batch."""
+    with _SESSION_LOCKS_GUARD:
+        lk = _SESSION_LOCKS.get(batch_id)
+        if lk is None:
+            lk = _threading.Lock()
+            _SESSION_LOCKS[batch_id] = lk
+        return lk
+
+
+def _apply_classification_to_fired(session: dict, lead_id: str, cls: dict,
+                                   call_id: str = None) -> None:
     """Store the deliberate transcript classification on the matching cockpit fired
-    entry (by lead_id, the most recent still-unclassified one). No-op for non-cockpit
-    sessions; the barometer reads fired[i]['classified']."""
+    entry. Matches by call_id FIRST (unique per call) and only falls back to lead_id
+    (most recent still-unclassified, else any) so the live poll path — which always
+    knows the exact call_id — can never mis-assign to a same-lead re-dial or silently
+    drop on an empty lead_id. No-op for non-cockpit sessions; the barometer reads
+    fired[i]['classified']."""
     ck = session.get("cockpit")
     if not ck:
         return
+    fired = ck.get("fired") or []
     lead_id = (lead_id or "").strip()
+    call_id = (call_id or "").strip()
     target = None
-    for f in (ck.get("fired") or []):
-        if (f.get("lead_id") or "").strip() == lead_id and not f.get("classified"):
-            target = f          # most recent unclassified match for this lead
-    if target is None:
-        for f in (ck.get("fired") or []):
-            if (f.get("lead_id") or "").strip() == lead_id:
+    # 1) exact, unique match on call_id (the reliable key)
+    if call_id:
+        for f in fired:
+            if (f.get("call_id") or "").strip() == call_id:
                 target = f
-    if target is not None:
-        target["classified"] = cls.get("bucket")
-        target["appt"] = {"agreed": cls.get("appointment_agreed") is True,
-                          "day": cls.get("appointment_day") or "",
-                          "time": cls.get("appointment_time") or ""}
-        target["eval_summary"] = cls.get("summary") or ""
+                break
+    # 2) fall back to lead_id (most recent unclassified for this lead, else any)
+    if target is None and lead_id:
+        for f in fired:
+            if (f.get("lead_id") or "").strip() == lead_id and not f.get("classified"):
+                target = f          # most recent unclassified match for this lead
+        if target is None:
+            for f in fired:
+                if (f.get("lead_id") or "").strip() == lead_id:
+                    target = f
+    if target is None:
+        app.logger.warning(
+            "transcript classification UNASSIGNED — no fired row for call_id=%r lead_id=%r (bucket=%r)",
+            call_id, lead_id, cls.get("bucket"))
+        return
+    target["classified"] = cls.get("bucket")
+    target["appt"] = {"agreed": cls.get("appointment_agreed") is True,
+                      "day": cls.get("appointment_day") or "",
+                      "time": cls.get("appointment_time") or ""}
+    target["eval_summary"] = cls.get("summary") or ""
+    # also persist the rich eval fields for the durable Voice Calls store
+    target["top_problem"] = cls.get("top_problem") or ""
+    target["schmerzscore"] = cls.get("schmerzscore")
+    target["payment"] = cls.get("payment_discussed") is True
+    target["interview_completed"] = cls.get("interview_completed") is True
 
 
 def _fire_followup_booking(lead_id: str, availability: str, transcript_link: str = "") -> bool:
@@ -1821,18 +1865,23 @@ def _call_ended_seconds_ago(c: dict):
 def _classify_fired_async(batch_id: str, call_id: str, lead_id: str,
                           transcript: str, ended_reason: str, dur) -> None:
     """Fallback classification (when the E webhook never delivered the transcript):
-    classify from get_call's transcript, apply to the fired entry, gate booking,
-    persist. Process-local dedup via _CLASSIFYING (cleared in finally)."""
+    classify from get_call's transcript, apply to the fired entry (matched by call_id —
+    the reliable key the poll path always knows), gate booking, persist. The Claude call
+    and Notion write-backs run OUTSIDE the per-session lock; only the load→apply→save of
+    the session file is serialized, so parallel fallback threads can't stomp each other.
+    Process-local dedup via _CLASSIFYING (cleared in finally)."""
     try:
         from claude_client import classify_call_outcome
         cls = classify_call_outcome(transcript, ended_reason=ended_reason, duration_s=dur)
-        session = _load_voice_session(batch_id)
-        if not session:
-            return
-        _apply_classification_to_fired(session, lead_id, cls)
-        _book_followup_from_eval(session, lead_id, cls)
-        _enrich_lead(lead_id, cls)   # write-back here too (not just via E) so it's not single-point-of-failure
-        _save_voice_session(session)
+        with _session_lock(batch_id):
+            session = _load_voice_session(batch_id)
+            if not session:
+                return
+            _apply_classification_to_fired(session, lead_id, cls, call_id=call_id)
+            _book_followup_from_eval(session, lead_id, cls)   # rare; no-op unless an appt was agreed
+            _save_voice_session(session)
+        _enrich_lead(lead_id, cls)   # Notion write-back (here too, not just via E, so it's not single-point-of-failure)
+        _sync_voice_calls(batch_id, only_call_id=call_id)   # durable per-call row, now final
     except Exception as e:
         app.logger.error("fallback classify failed (%s): %s", call_id, e)
     finally:
@@ -1857,6 +1906,29 @@ def _maybe_spawn_fallback_classify(batch_id: str, f: dict, c: dict) -> None:
         args=(batch_id, call_id, f.get("lead_id") or "", transcript,
               str(c.get("endedReason") or ""), _call_duration_s(c)),
         name=f"classify-{call_id[:8]}", daemon=True).start()
+
+
+def _sweep_unclassified(batch_id: str) -> None:
+    """Synchronous catch-up at batch end. The live fallback only fires while the
+    frontend polls _batch_status, so a call that ended after the operator closed the
+    cockpit would sit on 'auswerten' forever — never classified, never written to the
+    Voice Calls DB, never on the Analyse page. Classify any connected+ended fired call
+    that still has no classification, in-thread. Bounded by the fired list; one Haiku
+    call each. Reuses _classify_fired_async (which applies by call_id, enriches, syncs)."""
+    session = _load_voice_session(batch_id)
+    ck = (session or {}).get("cockpit") or {}
+    for f in (ck.get("fired") or []):
+        call_id = f.get("call_id")
+        if not call_id or f.get("classified") or call_id in _CLASSIFYING:
+            continue
+        c = _fetch_call_cached(call_id)
+        if _bucket_call(c, f) != "auswerten":
+            continue                      # only connected+ended-with-transcript stragglers
+        transcript = (c.get("transcript") or "").strip()
+        if not transcript:
+            continue
+        _classify_fired_async(batch_id, call_id, f.get("lead_id") or "", transcript,
+                              str(c.get("endedReason") or ""), _call_duration_s(c))
 
 
 def _mark_lead_dialed(lead_id: str) -> None:
@@ -2141,6 +2213,273 @@ def _write_session_summary(batch_id: str) -> None:
         app.logger.error("_write_session_summary failed (%s): %s", batch_id, e)
 
 
+# ---- Phase 4: durable per-call rows (Voice Calls DB) → Analyse page ----------
+
+def _write_voice_call_row(props: dict) -> None:
+    """Best-effort create of one Voice Calls row. Non-fatal; no-op without creds/DB."""
+    key = os.environ.get("NOTION_API_KEY", "").strip()
+    if not key or not VOICE_CALLS_DB_ID:
+        return
+    try:
+        import requests as _rq
+        h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
+             "Content-Type": "application/json"}
+        r = _rq.post("https://api.notion.com/v1/pages", headers=h,
+                     json={"parent": {"database_id": VOICE_CALLS_DB_ID}, "properties": props},
+                     timeout=20)
+        if not r.ok:
+            app.logger.error("voice call row create failed: %s %s", r.status_code, r.text[:200])
+    except Exception as e:
+        app.logger.error("_write_voice_call_row failed: %s", e)
+
+
+def _voice_call_props(f: dict, c: dict, bucket: str, ver: str, batch_id: str) -> dict:
+    """Build Notion props for one fired call (fired entry f + Vapi call c)."""
+    sd = ((c.get("analysis") or {}).get("structuredData") or {})
+    dur = _call_duration_s(c)
+    connected = sd.get("connected")
+    if connected is None:
+        connected = bool(c.get("transcript")) and (dur is None or dur >= 8)
+    when = c.get("startedAt") or f.get("fired_at") or _now_iso()
+    firma = str(f.get("firma") or "—")
+    props = {
+        "Call": {"title": [{"text": {"content": f"{firma} · {str(when)[:10]}"[:200]}}]},
+        "Date": {"date": {"start": str(when)}},
+        "Firma": {"rich_text": [{"text": {"content": firma[:200]}}]},
+        "Connected": {"checkbox": bool(connected)},
+        "Bucket": {"select": {"name": bucket}},
+    }
+    if f.get("call_id"):
+        props["Call ID"] = {"rich_text": [{"text": {"content": str(f["call_id"])[:200]}}]}
+    if f.get("lead_id"):
+        props["Lead ID"] = {"rich_text": [{"text": {"content": str(f["lead_id"])[:200]}}]}
+    if batch_id:
+        props["Batch ID"] = {"rich_text": [{"text": {"content": str(batch_id)[:200]}}]}
+    if f.get("branche"):
+        props["Branche"] = {"select": {"name": str(f["branche"])[:100]}}
+    if ver:
+        props["Script Version"] = {"select": {"name": str(ver)[:100]}}
+    if dur is not None:
+        props["Duration s"] = {"number": int(dur)}
+    cost = float(c.get("cost") or 0)
+    if cost:
+        props["Cost CHF"] = {"number": round(cost * _USD_TO_CHF, 4)}
+    tp = str(f.get("top_problem") or "").strip()
+    if tp:
+        props["Top Problem"] = {"rich_text": [{"text": {"content": tp[:1900]}}]}
+    sc = f.get("schmerzscore")
+    if isinstance(sc, (int, float)):
+        props["Schmerzscore"] = {"number": sc}
+    if f.get("payment"):
+        props["Payment"] = {"checkbox": True}
+    if f.get("interview_completed"):
+        props["Interview Completed"] = {"checkbox": True}
+    if f.get("disclose_ai") is not None:
+        props["Disclose AI"] = {"checkbox": bool(f.get("disclose_ai"))}
+    return props
+
+
+def _sync_voice_calls(batch_id: str, only_call_id: str = None) -> None:
+    """Append a durable Voice Calls row per fired call (no-answer included). Skips
+    still-'live'/'auswerten' calls (the fallback-classify thread re-syncs each once its
+    bucket resolves). Dedup is at READ time (insights keeps the latest per Call ID).
+    Best-effort / non-fatal."""
+    if not VOICE_CALLS_DB_ID or not os.environ.get("NOTION_API_KEY", "").strip():
+        return
+    try:
+        session = _load_voice_session(batch_id)
+        ck = (session or {}).get("cockpit") or {}
+        fired = ck.get("fired") or []
+        if not fired:
+            return
+        ver = _script_version()
+        for f in fired:
+            cid = f.get("call_id")
+            if only_call_id and cid != only_call_id:
+                continue
+            c = _fetch_call_cached(cid) if cid else {}
+            bucket = _bucket_call(c, f)
+            if bucket in ("live", "auswerten"):
+                continue                      # not final yet
+            _write_voice_call_row(_voice_call_props(f, c, bucket, ver, batch_id))
+    except Exception as e:
+        app.logger.error("_sync_voice_calls failed (%s): %s", batch_id, e)
+
+
+# --- insights aggregation (read) ---------------------------------------------
+
+_INSIGHTS_CACHE: dict = {}
+_INSIGHTS_TTL = 300        # 5 min
+
+
+def _vc_rt(prop):
+    arr = (prop or {}).get("rich_text") or (prop or {}).get("title") or []
+    return "".join(t.get("plain_text", "") for t in arr)
+
+
+def _vc_sel(prop):
+    s = (prop or {}).get("select")
+    return (s or {}).get("name") if s else None
+
+
+def _vc_cb(prop):
+    return bool((prop or {}).get("checkbox"))
+
+
+def _vc_num(prop):
+    return (prop or {}).get("number")
+
+
+def _vc_date(prop):
+    d = (prop or {}).get("date")
+    return (d or {}).get("start") if d else None
+
+
+def _vc_local_dt(s):
+    """Parse an ISO ts and convert to Europe/Zurich (so heatmap hours are local)."""
+    try:
+        from datetime import datetime as _dt, timezone as _tz
+        d = _dt.fromisoformat(str(s).replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=_tz.utc)
+        try:
+            from zoneinfo import ZoneInfo
+            return d.astimezone(ZoneInfo("Europe/Zurich"))
+        except Exception:
+            return d
+    except Exception:
+        return None
+
+
+def _query_voice_calls(days: int, branche: str = None) -> list:
+    """Paginated Voice Calls query (Date ≥ cutoff, optional Branche)."""
+    key = os.environ.get("NOTION_API_KEY", "").strip()
+    if not key or not VOICE_CALLS_DB_ID:
+        return []
+    import requests as _rq
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    h = {"Authorization": f"Bearer {key}", "Notion-Version": "2022-06-28",
+         "Content-Type": "application/json"}
+    filters = []
+    if days and days > 0:
+        cutoff = (_dt.now(_tz.utc) - _td(days=days)).isoformat()
+        filters.append({"property": "Date", "date": {"on_or_after": cutoff}})
+    if branche:
+        filters.append({"property": "Branche", "select": {"equals": branche}})
+    body = {"page_size": 100}
+    if len(filters) == 1:
+        body["filter"] = filters[0]
+    elif len(filters) > 1:
+        body["filter"] = {"and": filters}
+    results, cursor = [], None
+    while True:
+        if cursor:
+            body["start_cursor"] = cursor
+        r = _rq.post(f"https://api.notion.com/v1/databases/{VOICE_CALLS_DB_ID}/query",
+                     headers=h, json=body, timeout=30)
+        if not r.ok:
+            app.logger.error("voice calls query failed: %s %s", r.status_code, r.text[:200])
+            break
+        data = r.json()
+        results.extend(data.get("results", []))
+        cursor = data.get("next_cursor")
+        if not (data.get("has_more") and cursor):
+            break
+    return results
+
+
+def _compute_insights(days: int, branche: str = None) -> dict:
+    pages = _query_voice_calls(days, branche)
+    # dedupe by Call ID (latest last_edited_time wins)
+    by_key = {}
+    for p in pages:
+        pr = p.get("properties") or {}
+        cid = _vc_rt(pr.get("Call ID")) or p.get("id")
+        ledit = p.get("last_edited_time") or ""
+        if cid not in by_key or ledit > by_key[cid][0]:
+            by_key[cid] = (ledit, p)
+    rows = [v[1] for v in by_key.values()]
+
+    tod, problems = {}, {}
+    schmerz = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    n = conn = hot = interview = pay = hot_n = 0
+    cost_sum = 0.0
+    hot_dur, cold_dur = [], []
+    for p in rows:
+        pr = p.get("properties") or {}
+        bucket = _vc_sel(pr.get("Bucket"))
+        connected = _vc_cb(pr.get("Connected"))
+        dur = _vc_num(pr.get("Duration s"))
+        cost = _vc_num(pr.get("Cost CHF")) or 0
+        tp = _vc_rt(pr.get("Top Problem"))
+        sc = _vc_num(pr.get("Schmerzscore"))
+        n += 1
+        cost_sum += cost
+        if connected:
+            conn += 1
+        if bucket == "hot":
+            hot += 1
+            hot_n += 1
+        if _vc_cb(pr.get("Interview Completed")):
+            interview += 1
+        if _vc_cb(pr.get("Payment")):
+            pay += 1
+        dt = _vc_local_dt(_vc_date(pr.get("Date")))
+        if dt:
+            t = tod.setdefault((dt.weekday(), dt.hour), {"calls": 0, "connected": 0, "hot": 0})
+            t["calls"] += 1
+            if connected:
+                t["connected"] += 1
+            if bucket == "hot":
+                t["hot"] += 1
+        if dur is not None:
+            (hot_dur if bucket == "hot" else cold_dur if bucket in ("cold", "hangup") else []).append(dur)
+        if tp:
+            e = problems.setdefault(tp.strip().lower(),
+                                    {"count": 0, "score_sum": 0, "score_n": 0, "label": tp.strip()})
+            e["count"] += 1
+            if isinstance(sc, (int, float)):
+                e["score_sum"] += sc
+                e["score_n"] += 1
+        if isinstance(sc, (int, float)):
+            si = int(round(sc))
+            if 1 <= si <= 5:
+                schmerz[si] += 1
+
+    top = sorted(problems.values(), key=lambda x: -x["count"])[:10]
+
+    def _avg(a):
+        return round(sum(a) / len(a), 1) if a else None
+
+    return {
+        "total_calls": n,
+        "time_of_day": [{"dow": k[0], "hour": k[1], **v} for k, v in sorted(tod.items())],
+        "top_problems": [{"problem": e["label"], "count": e["count"],
+                          "avg_schmerz": round(e["score_sum"] / e["score_n"], 1) if e["score_n"] else None}
+                         for e in top],
+        "schmerzscore": {str(k): v for k, v in schmerz.items()},
+        "kpis": {
+            "interview_completion_rate": round(interview / n, 4) if n else 0,
+            "payment_rate": round(pay / n, 4) if n else 0,
+            "chf_per_hot": round(cost_sum / hot, 2) if hot else None,
+            "avg_dur_hot": _avg(hot_dur),
+            "avg_dur_cold": _avg(cold_dur),
+        },
+    }
+
+
+def _insights_cached(days: int, branche: str = None) -> dict:
+    import time as _t
+    ckey = f"{days}:{branche or ''}"
+    now = _t.time()
+    hit = _INSIGHTS_CACHE.get(ckey)
+    if hit and (now - hit[0]) < _INSIGHTS_TTL:
+        return hit[1]
+    data = _compute_insights(days, branche)
+    _INSIGHTS_CACHE[ckey] = (now, data)
+    return data
+
+
 # ---- the batch runner (daemon) ----------------------------------------------
 
 def _run_cockpit_batch(batch_id: str) -> None:
@@ -2196,11 +2535,14 @@ def _run_cockpit_batch(batch_id: str) -> None:
                 entry["call_id"] = call.get("id")
             except Exception as e:
                 entry["error"] = str(e)[:300]
-            # reload → append → advance cursor (preserves any stop flag set meanwhile)
-            fresh = _load_voice_session(batch_id)
-            fresh["cockpit"]["fired"].append(entry)
-            fresh["cockpit"]["cursor"] = i + 1
-            _save_voice_session(fresh)
+            # reload → append → advance cursor (preserves any stop flag set meanwhile).
+            # Under the session lock so a concurrent fallback-classify save can't drop
+            # this freshly dialed row (or vice-versa).
+            with _session_lock(batch_id):
+                fresh = _load_voice_session(batch_id)
+                fresh["cockpit"]["fired"].append(entry)
+                fresh["cockpit"]["cursor"] = i + 1
+                _save_voice_session(fresh)
             if entry.get("call_id"):
                 _mark_lead_dialed(lead.get("lead_id"))
             # pace, re-checking stop every ~2s
@@ -2229,9 +2571,16 @@ def _run_cockpit_batch(batch_id: str) -> None:
         with _RUNNER_LOCK:
             if _RUNNER_THREADS.get(batch_id) is _threading.current_thread():
                 _RUNNER_THREADS.pop(batch_id, None)
-        # Terminal state reached (done / stopped / error) → persist a durable summary
-        # row to Notion. Safe on empty/missing batches (the writer no-ops).
+        # Terminal state reached (done / stopped / error). First classify any straggler
+        # calls that ended without a frontend poll to pick them up, so top_problem /
+        # schmerzscore are filled before the durable rows are written. Then persist a
+        # summary + one durable row per fired call. Safe on empty/missing batches.
+        try:
+            _sweep_unclassified(batch_id)    # catch-up: classify 'auswerten' stragglers
+        except Exception as e:
+            app.logger.error("post-batch classify sweep failed (%s): %s", batch_id, e)
         _write_session_summary(batch_id)
+        _sync_voice_calls(batch_id)          # + one durable row per fired call (Analyse page)
 
 
 # Real thread handles per batch (the persisted thread_alive flag is NOT a sync
@@ -2267,6 +2616,11 @@ def voice_overview_page():
     return send_from_directory("static", "overview.html")
 
 
+@app.route("/voice/analyse", methods=["GET"])
+def voice_analyse_page():
+    return send_from_directory("static", "analyse.html")
+
+
 @app.route("/api/cockpit/login", methods=["POST"])
 def cockpit_login():
     data = request.get_json(silent=True) or {}
@@ -2297,6 +2651,20 @@ def cockpit_budget_status():
     remaining = _budget_remaining_chf()
     spent = round(max(0.0, COLD_CALL_BUDGET_CHF - remaining), 2)
     return jsonify({"spent_chf": spent, "cap_chf": COLD_CALL_BUDGET_CHF, "remaining_chf": remaining})
+
+
+@app.route("/api/cockpit/insights", methods=["GET"])
+def cockpit_insights():
+    """Aggregated deep analytics for the Analyse page (time-of-day, top problems,
+    Schmerzscore, KPIs) from the durable Voice Calls DB. 5-min cached, read-only."""
+    if not _cockpit_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        days = int(request.args.get("days") or 0)
+    except Exception:
+        days = 0
+    branche = request.args.get("branche") or None
+    return jsonify(_insights_cached(days, branche))
 
 
 @app.route("/api/cockpit/preview", methods=["POST"])
