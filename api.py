@@ -2408,7 +2408,8 @@ def _run_cockpit_batch(batch_id: str) -> None:
                     number=lead.get("phone"), session_id=batch_id, lead_id=lead.get("lead_id", ""),
                     firma=lead.get("firma", ""), branche=lead.get("branche", ""),
                     kontakt_nachname=lead.get("kontakt_nachname", ""),
-                    disclosure_line=lead.get("disclosure_line", ""))
+                    disclosure_line=lead.get("disclosure_line", ""),
+                    context=lead.get("context", ""))
                 entry["call_id"] = call.get("id")
             except Exception as e:
                 entry["error"] = str(e)[:300]

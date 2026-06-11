@@ -120,7 +120,7 @@ def _phone_number_id() -> str:
 
 def place_call(*, number: str, session_id: str, lead_id: str = "", firma: str = "",
                branche: str = "", kontakt_nachname: str = "",
-               disclosure_line: str = "") -> dict:
+               disclosure_line: str = "", context: str = "") -> dict:
     """Place ONE outbound call via Vapi (POST /call). Returns the created call object
     ({id, status, ...}). The conversation runs async on Vapi's side; poll get_call(id)
     for status/cost/transcript. `metadata.session_id` lets Workflow E feed the same
@@ -139,6 +139,7 @@ def place_call(*, number: str, session_id: str, lead_id: str = "", firma: str = 
                 "branche": branche or "",
                 "kontakt_nachname": kontakt_nachname or "",
                 "disclosure_line": disclosure_line or "",
+                "context": context or "",
             }
         },
         "metadata": {"lead_id": lead_id or "", "session_id": session_id or ""},
