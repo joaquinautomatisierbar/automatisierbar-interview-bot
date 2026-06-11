@@ -142,7 +142,8 @@ def place_call(*, number: str, session_id: str, lead_id: str = "", firma: str = 
                 "context": context or "",
             }
         },
-        "metadata": {"lead_id": lead_id or "", "session_id": session_id or ""},
+        "metadata": {"lead_id": lead_id or "", "session_id": session_id or "",
+                     "firma": firma or "", "branche": branche or ""},
     }
     resp = requests.post(f"{VAPI_BASE}/call", headers=_headers(), json=payload, timeout=_TIMEOUT)
     resp.raise_for_status()
