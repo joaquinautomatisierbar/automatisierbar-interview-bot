@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>automatisierbar · Übersicht</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/cockpit.css">
+<style>
+  #lower{grid-template-columns:1fr 1fr}
+  @media(max-width:820px){#lower{grid-template-columns:1fr}}
+</style>
+</head>
+<body data-page="overview">
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <header class="topbar">
+      <div><h1>Übersicht</h1><div class="sub">Aggregierte Cold-Call Metriken über alle Sessions</div></div>
+      <div class="topbar-actions">
+        <div class="seg" id="periodSeg">
+          <button data-d="7">7 Tage</button>
+          <button data-d="30" class="on">30 Tage</button>
+          <button data-d="90">90 Tage</button>
+          <button data-d="0">Alle</button>
+        </div>
+      </div>
+    </header>
+    <div class="content">
+      <div class="kpis" id="kpis"></div>
+
+      <div class="section-h">Aktivität über Zeit</div>
+      <div class="card chart-wrap" id="actChart"></div>
+
+      <div class="grid" id="lower" style="margin-top:18px">
+        <div class="card">
+          <div class="section-h" style="margin:0 0 14px">Performance nach Branche</div>
+          <div id="branche"></div>
+        </div>
+        <div class="card chart-wrap">
+          <div class="section-h" style="margin:0 0 14px">Raten-Trend <span class="dim" style="text-transform:none;letter-spacing:0;font-weight:400">· gestrichelt = neue Skript-Version</span></div>
+          <div id="rateChart"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/static/cockpit-shell.js"></script>
+<script>
+const SERIES_RATE = [
+  {key:"connect_rate", color:"#38BDF8", label:"Verbindungsrate"},
+  {key:"hot_rate",     color:"#15C87A", label:"Hot-Rate"},
+  {key:"followup_rate",color:"#EAB308", label:"Follow-up-Rate"},
+];
+const sum = (ss,f)=>ss.reduce((a,s)=>a+(f(s)||0),0);
+
+const app = {
+  sessions:[], periodDays:30,
+
+  async load(){
+    let r; try{ r=await fetch("/api/cockpit/sessions",{headers:Shell.hdr()}); }catch(e){ return this._fail("Netzwerkfehler"); }
+    if(r.status===401) return this._fail("Kein/ungültiger API-Key (?key=…)");
+    const d=await r.json();
+    if(d.error) Shell.toast(d.error);
+    this.sessions=(d.sessions||[]).filter(s=>s.fired>0)
+      .map(s=>({...s,_t:Date.parse(s.date)||0})).sort((a,b)=>a._t-b._t);
+    document.querySelectorAll("#periodSeg button").forEach(b=>b.onclick=()=>this.setPeriod(+b.dataset.d));
+    this.render();
+  },
+  _fail(m){ Shell.toast(m); document.getElementById("kpis").innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="ico">⚠️</div>${Shell.esc(m)}</div>`; },
+
+  setPeriod(days){ this.periodDays=days; document.querySelectorAll("#periodSeg button").forEach(b=>b.classList.toggle("on",+b.dataset.d===days)); this.render(); },
+
+  _window(days){ if(!days) return this.sessions.slice(); const cut=Date.now()-days*864e5; return this.sessions.filter(s=>s._t>=cut); },
+  _prevWindow(days){ if(!days) return []; const hi=Date.now()-days*864e5, lo=hi-days*864e5; return this.sessions.filter(s=>s._t>=lo&&s._t<hi); },
+  _agg(ss){
+    const fired=sum(ss,s=>s.fired), connected=sum(ss,s=>s.connected);
+    const hot=sum(ss,s=>(s.barometers||{}).hot), cost=sum(ss,s=>s.cost_chf);
+    return {fired,connected,hot,cost, connectRate:fired?connected/fired:0, hotRate:fired?hot/fired:0, chfPerHot:hot?cost/hot:0};
+  },
+
+  render(){
+    const cur=this._window(this.periodDays), prev=this._prevWindow(this.periodDays);
+    if(!cur.length){
+      document.getElementById("kpis").innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="ico">📊</div>Keine Sessions in diesem Zeitraum.<br><span class="dim">Starte einen Batch im Live-Cockpit — danach erscheinen hier die Metriken.</span></div>`;
+      document.getElementById("actChart").innerHTML=`<div class="empty">Keine Daten.</div>`;
+      document.getElementById("branche").innerHTML=`<div class="empty">Keine Daten.</div>`;
+      document.getElementById("rateChart").innerHTML=`<div class="empty">Keine Daten.</div>`;
+      return;
+    }
+    const a=this._agg(cur), p=this._agg(prev);
+    this.renderKpis(a,p,cur);
+    this.renderActChart(cur);
+    this.renderBranche(cur);
+    this.renderRateChart(cur);
+  },
+
+  _delta(cur, prev, opts){
+    opts=opts||{};
+    if(prev==null || (prev===0 && cur===0)) return `<span class="delta flat">—</span>`;
+    let up, txt;
+    if(opts.points){ const diff=(cur-prev)*100; up=diff>=0; txt=`${up?"▲":"▼"} ${diff>=0?"+":""}${diff.toFixed(0)}pt`; }
+    else { if(prev===0) return `<span class="delta up">▲ neu</span>`; const rel=(cur-prev)/prev*100; up=rel>=0; txt=`${up?"▲":"▼"} ${rel>=0?"+":""}${rel.toFixed(0)}%`; }
+    let cls=up?"up":"down"; if(opts.invert) cls=up?"down":"up";
+    return `<span class="delta ${cls}">${txt}</span>`;
+  },
+  _card(label, value, deltaHtml, sparkVals, color){
+    return `<div class="stat"><div class="lbl">${label}</div><div class="big num">${value}</div>
+      <div class="foot">${deltaHtml}<div class="spark">${Shell.sparkline(sparkVals,{color})}</div></div></div>`;
+  },
+
+  renderKpis(a,p,cur){
+    const hot=s=>(s.barometers||{}).hot||0;
+    const k=[
+      this._card("Calls total", a.fired, this._delta(a.fired,p.fired), cur.map(s=>s.fired), "#15C87A"),
+      this._card("Verbindungsrate", Shell.pct(a.connectRate), this._delta(a.connectRate,p.connectRate,{points:1}), cur.map(s=>s.connect_rate), "#38BDF8"),
+      this._card("Hot-Rate", Shell.pct(a.hotRate), this._delta(a.hotRate,p.hotRate,{points:1}), cur.map(s=>s.hot_rate), "#15C87A"),
+      this._card("Termine / Hot", a.hot, this._delta(a.hot,p.hot), cur.map(hot), "#5EE0A6"),
+      this._card("CHF pro Hot", a.chfPerHot?a.chfPerHot.toFixed(2):"—", this._delta(a.chfPerHot,p.chfPerHot,{invert:1}), cur.map(s=>hot(s)?s.cost_chf/hot(s):0), "#F97316"),
+    ];
+    document.getElementById("kpis").innerHTML=k.join("");
+  },
+
+  renderActChart(cur){
+    const svg=Shell.lineChart({
+      rows:cur, x:s=>Shell.dateShort(s.date),
+      series:[
+        {get:s=>s.fired, color:"#0A8F54", label:"Calls", area:true},
+        {get:s=>s.connected, color:"#38BDF8", label:"Verbunden"},
+        {get:s=>(s.barometers||{}).hot||0, color:"#15C87A", label:"Hot"},
+      ],
+    });
+    const leg=Shell.legend([{color:"#0A8F54",label:"Calls"},{color:"#38BDF8",label:"Verbunden"},{color:"#15C87A",label:"Hot"}]);
+    document.getElementById("actChart").innerHTML=svg+leg;
+  },
+
+  renderBranche(cur){
+    const by={};
+    cur.forEach(s=>{ const k=s.branche||"Alle ICP"; (by[k]=by[k]||{fired:0,hot:0}); by[k].fired+=s.fired||0; by[k].hot+=(s.barometers||{}).hot||0; });
+    const rows=Object.entries(by).map(([name,v])=>({name, rate:v.fired?v.hot/v.fired:0, calls:v.fired}))
+      .sort((a,b)=>b.rate-a.rate)
+      .map(r=>({name:r.name, value:r.rate, label:`${Shell.pct(r.rate)} · ${r.calls}`}));
+    document.getElementById("branche").innerHTML=Shell.hbars(rows, Math.max(...rows.map(r=>r.value), .01));
+  },
+
+  renderRateChart(cur){
+    const svg=Shell.lineChart({
+      rows:cur, x:s=>Shell.dateShort(s.date), yMax:1, yFmt:v=>Math.round(v*100)+"%",
+      series:SERIES_RATE.map(s=>({get:r=>r[s.key]||0, color:s.color, label:s.label})),
+      marker:(s,i)=> (i>0 && s.script_version && s.script_version!==cur[i-1].script_version) ? s.script_version : null,
+    });
+    document.getElementById("rateChart").innerHTML=svg+Shell.legend(SERIES_RATE);
+  },
+};
+Shell.ready(()=>app.load());
+</script>
+</body>
+</html>
