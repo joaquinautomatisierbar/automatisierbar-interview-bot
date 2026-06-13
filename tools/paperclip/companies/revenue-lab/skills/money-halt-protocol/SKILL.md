@@ -40,8 +40,10 @@ esac
 - **One question, ideally yes/no.** The poller captures the first matching reply only.
 - **Timeout = no.** Exit code 1 from the poller (10-min default) means no answer → do NOT
   proceed. Pick the safe default (don't spend, don't send).
-- **Prefer the Revenue Lab channel.** If `REVENUE_TELEGRAM_BOT_TOKEN` / `REVENUE_TELEGRAM_CHAT_ID`
-  are set, the hooks use them — keeps Revenue Lab halts off the Automatisierbar operator bot
-  (avoids the documented getUpdates reply-crosstalk).
+- **Channel.** Halts go to whichever Telegram bot `.claude/hooks/notify-telegram.sh` is wired to.
+  By default that is the operator bot (`OPERATOR_TELEGRAM_*`). A dedicated Revenue Lab bot
+  (`REVENUE_TELEGRAM_*`) is wired into the hook at import time when the operator provisions one —
+  recommended, to keep Revenue Lab halts/polls off the Automatisierbar bot (avoids the documented
+  getUpdates reply-crosstalk). Until then, halts share the operator channel.
 - **When in doubt, don't act — produce the artifact and hand it to the operator instead.** The
   cost of a clarifying ping is trivial against a $300 cap.

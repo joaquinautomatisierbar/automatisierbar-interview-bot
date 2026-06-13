@@ -198,19 +198,36 @@ def pause_all_agents(company_id=None, reason="", state=None, **_):
         result["pause_helper_out"] = (out.stdout or out.stderr or "").strip()[:500]
     except Exception as e:
         result["pause_helper_error"] = str(e)
-    # best-effort operator page
-    try:
-        spent = state.get("spent_usd") if state else "?"
-        rev = state.get("revenue_usd") if state else "?"
-        subprocess.run(
-            ["bash", _NOTIFY_HOOK, "halt",
-             f"[revenue-lab] KILL-SWITCH TRIPPED ({reason}). All agents paused. "
-             f"spent=${spent} revenue=${rev}. Reset via revenue_governor.py reset after review."],
-            capture_output=True, text=True, timeout=30,
-        )
-    except Exception as e:
-        result["notify_error"] = str(e)
+    # best-effort operator page (self-contained — no dependency on the hook being mounted)
+    spent = state.get("spent_usd") if state else "?"
+    rev = state.get("revenue_usd") if state else "?"
+    result["notify"] = notify_operator(
+        f"[revenue-lab] KILL-SWITCH TRIPPED ({reason}). All agents paused. "
+        f"spent=${spent} revenue=${rev}. Reset via revenue_governor.py reset after review.")
     return result
+
+
+def notify_operator(msg):
+    """Best-effort operator page. Sends via the Telegram Bot API directly — Revenue Lab bot
+    preferred (REVENUE_TELEGRAM_*), operator bot as fallback (OPERATOR_TELEGRAM_*); if neither
+    is in env, falls back to the notify-telegram.sh hook. Never raises."""
+    tok = os.environ.get("REVENUE_TELEGRAM_BOT_TOKEN") or os.environ.get("OPERATOR_TELEGRAM_BOT_TOKEN")
+    chat = os.environ.get("REVENUE_TELEGRAM_CHAT_ID") or os.environ.get("OPERATOR_TELEGRAM_CHAT_ID")
+    if tok and chat:
+        try:  # curl, not urllib — robust cert handling across macOS + Linux
+            out = subprocess.run(
+                ["curl", "-s", "-m", "15", "-X", "POST",
+                 f"https://api.telegram.org/bot{tok}/sendMessage",
+                 "--data-urlencode", f"chat_id={chat}", "--data-urlencode", f"text={msg}"],
+                capture_output=True, text=True, timeout=20)
+            return {"sent": '"ok":true' in (out.stdout or ""), "via": "telegram_api"}
+        except Exception as e:
+            return {"sent": False, "error": str(e)}
+    try:
+        subprocess.run(["bash", _NOTIFY_HOOK, "halt", msg], capture_output=True, text=True, timeout=30)
+        return {"sent": True, "via": "hook"}
+    except Exception as e:
+        return {"sent": False, "error": str(e)}
 
 
 def _resolve_company_id(state):
@@ -266,6 +283,13 @@ def _cli(argv):
         print(f"trip-test: pausing agents for company_id={cid or '(none → dry-run)'}")
         print(json.dumps(pause_all_agents(company_id=cid, reason="trip-test", state=_recompute(st)), indent=2))
         print("NOTE: agents are now paused. Run `reset` and re-enable wakeOnDemand per the plan.")
+        return 0
+
+    if cmd == "set-company":
+        st = read_state()
+        st["company_id"] = args[0]
+        write_state(st, DEFAULT_LEDGER)
+        print(f"company_id set to {args[0]} (kill-switch will pause this company's agents)")
         return 0
 
     if cmd == "reset":
