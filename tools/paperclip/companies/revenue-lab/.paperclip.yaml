@@ -1,0 +1,37 @@
+schema: paperclip/v1
+# Per-agent secret declarations for Revenue Lab. Only the 2 agents that touch an
+# external system get keys; the CEO is reasoning + operator-comms only and gets none.
+#
+# These are env-var-name declarations. The actual value binding (env var name ->
+# paperclip-managed secretId) is wired on the live company as a `secret_ref` in
+# each agent's adapterConfig.env (PATCH /api/agents/:id), which lets the agent-facing
+# name differ from the stored secret name (e.g. STRIPE_API_KEY_TEST -> stripe_test_sk).
+#
+# NEVER declare ANTHROPIC_API_KEY or any console key here — agents auth via
+# CLAUDE_CODE_OAUTH_TOKEN (Claude Max abo) at the process level. A console key would
+# shadow the OAuth token and silently meter paid credits. Operator decision: Max plan,
+# not credits. This is the single most important line in this file.
+agents:
+  ceo:
+    inputs:
+      env: {}    # reasoning + operator-comms only; spends nothing, touches no external system
+
+  builder:
+    inputs:
+      env:
+        N8N_API_KEY:        # build the fulfilment workflow asset INACTIVE; reuse existing infra
+          kind: secret
+          requirement: optional
+        NOTION_API_KEY:     # write the offer/demand-research doc + CRM rows in a SANDBOX DB
+          kind: secret
+          requirement: optional
+
+  finance-ops:
+    inputs:
+      env:
+        STRIPE_API_KEY_TEST:   # TEST-mode key first (bind -> stripe_test_sk). NET-NEW secret.
+          kind: secret
+          requirement: required
+        STRIPE_API_KEY_LIVE:   # LIVE key — bound ONLY at Phase-1 go-live, never before. NET-NEW.
+          kind: secret
+          requirement: optional
