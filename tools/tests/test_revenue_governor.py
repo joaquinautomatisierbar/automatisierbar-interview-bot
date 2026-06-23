@@ -136,6 +136,50 @@ s = rg.read_state(p)
 chk("issue_spend: sums per issue (A=7)", rg.issue_spend(s, "ISS-A") == 7.0, str(rg.issue_spend(s, "ISS-A")))
 chk("issue_spend: isolates issues (B=9)", rg.issue_spend(s, "ISS-B") == 9.0)
 
+# ── inner caps: month + cycle (train loop) ───────────────────────────────────
+# defaults: caps off (None) so Revenue Lab is unaffected
+stc = rg.default_state(now=T0)
+chk("default: cycle/month caps off", stc["cycle_cap_usd"] is None and stc["month_cap_usd"] is None)
+chk("default: no active cycle", stc["active_cycle"] is None)
+
+# month_spend: only counts the trailing 30 days
+sm = rg.default_state(now=T0)
+sm["spend"] = [
+    {"id": "old", "usd": 40.0, "ts": (T0 - timedelta(days=40)).isoformat()},
+    {"id": "recent", "usd": 12.0, "ts": (T0 - timedelta(days=5)).isoformat()},
+]
+chk("month_spend: trailing 30d only (12, not 52)", rg.month_spend(sm, now=T0) == 12.0, str(rg.month_spend(sm, now=T0)))
+
+# month cap blocks
+p = _tmp_ledger(rg.default_state(now=T0, month_cap_usd=50.0))
+rg.record_spend("m1", "api", 45.0, path=p, now=T0)
+ok, why = rg.preflight_can_spend(10, path=p, now=T0)
+chk("month cap: 45+10 > 50 → blocked", ok is False, why)
+ok, _ = rg.preflight_can_spend(4, path=p, now=T0)
+chk("month cap: 45+4 <= 50 → ok", ok is True)
+
+# cycle cap blocks within an open cycle; cycle_spend tags by active cycle
+p = _tmp_ledger(rg.default_state(now=T0, cycle_cap_usd=15.0, month_cap_usd=50.0))
+rg.start_cycle("night-001", path=p, now=T0)
+rg.record_spend("c1", "api", 12.0, path=p, now=T0)        # tagged to night-001 via active_cycle
+s = rg.read_state(p)
+chk("record_spend: tags active cycle_id", s["spend"][0].get("cycle_id") == "night-001", str(s["spend"][0]))
+chk("cycle_spend: sums the cycle (12)", rg.cycle_spend(s) == 12.0, str(rg.cycle_spend(s)))
+ok, why = rg.preflight_can_spend(5, path=p, now=T0)
+chk("cycle cap: 12+5 > 15 → blocked", ok is False, why)
+ok, _ = rg.preflight_can_spend(3, path=p, now=T0)
+chk("cycle cap: 12+3 <= 15 → ok", ok is True)
+
+# end_cycle removes the per-cycle ceiling (still under master + month)
+rg.end_cycle(path=p)
+ok, _ = rg.preflight_can_spend(5, path=p, now=T0)
+chk("end_cycle: cycle cap no longer applies", ok is True)
+
+# caps off → unaffected (Revenue Lab path): big spend allowed up to master cap
+p = _tmp_ledger(rg.default_state(now=T0))   # caps None
+ok, _ = rg.preflight_can_spend(120, path=p, now=T0)
+chk("caps off: $120 allowed (only master cap applies)", ok is True)
+
 # ── summary ──────────────────────────────────────────────────────────────────
 print()
 if fails:

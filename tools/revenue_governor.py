@@ -15,6 +15,10 @@ On any trip, ALL Revenue Lab agents are paused (tools/paperclip/lib/pause_compan
 operator is paged on Telegram. Compute is NOT dollar-tracked here (Max plan); the cap governs
 external/business spend only (paid non-Claude APIs, ads, domains, tools, Stripe fees).
 
+Inner caps (Cortana train loop): the SAME code guards a separate ledger via GOVERNOR_LEDGER. With
+`set-caps`, a per-cycle cap (one night) and a trailing-30d month cap apply on top of the $300 master,
+so the worst case before a breaker is the per-night cap. Off by default → Revenue Lab is unaffected.
+
 CLI:
   python3 tools/revenue_governor.py status
   python3 tools/revenue_governor.py can-spend <usd>
@@ -23,6 +27,10 @@ CLI:
   python3 tools/revenue_governor.py issue-spend <issue_id>
   python3 tools/revenue_governor.py trip-test     # really pauses live agents, then `reset`
   python3 tools/revenue_governor.py reset         # status -> active (does not wipe ledger)
+  # train-loop inner caps (use GOVERNOR_LEDGER=data/train_ledger.json to keep separate from Revenue Lab):
+  python3 tools/revenue_governor.py set-caps <cycle_cap|none> <month_cap|none>
+  python3 tools/revenue_governor.py start-cycle <id> [cap_usd]
+  python3 tools/revenue_governor.py end-cycle
 
 Pure functions are unit-tested in tools/tests/test_revenue_governor.py (no network/no live).
 """
@@ -30,14 +38,22 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 CAP_USD = 300.0
 ZERO_REV_TRIP_DAYS = 21
+# Inner caps for the Cortana self-improvement train loop. None = off (Revenue Lab leaves them off);
+# the train loop runs against its own ledger (GOVERNOR_LEDGER=data/train_ledger.json) with these set,
+# so a single night can't blow more than the cycle cap and a month can't exceed the month cap — the
+# worst-case-before-breaker is the per-night cap, not the $300 master.
+CYCLE_CAP_USD = None      # max external spend per nightly cycle (train loop: e.g. 15.0)
+MONTH_CAP_USD = None      # max external spend per trailing 30 days (train loop: e.g. 50.0)
+MONTH_WINDOW_DAYS = 30
 UTC = timezone.utc
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_LEDGER = os.path.join(_HERE, "..", "data", "revenue_ledger.json")
+# GOVERNOR_LEDGER lets the train loop point the SAME code at a separate ledger from Revenue Lab's.
+DEFAULT_LEDGER = os.environ.get("GOVERNOR_LEDGER") or os.path.join(_HERE, "..", "data", "revenue_ledger.json")
 _PAUSE_HELPER = os.path.join(_HERE, "paperclip", "lib", "pause_company.js")
 _NOTIFY_HOOK = os.path.join(_HERE, "..", ".claude", "hooks", "notify-telegram.sh")
 
@@ -59,17 +75,22 @@ def _days_since(started_at, now):
 
 
 # ── state ────────────────────────────────────────────────────────────────────
-def default_state(cap_usd=CAP_USD, now=None, company_id=None):
+def default_state(cap_usd=CAP_USD, now=None, company_id=None,
+                  cycle_cap_usd=CYCLE_CAP_USD, month_cap_usd=MONTH_CAP_USD):
     return {
         "cap_usd": float(cap_usd),
         "started_at": _now(now).isoformat(),
         "status": "active",          # active | tripped_spend | tripped_time | paused
         "company_id": company_id,    # filled post-import; resolves the pause target
-        "spend": [],                 # [{id, ts, category, usd, note, issue_id}]
+        "spend": [],                 # [{id, ts, category, usd, note, issue_id, cycle_id}]
         "revenue": [],               # [{id, ts, usd, stripe_charge_id, note}]
         "spent_usd": 0.0,
         "revenue_usd": 0.0,
         "counted": [],               # dedup ids across spend+revenue (idempotency)
+        # ── inner caps for the train loop (None = off; checked only when set) ──
+        "cycle_cap_usd": cycle_cap_usd,   # max external spend per nightly cycle
+        "month_cap_usd": month_cap_usd,   # max external spend per trailing 30 days
+        "active_cycle": None,             # {id, started_at, cap_usd} while a cycle is open
     }
 
 
@@ -117,9 +138,44 @@ def issue_spend(state, issue_id):
                      if e.get("issue_id") == issue_id), 2)
 
 
+# ── inner caps for the train loop (pure where possible) ───────────────────────
+def month_spend(state, now=None):
+    """External spend within the trailing MONTH_WINDOW_DAYS days (for the inner month cap)."""
+    cutoff = _now(now) - timedelta(days=MONTH_WINDOW_DAYS)
+    return round(sum(float(e.get("usd", 0)) for e in state.get("spend", [])
+                     if e.get("ts") and _parse_dt(e["ts"]) >= cutoff), 2)
+
+
+def cycle_spend(state, cycle_id=None):
+    """Spend tagged to a cycle (defaults to the active cycle). 0 if no cycle."""
+    cid = cycle_id if cycle_id is not None else (state.get("active_cycle") or {}).get("id")
+    if cid is None:
+        return 0.0
+    return round(sum(float(e.get("usd", 0)) for e in state.get("spend", [])
+                     if e.get("cycle_id") == cid), 2)
+
+
+def start_cycle(cycle_id, cap_usd=None, path=DEFAULT_LEDGER, now=None):
+    """Open a train cycle so the per-cycle cap applies. cap_usd overrides the ledger's cycle_cap_usd."""
+    state = read_state(path)
+    eff = float(cap_usd) if cap_usd is not None else state.get("cycle_cap_usd")
+    state["active_cycle"] = {"id": cycle_id, "started_at": _now(now).isoformat(), "cap_usd": eff}
+    write_state(state, path)
+    return state["active_cycle"]
+
+
+def end_cycle(path=DEFAULT_LEDGER):
+    state = read_state(path)
+    state["active_cycle"] = None
+    write_state(state, path)
+    return state
+
+
 # ── enforcement (I/O) ────────────────────────────────────────────────────────
 def preflight_can_spend(estimated_usd, path=DEFAULT_LEDGER, now=None):
-    """(allowed: bool, reason: str). Agents MUST call this before any external spend."""
+    """(allowed: bool, reason: str). Agents MUST call this before any external spend. Enforces, in
+    order: governor status, the $300 master cap, the trailing-30d month cap, and the active cycle cap.
+    The inner caps are skipped when unset (None) so Revenue Lab is unaffected."""
     state = _recompute(read_state(path))
     effective = state["status"] if state["status"] != "active" else killswitch_verdict(state, now)
     if effective != "active":
@@ -128,7 +184,22 @@ def preflight_can_spend(estimated_usd, path=DEFAULT_LEDGER, now=None):
     est = float(estimated_usd)
     if est > headroom:
         return False, f"est ${est:.2f} exceeds remaining ${headroom:.2f} of ${state['cap_usd']:.0f} cap"
-    return True, f"ok: ${headroom:.2f} remaining"
+    mcap = state.get("month_cap_usd")
+    if mcap is not None:
+        mspent = month_spend(state, now)
+        if mspent + est > float(mcap):
+            return False, f"est ${est:.2f} would exceed month cap ${float(mcap):.0f} (spent ${mspent:.2f}/30d)"
+    ac = state.get("active_cycle")
+    if ac:
+        ccap = ac.get("cap_usd")
+        if ccap is None:
+            ccap = state.get("cycle_cap_usd")
+        if ccap is not None:
+            cspent = cycle_spend(state, ac["id"])
+            if cspent + est > float(ccap):
+                return False, (f"est ${est:.2f} would exceed cycle cap ${float(ccap):.2f} "
+                               f"(cycle '{ac['id']}' spent ${cspent:.2f})")
+    return True, f"ok: ${headroom:.2f} master headroom"
 
 
 def check_killswitch(path=DEFAULT_LEDGER, now=None, pause_fn=None):
@@ -149,14 +220,15 @@ def check_killswitch(path=DEFAULT_LEDGER, now=None, pause_fn=None):
     return verdict
 
 
-def record_spend(entry_id, category, usd, note="", issue_id=None,
+def record_spend(entry_id, category, usd, note="", issue_id=None, cycle_id=None,
                  path=DEFAULT_LEDGER, now=None, pause_fn=None):
     now = _now(now)
     state = read_state(path)
     if entry_id not in state["counted"]:
+        cid = cycle_id if cycle_id is not None else (state.get("active_cycle") or {}).get("id")
         state["spend"].append({
             "id": entry_id, "ts": now.isoformat(), "category": category,
-            "usd": float(usd), "note": note, "issue_id": issue_id,
+            "usd": float(usd), "note": note, "issue_id": issue_id, "cycle_id": cid,
         })
         state["counted"].append(entry_id)
     _recompute(state)
@@ -244,12 +316,40 @@ def _cli(argv):
     if cmd == "status":
         st = _recompute(read_state())
         days = round(_days_since(st["started_at"], _now()), 1)
-        print(json.dumps({
+        out = {
             "status": st["status"], "cap_usd": st["cap_usd"],
             "spent_usd": st["spent_usd"], "revenue_usd": st["revenue_usd"],
             "remaining_usd": remaining_usd(st), "days_elapsed": days,
             "live_verdict": killswitch_verdict(st), "company_id": st.get("company_id"),
-        }, indent=2))
+        }
+        if st.get("month_cap_usd") is not None:
+            out["month_cap_usd"] = st["month_cap_usd"]
+            out["month_spent_usd"] = month_spend(st)
+        if st.get("cycle_cap_usd") is not None or st.get("active_cycle"):
+            out["cycle_cap_usd"] = st.get("cycle_cap_usd")
+            out["active_cycle"] = st.get("active_cycle")
+            if st.get("active_cycle"):
+                out["cycle_spent_usd"] = cycle_spend(st)
+        print(json.dumps(out, indent=2))
+        return 0
+
+    if cmd == "set-caps":   # set-caps <cycle_cap|none> <month_cap|none>
+        st = read_state()
+        st["cycle_cap_usd"] = None if args[0].lower() in ("none", "off", "-") else float(args[0])
+        st["month_cap_usd"] = None if args[1].lower() in ("none", "off", "-") else float(args[1])
+        write_state(st, DEFAULT_LEDGER)
+        print(f"caps set: cycle={st['cycle_cap_usd']} month={st['month_cap_usd']} (ledger {DEFAULT_LEDGER})")
+        return 0
+
+    if cmd == "start-cycle":   # start-cycle <id> [cap_usd]
+        cap = float(args[1]) if len(args) > 1 else None
+        ac = start_cycle(args[0], cap_usd=cap)
+        print(f"cycle '{ac['id']}' open, cap=${ac['cap_usd']}")
+        return 0
+
+    if cmd == "end-cycle":
+        end_cycle()
+        print("cycle closed")
         return 0
 
     if cmd == "can-spend":
