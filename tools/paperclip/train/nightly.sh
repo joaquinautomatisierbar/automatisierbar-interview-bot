@@ -85,6 +85,14 @@ fi
 # ── END + DIGEST ─────────────────────────────────────────────────────────────
 section "DIGEST"
 python3 "$GOV" end-cycle >/dev/null
+
+# append a cycle record to the run-log the SELF-IMPROVE view renders (live build steps add per-task records)
+RUNREC=$(printf '%s\n' "$SEL" | CYCLE_ID="$CYCLE_ID" MODE="$MODE" python3 -c 'import json,sys,os
+sel=json.load(sys.stdin)["selected"]
+print(json.dumps({"cycle":os.environ["CYCLE_ID"],"mode":os.environ["MODE"],"kind":"cycle",
+  "status":"planned" if os.environ["MODE"]=="dry" else "running",
+  "note":("geplant (dry-run): " if os.environ["MODE"]=="dry" else "")+", ".join(t["id"] for t in sel)}))')
+printf '%s' "$RUNREC" | python3 "$SCRIPT_DIR/train_log.py" append - >/dev/null 2>&1 && log "run-log: cycle record appended" || log "run-log: append skipped"
 python3 "$GOV" status | python3 -c 'import json,sys
 d=json.load(sys.stdin)
 print(" cycle closed · status="+d["status"]
