@@ -14,7 +14,12 @@ set -euo pipefail
 PROJECT_ROOT="${PROJECT_ROOT:-/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview}"
 DEST="${HOME}/_context"
 VPS_USER="paperclip"
-VPS_HOST="72.61.106.8"
+# 2026-06-22 (Cortana Phase 0): fixed drift — old box 72.61.106.8 is powered off.
+# Prod VPS is 187.124.191.115 (see tools/paperclip/pipeline.config.json host.ip).
+# NOTE: this rsync path is being SUPERSEDED by a VPS-side `git pull` on commit
+# (Cortana plan, Phase 0) so context can never go stale or push to a dead box.
+# Until that lands, this --push-to-vps path is the active mechanism — keep the IP current.
+VPS_HOST="${VPS_HOST:-187.124.191.115}"
 VPS_KEY="${HOME}/.ssh/paperclip_vps"
 VPS_DEST="/home/${VPS_USER}/_context"
 
@@ -46,6 +51,17 @@ MOUNT_PATHS=(
   "tools/notion_session.py"
   "tools/paperclip"
   "tools/extract_pdf_text.py"
+  # ---- 2026-06-01: signal collectors + company-state puller. Required by both
+  # linkedin_brief.py and sync_company_state.py when they run on VPS systemd timers.
+  "tools/signals"
+  "tools/sync_company_state.py"
+  # ---- 2026-06-13: Revenue Lab deterministic tools. The finance-ops + builder agents
+  # run these on the VPS (budget governor, Stripe ops, one-shot trigger). Must be mounted
+  # or the agents have no governor/Stripe tool to call.
+  "tools/revenue_governor.py"
+  "tools/stripe_ops.py"
+  "tools/revenue_trigger.py"
+  "tools/render_pdf.py"
   "prompts/transcript_classification.md"
   "references"
 )

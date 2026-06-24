@@ -58,6 +58,11 @@ Look for **patterns and intent**, not exact paths. Use `Read` / `Bash ls` / `Bas
 
 **Decisions log:** `decisions/log.md` (root). Count entries dated within the last 90 days.
 
+**Learning system** (added 2026-06-01 — the paperclip memory loop):
+- `references/learnings/INDEX.md` — count entries across `global.md` + `operator-feedback.md` + `by-role/*.md`. Each entry starts with `## <slug>` H2 inside one of these files.
+- `references/retros/` — count files matching `AUT-*.md` (excluding `INDEX.md`).
+- Roughly count Issues shipped in last 30 days via paperclip API: `curl http://127.0.0.1:3100/api/companies/47196d38-2f19-4168-af8f-fe9451dff910/issues` → filter `status in ("done","in_review")` AND `updatedAt within last 30 days`. If the API is unreachable, skip — operator runs `/audit` from MacBook and the API may not be tunneled.
+
 **Hooks / scheduled jobs:** `.claude/settings.json` `hooks` key. Look for `Notification`, `PreToolUse`, `Stop` — any of these = recurring trigger active.
 
 **Recurring patterns documented in CLAUDE.md:** sections about `/schedule` cron routines, `/loop` autonomous mode, weekly rituals.
@@ -75,7 +80,7 @@ Don't penalize for non-canonical names if the *intent* is captured elsewhere.
 | `CLAUDE.md` exists, substantive (>2000 words, multi-section) | 5 | Read + count |
 | Identity / role / voice / persona captured (operator brain, halt policy, autonomy expectations) | 5 | Sections like "Halt-before-acting", "Autonomy & Self-Testing", "Operator brain" — at least 2 such sections |
 | Persistent memory exists with multiple entries | 5 | `MEMORY.md` index has ≥3 entries OR memory dir has ≥3 `.md` files |
-| Reference guides exist (operator principles, prompts, API guides) | 5 | `references/`, `prompts/`, OR memory `reference_*.md` count ≥2 |
+| Reference guides + learnings exist | 5 | (a) `references/` or `prompts/` or memory `reference_*.md` count ≥2 → up to 3 pts; AND (b) `references/learnings/` exists with ≥1 entry across `global.md` / `operator-feedback.md` / `by-role/*.md` → up to 2 pts. If learnings dir is empty, hard cap at 3. |
 | Decisions log has ≥3 entries within 90 days | 5 | `decisions/log.md` exists + count entries by `^## YYYY-` headers |
 
 #### Connections (25 pts) — domain-aware, mechanism-agnostic
@@ -122,7 +127,8 @@ A "reachable" connection counts via ANY mechanism: MCP, n8n credential, script, 
 | Telegram operator-notify wired (halt + checkpoint surface) | 5 | `.claude/hooks/notify-telegram.sh` + `telegram-poll.sh` exist + `OPERATOR_TELEGRAM_*` referenced in CLAUDE.md |
 | Recurring trigger documented OR scheduled — `/schedule` cron routine OR n8n schedule-triggered workflow OR weekly ritual in CLAUDE.md | 5 | Schedule-trigger node in any `workflows/*.md`, `/schedule` section in CLAUDE.md, or active CronList entries |
 | Recent activity / usage signal | 5 | Files in `workflows/` or `.claude/skills/` modified within 30 days OR `decisions/log.md` entry within 30 days |
-| Templates folder OR canonical workflow scaffolds populated | 5 | `templates/` exists with ≥1 file OR workflows reference shared scaffolds |
+| Retro coverage — paperclip is actually learning per shipped Issue | 5 | Count files in `references/retros/` matching `AUT-*.md` (exclude INDEX.md) → `R`. Count Issues shipped in last 30 days from paperclip API (status `done` or `in_review`, updatedAt within 30d) → `S`. Score: 0 if `S>0` and `R==0`; 2 if `R/S < 0.3`; 4 if `R/S < 0.7`; 5 if `R/S ≥ 0.7`. If API unreachable, just check `R ≥ 1` → 3 pts, `R ≥ 5` → 5 pts. |
+| Company-state snapshot fresh + populated | 5 | (a) Each of `references/company-state/{founder-syncs,active-clients,this-week,team-capacity}.md` exists → 1 pt each (max 4). (b) Each file's `last_refreshed:` frontmatter is within 36h → bonus 1 pt if all 4 are fresh, -1 per stale file capped at -3. Floor 0. Cap 5. If the entire directory is missing, score 0 + flag "snapshot puller never ran — install via `bash tools/paperclip/scripts/sync-company-state.sh`". |
 
 ### Step 3: Identify top-3 gaps by leverage
 
@@ -187,6 +193,19 @@ Cadence        {bar}  {n}/25  {label}
    → {concrete next-step}
 
 ## Suggested next: {single most leveraged action — usually #1 above}
+
+## Learning Loop Health (added 2026-06-01)
+
+Paperclip memory loop — surfaces whether the system is actually getting smarter per shipped Issue.
+
+- **Learning density:** {N entries across `references/learnings/global.md` + `operator-feedback.md` + `by-role/*.md`}
+- **Retro coverage:** {R retros in `references/retros/`} / {S Issues shipped last 30d} = {ratio}
+- **Operator feedback freshness:** last entry in `operator-feedback.md` was {N days ago} — flag if >14d AND any agent run happened in that window
+- **Pending pulls:** {P} RETRO comments on Issues without corresponding files in `references/retros/`
+- **Company state freshness:** founder-syncs.md = {Xh old}, active-clients.md = {Yh old}, this-week.md = {Zh old}, team-capacity.md = {Wh old}. Flag if any >36h with "→ run `bash tools/paperclip/scripts/sync-company-state.sh` or check `systemctl status sync-company-state.timer` on VPS".
+
+If ratio < 0.7 AND Issues are shipping: run `bash tools/paperclip/scripts/pull-retros.sh` to pull retros + commit. If still low after pull, the `write-retro` skill on Release Engineer may be skipping — check a recent Issue's comments for the `RETRO:` marker.
+If operator-feedback hasn't been touched in 14+ days: surface as a gap — operator is correcting agents in this Claude Code session but not running `/remember` to propagate, so future agents will repeat the same mistakes.
 
 ---
 Structural gaps only. To explore CAPABILITY gaps (what your AIOS could DO that it can't yet), run /level-up after this audit.

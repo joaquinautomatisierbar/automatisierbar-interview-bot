@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- War Room AM kickoff — daily 08:30 Europe/Zurich (OPTIONAL — "in Film kommen").
+     Install: copy to ~/Library/LaunchAgents/ then: launchctl load ~/Library/LaunchAgents/com.automatisierbar.war-room-kickoff.plist
+     Posts the morning "Ziel 100 each, open to goal" nudge + current pace standing. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.automatisierbar.war-room-kickoff</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview/tools/scheduled/war-room-reveal.sh</string>
+        <string>kickoff</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview/.tmp/war-room-kickoff-launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview/.tmp/war-room-kickoff-launchd.err</string>
+</dict>
+</plist>

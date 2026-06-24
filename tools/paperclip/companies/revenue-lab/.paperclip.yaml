@@ -16,6 +16,11 @@ agents:
     inputs:
       env: {}    # reasoning + operator-comms only; spends nothing, touches no external system
 
+  qa-reviewer:
+    inputs:
+      env: {}    # review only — renders + observes deliverables; no external system, no spend
+               # (REVENUE_TELEGRAM_* bound at runtime so it can page the operator if needed)
+
   builder:
     inputs:
       env:

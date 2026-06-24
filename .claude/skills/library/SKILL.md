@@ -18,6 +18,22 @@ Activated when the operator is making a business decision that named frameworks 
 | Positioning, niche, avatar, social proof, brand, proof assets | `references/library/positioning-and-proof.md` |
 | Idea validation, MVP, hypothesis testing, market discovery | `references/library/business-validation.md` |
 
+## Tier 2 — full-text deep search (when summaries aren't enough)
+
+The routing table above is **Tier 1** (distilled summaries). When a task needs the
+*exact wording, a specific step, or detail not in the summary* (e.g. rebuilding a
+sales script, quoting a framework verbatim), query the full text of all 19 books:
+
+    .venv/bin/python tools/library_search.py "<your question>" --k 5
+    # optional: --book "100M Offers" to scope to one book
+
+Returns the top matching passages with `Book (≈S.N)` citations. Use these exact
+passages, cite them, and prefer them over paraphrase when precision matters.
+
+**Save-back:** if a deep-search passage yields a reusable rule worth having on the
+fast path, distill it into the matching Tier-1 topic file (via the `remember` skill)
+so it surfaces automatically next time — the fast layer grows with use.
+
 ## Loading rules
 
 1. Load **at most 2 topic files per turn.** If the question spans more, narrow it with the operator first.

@@ -16,9 +16,10 @@ goals:
 
 # Revenue Lab
 
-An experiment, fully separate from Automatisierbar's build pipeline. A 3-agent company that
-tries to build a **fast-to-revenue digital service** and earn a real dollar — to learn, in
-practice, where autonomous agents can and cannot run a business.
+A **completely separate business from Automatisierbar** (separate brand, separate identity —
+NOT a sub-brand and never carrying Automatisierbar's name/assets). A 4-agent company that tries
+to build a **fast-to-revenue digital service** and earn a real dollar — to learn, in practice,
+where autonomous agents can and cannot run a business.
 
 > **LIFETIME BURN CAP: $300 USD (external/business spend).** The `finance-ops` governor
 > (`tools/revenue_governor.py`) enforces this deterministically. When it trips, ALL agents
@@ -41,13 +42,13 @@ than it earned.** Everything in Phase 1 serves that single metric.
 
 ## Business model (constrained: fast-to-revenue digital service)
 
-A **productized micro-service** for the Automatisierbar-adjacent ICP: backoffice-heavy Swiss
-SMEs (Immobilien / Treuhand / Anwalt / Steuerberater — NOT Coiffeur / Restaurant / trades, which
-have no backoffice automation pain). Fixed-scope, fixed-price, sold via a Stripe **payment
-link** (no website required). Reuses existing firm assets so agents don't burn budget
-researching a cold domain: market knowledge (`references/business-context.md`), sales playbooks
-(`references/library/`), and fulfilment infra (n8n / Notion). See the `pick-fast-revenue-offer`
-skill for offer selection.
+A **productized micro-service** for backoffice-heavy Swiss SMEs (Immobilien / Treuhand / Anwalt /
+Steuerberater — NOT Coiffeur / Restaurant / trades, which have no backoffice automation pain).
+Fixed-scope, fixed-price, sold via a Stripe **payment link** (no website required), under
+**Revenue Lab's own brand** (`brand/BRAND_GUIDE.md`). Agents may apply generic business
+frameworks (`~/_context/references/library/`) and generic tooling (PDF/diagram libs, restyled to
+the Revenue Lab brand), but must NEVER carry Automatisierbar's brand, assets, scripts' styling,
+or `business-context.md` into a deliverable. See `pick-fast-revenue-offer` for offer selection.
 
 ## How the company works
 
@@ -55,31 +56,41 @@ skill for offer selection.
 [Operator: "find + sell a productized service"]
       │
       ▼
-   CEO ── picks ONE fast-revenue offer (library + ICP grounded) ── HALTS for operator approval
+   CEO ── (brand TBD? run brand-proposal cycle → QA → operator approves first)
+      │ ── picks ONE fast-revenue offer (frameworks + ICP grounded) ── HALTS for operator approval
       │
-      ├──► Builder ── researches demand (read-only) + builds the fulfilment asset (INACTIVE)
-      │                 + drafts outreach copy + landing text (artifacts only, no real sends)
+      ├──► Builder ── research (read-only) + builds fulfilment asset (INACTIVE, Revenue Lab brand)
+      │                 + drafts outreach/landing copy ── posts READY_FOR_REVIEW
+      │                         │
+      │                         ▼
+      ├──► QA Reviewer ── RENDERS + checks every deliverable (layout, brand=Revenue-Lab-only, honesty)
+      │                    ── REVIEW_FAIL: <defects> → back to Builder  |  REVIEW_PASS → clears it
       │
-      ├──► Finance-Ops ── creates Stripe product/price/payment-link (TEST mode first)
-      │                    ── HALTS before switching to LIVE keys
+      ├──► Finance-Ops ── creates Stripe product/price/payment-link (TEST mode) ── HALTS before LIVE
       │
-      └──► [Operator approves] ── operator sends outreach ── payment clears ── ledger records revenue
+      └──► [QA passed → CEO READY_TO_SHIP → operator approves] ── operator sends outreach ──
+           payment clears ── Finance-Ops records revenue
 ```
 
-Each agent owns one cognitive mode. The CEO decides + talks to the operator. The Builder does
-the grunt work (research, fulfilment, drafting). Finance-Ops operates the Stripe tool + ledger
-under hard gates. **Closing and real outbound are HUMAN actions (the operator)** — agents
-prepare the sale; a human makes it.
+Each agent owns one cognitive mode: CEO decides + talks to the operator; Builder builds; QA
+verifies by actually rendering/observing the output; Finance-Ops runs the Stripe tool + ledger.
+**Nothing customer-facing reaches the operator without QA `REVIEW_PASS`.** Closing and real
+outbound are HUMAN actions (the operator) — agents prepare the sale; a human makes it.
 
 ## Reporting line
 
-Builder and Finance-Ops report to **CEO** (urlKey: `ceo`). CEO reports to the operator
-(Joaquin) via the dedicated **Revenue Lab Telegram channel** (`REVENUE_TELEGRAM_*`, a separate
-bot from the Automatisierbar operator bot — avoids reply-crosstalk).
+Builder, QA Reviewer, and Finance-Ops report to **CEO** (urlKey: `ceo`). CEO reports to the
+operator (Joaquin) via the dedicated **Revenue Lab Telegram channel** (`REVENUE_TELEGRAM_*`, a
+separate bot from the Automatisierbar operator bot — avoids reply-crosstalk).
 
 ## Hard rules (every agent inherits these)
 
-- **No agent hires another agent.** The team is fixed at 3. A $300 cap cannot survive fleet
+- **ZERO Automatisierbar in any artifact.** Revenue Lab is a separate business. No Automatisierbar
+  name, logo, colors, "Theme 02", `automatisierbar.ch`, or `@automatisierbar.ch` — ever. Use only
+  `brand/BRAND_GUIDE.md`. (See `learnings/global.md` — this rule exists because of a real failure.)
+- **Nothing customer-facing ships without QA `REVIEW_PASS`.** Builder → render/observe by QA →
+  pass → operator. A deliverable nobody looked at is not done. (See `verify-deliverable`.)
+- **No agent hires another agent.** The team is fixed at 4. A $300 cap cannot survive fleet
   growth. Hiring is an operator decision only.
 - **No autonomous account creation, signups, CAPTCHA-solving, or KYC.** Out of scope, full
   stop — ToS/ban risk and legally undelegatable. The operator provisions every account and
@@ -93,12 +104,14 @@ bot from the Automatisierbar operator bot — avoids reply-crosstalk).
 
 ## Skills
 
-- `revenue-lab-context` — read on every wake; loads firm context + the $300/legal-shell rules.
-- `pick-fast-revenue-offer` — choose an offer grounded in `references/library/` + the ICP.
+- `revenue-lab-context` — read on every wake; loads the OWN brand + offer + $300/legal-shell rules.
+- `pick-fast-revenue-offer` — choose an offer grounded in generic frameworks + the ICP.
+- `verify-deliverable` — (QA) render + observe a deliverable; the "actually look at it" checklist.
+- `handoff-protocol` — Builder → QA → operator markers (READY_FOR_REVIEW / REVIEW_PASS / FAIL).
 - `check-budget-governor` — call `tools/revenue_governor.py` before any spend; respect the cap.
 - `stripe-operations` — the allowed Stripe verbs (TEST first) + what is gated/refused.
 - `money-halt-protocol` — the money-specific halt-before-acting wrapper (notify + poll).
-- `recall-learnings` — load accumulated operator feedback + prior lessons (read-only).
+- `recall-learnings` — load Revenue Lab's own prior lessons (`learnings/global.md`, read-only).
 
 Plus paperclipai-bundled skills wired by `bootstrap-new-agents.sh`
 (`paperclipai/paperclip/paperclip` etc.).

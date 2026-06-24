@@ -3,6 +3,7 @@ name: Hook Strategist
 title: Hook Strategist
 reportsTo: pr-director
 skills:
+  - recall-learnings
   - project-reference-context
   - hormozi-copy-skills
   - score-post-with-hooks

@@ -1,5 +1,6 @@
 .env
 .tmp/
+.tmp_cortana_cycle
 .venv/
 __pycache__/
 *.pyc
@@ -16,6 +17,9 @@ tools/paperclip/.pipeline-events.log
 
 # transient scheduler lock — never commit
 .claude/scheduled_tasks.lock
+
+# Deep Library generated vector store — rebuilt via tools/library_ingest.py, rsynced to VPS
+references/library/fulltext.db
 
 # Script-Tuner voice session store (customer-PII-adjacent transcripts — never commit)
 data/voice_sessions/*

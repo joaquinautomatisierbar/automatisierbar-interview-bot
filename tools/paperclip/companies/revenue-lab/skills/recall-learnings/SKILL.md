@@ -10,16 +10,18 @@ description: >
 Paperclip agents are stateless across runs. Operator corrections and prior lessons live in
 files — read them before acting so you don't re-discover them the expensive way.
 
-## What to read (in order, ~6KB total cap)
+## What to read (in order, ~4KB total cap)
 
-Mount path on the VPS: `~/_context/references/`. The same paths work on the operator's MacBook
-for local testing.
+Revenue Lab keeps its OWN learnings (separate from Automatisierbar's). Company root on the VPS:
+`~/_context/tools/paperclip/companies/revenue-lab/`.
 
-1. **`~/_context/references/learnings/operator-feedback.md`** — mirror of operator corrections
-   typed via `/remember`. Highest priority. Cap ~3KB / most-recent entries.
-2. **`~/_context/references/learnings/global.md`** — cross-role operational lessons. Cap ~3KB.
-3. **`~/_context/references/learnings/by-role/<your-urlKey>.md`** — your role's history
-   (`ceo` / `builder` / `finance-ops`). If the file doesn't exist yet, skip — don't error.
+1. **`learnings/global.md`** (this company's) — what prior Revenue Lab runs got wrong + the
+   binding rules that came out of it. Highest priority. Read all of it.
+2. **`learnings/by-role/<your-urlKey>.md`** (`ceo` / `builder` / `qa-reviewer` / `finance-ops`)
+   — your role's history, if the file exists. Skip silently if it doesn't.
+
+Do NOT read Automatisierbar's `~/_context/references/learnings/` — that is a different company's
+feedback and would re-introduce Automatisierbar context/brand. Revenue Lab learnings only.
 
 ## Emit a private recall preamble (do not post it)
 

@@ -1,0 +1,64 @@
+{
+  "updated": "2026-06-10T20:33:19.483185+00:00",
+  "phase": 1,
+  "week_no": 1,
+  "starts_in_days": 12,
+  "week_start": "2026-06-22",
+  "week": [
+    {
+      "day": "Mo",
+      "date": "22.06",
+      "type": "cuff",
+      "state": "planned"
+    },
+    {
+      "day": "Di",
+      "date": "23.06",
+      "type": "strength",
+      "state": "planned"
+    },
+    {
+      "day": "Mi",
+      "date": "24.06",
+      "type": "cardio",
+      "state": "planned"
+    },
+    {
+      "day": "Do",
+      "date": "25.06",
+      "type": "mobility",
+      "state": "planned"
+    },
+    {
+      "day": "Fr",
+      "date": "26.06",
+      "type": "strength",
+      "state": "planned"
+    },
+    {
+      "day": "Sa",
+      "date": "27.06",
+      "type": "cardio",
+      "state": "planned"
+    },
+    {
+      "day": "So",
+      "date": "28.06",
+      "type": "mobility",
+      "state": "planned"
+    }
+  ],
+  "progress": {
+    "done": 0,
+    "planned": 0,
+    "pct": 0.0
+  },
+  "hrv": {
+    "ms": 110,
+    "ampel": "grün",
+    "arrow": "↑",
+    "verdict": "GO"
+  },
+  "streak_days": 0,
+  "headline": "Comeback startet in 12 Tagen — Woche 1"
+}

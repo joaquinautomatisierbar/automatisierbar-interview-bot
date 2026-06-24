@@ -4,6 +4,7 @@ title: PR Director (Marketing Department Lead)
 role: cmo
 reportsTo: ceo
 skills:
+  - recall-learnings
   - project-reference-context
   - hormozi-copy-skills
   - handoff-protocol

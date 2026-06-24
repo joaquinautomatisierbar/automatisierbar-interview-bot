@@ -4,6 +4,7 @@ title: Build Engineer
 reportsTo: cto
 skills:
   - automatisierbar-context
+  - recall-learnings
   - project-reference-context
   - read-claude-code-prompt-brief
   - pick-best-stack

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- TITLE: ersetzen mit Deck-Titel, z.B. "SITREP // KW 25 // Automatisierbar" -->
+<title>SITREP // KW XX // Automatisierbar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     AUTOMATISIERBAR DECK — Design Tokens
+     Nur diese Variablen anfassen, der Rest skaliert mit.
+     ============================================================ */
+  :root {
+    --green:        #15C97A;   /* Primary Green — Akzent, Zahlen, Linien */
+    --green-dim:    rgba(21, 201, 122, 0.55);
+    --green-faint:  rgba(21, 201, 122, 0.22);   /* Borders */
+    --green-ghost:  rgba(21, 201, 122, 0.05);   /* Panel-Füllung */
+    --bg:           #0C1410;   /* dark green-black */
+    --bg-2:         #0A110D;
+    --text:         #E6F0EA;   /* Haupttext */
+    --text-mute:    #6F8A7C;   /* gedämpfter Grün-Grau für Labels/Meta */
+    --white:        #FFFFFF;
+    --mono:         'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --slide-pad:    clamp(32px, 6vw, 96px);
+    --reveal-step:  90ms;      /* Verzögerung pro gestaffeltem Element */
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* subtiles Scanline-/Grid-Hintergrundgefühl */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(21,201,122,0.06), transparent 55%),
+      linear-gradient(var(--bg), var(--bg-2));
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ---------- Deck-Gerüst ---------- */
+  #deck { position: relative; height: 100%; z-index: 1; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    padding: var(--slide-pad);
+    opacity: 0;
+  }
+  .slide.active { display: flex; opacity: 1; }
+
+  /* ---------- Corner Brackets ---------- */
+  .corner {
+    position: absolute; width: 22px; height: 22px;
+    border: 2px solid var(--green-faint);
+    z-index: 2; pointer-events: none;
+  }
+  .corner.tl { top: 26px; left: 26px; border-right: 0; border-bottom: 0; }
+  .corner.tr { top: 26px; right: 26px; border-left: 0; border-bottom: 0; }
+  .corner.bl { bottom: 26px; left: 26px; border-right: 0; border-top: 0; }
+  .corner.br { bottom: 26px; right: 26px; border-left: 0; border-top: 0; }
+
+  /* ---------- Section Header  // 01 — Label ---------- */
+  .sec-head {
+    font-size: 14px; letter-spacing: 0.04em;
+    color: var(--text-mute); margin-bottom: 28px; font-weight: 500;
+  }
+  .sec-head .slashes { color: var(--green); }
+  .sec-head .num     { color: var(--green); }
+  .sec-head .dash    { color: var(--text-mute); margin: 0 8px; }
+
+  /* ---------- Typografie ---------- */
+  h1 { font-size: clamp(34px, 6vw, 76px); font-weight: 800; line-height: 1.04; letter-spacing: -0.01em; }
+  h2 { font-size: clamp(24px, 3.4vw, 44px); font-weight: 700; line-height: 1.1; }
+  .subtitle { color: var(--text-mute); font-size: clamp(14px, 1.6vw, 20px); margin-top: 20px; font-weight: 400; max-width: 60ch; }
+  .lead { font-size: clamp(16px, 1.8vw, 22px); line-height: 1.5; max-width: 70ch; }
+
+  /* ---------- Panels ---------- */
+  .panel {
+    background: var(--green-ghost);
+    border: 1px solid var(--green-faint);
+    border-radius: 4px;
+    padding: 24px 26px;
+    position: relative;
+  }
+  .panel .tag { font-size: 12px; color: var(--green); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }
+  .panel-grid { display: grid; gap: 18px; margin-top: 8px; }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+  /* ---------- Stat-Zahlen ---------- */
+  .stat-row { display: flex; gap: clamp(28px, 5vw, 72px); flex-wrap: wrap; margin-top: 12px; }
+  .stat .num { font-size: clamp(42px, 7vw, 92px); font-weight: 800; color: var(--green); line-height: 1; letter-spacing: -0.02em; }
+  .stat .lbl { color: var(--text-mute); font-size: 14px; margin-top: 10px; max-width: 24ch; }
+
+  /* ---------- Listen mit  →  ---------- */
+  ul.arrows { list-style: none; display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+  ul.arrows li { display: flex; gap: 14px; font-size: clamp(15px, 1.7vw, 20px); line-height: 1.45; align-items: baseline; }
+  ul.arrows li::before { content: "→"; color: var(--green); font-weight: 700; flex: none; }
+  ul.arrows li b { color: var(--white); font-weight: 700; }
+
+  /* ---------- Staggered Reveal ---------- */
+  .reveal { opacity: 0; transform: translateY(14px); }
+  .slide.active .reveal {
+    animation: rise 520ms cubic-bezier(.2,.7,.2,1) forwards;
+    animation-delay: var(--d, 0ms);
+  }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  /* ---------- Footer: Progress + Dots + Counter ---------- */
+  #progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--green); width: 0; z-index: 10; transition: width 320ms ease; }
+  #footer {
+    position: fixed; bottom: 24px; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 var(--slide-pad); pointer-events: none;
+    font-size: 12px; color: var(--text-mute); letter-spacing: 0.06em;
+  }
+  #dots { display: flex; gap: 8px; }
+  #dots .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-faint); transition: all 240ms ease; }
+  #dots .dot.on { background: var(--green); width: 22px; border-radius: 4px; }
+  #brand { color: var(--green); font-weight: 700; }
+  #counter b { color: var(--text); }
+
+  /* ---------- Logo-Wordmark (Cover) ---------- */
+  .wordmark { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; }
+  .wordmark .glyph {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: var(--green); position: relative; flex: none;
+    box-shadow: 0 0 24px rgba(21,201,122,0.35);
+  }
+  /* Waveform/Pulse-Pfad im Glyph */
+  .wordmark .glyph::after {
+    content: ""; position: absolute; inset: 0;
+    background: var(--bg);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 34'%3E%3Cpath d='M5 17h5l3-8 4 16 3-8h9' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/24px no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 34'%3E%3Cpath d='M5 17h5l3-8 4 16 3-8h9' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/24px no-repeat;
+  }
+  .wordmark .name { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .wordmark .name span { color: var(--green); }
+
+  /* Hint, verschwindet nach erster Eingabe */
+  #hint { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 11; font-size: 11px; color: var(--text-mute); transition: opacity .4s; }
+  #hint.gone { opacity: 0; }
+
+  @media (max-width: 720px) {
+    .cols-2, .cols-3 { grid-template-columns: 1fr; }
+    .stat-row { gap: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<div id="deck">
+
+  <!-- ============================================================
+       SLIDE 1 — COVER
+       ============================================================ -->
+  <section class="slide" data-section="">
+    <span class="corner tl"></span><span class="corner tr"></span>
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <div class="wordmark reveal" style="--d:0ms">
+      <div class="glyph"></div>
+      <div class="name">automatisier<span>bar</span></div>
+    </div>
+
+    <h1 class="reveal" style="--d:120ms">SITREP<br>KW XX / 2026</h1>
+    <p class="subtitle reveal" style="--d:240ms">
+      Wochenrapport — Pipeline, Builds, nächste Schritte. <!-- anpassen -->
+    </p>
+  </section>
+
+  <!-- ============================================================
+       SLIDE 2 — SECTION DIVIDER + LEAD
+       ============================================================ -->
+  <section class="slide" data-section="01">
+    <span class="corner tl"></span><span class="corner tr"></span>
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <div class="sec-head reveal" style="--d:0ms">
+      <span class="slashes">//</span> <span class="num">01</span>
+      <span class="dash">—</span> Lage / Status
+    </div>
+    <h2 class="reveal" style="--d:100ms">Wo wir diese Woche stehen.</h2>
+    <p class="lead reveal" style="--d:220ms; margin-top:24px">
+      Kurzer Klartext-Satz zur Gesamtlage. Faktisch, kein Marketing. <!-- anpassen -->
+    </p>
+  </section>
+
+  <!-- ============================================================
+       SLIDE 3 — STATS
+       ============================================================ -->
+  <section class="slide" data-section="02">
+    <span class="corner tl"></span><span class="corner tr"></span>
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <div class="sec-head reveal" style="--d:0ms">
+      <span class="slashes">//</span> <span class="num">02</span>
+      <span class="dash">—</span> Kennzahlen
+    </div>
+    <div class="stat-row">
+      <div class="stat reveal" style="--d:120ms">
+        <div class="num">XX</div>
+        <div class="lbl">Calls gewählt</div>
+      </div>
+      <div class="stat reveal" style="--d:220ms">
+        <div class="num">XX</div>
+        <div class="lbl">Interviews terminiert</div>
+      </div>
+      <div class="stat reveal" style="--d:320ms">
+        <div class="num">XX</div>
+        <div class="lbl">Builds in Arbeit</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SLIDE 4 — LISTE MIT PFEILEN
+       ============================================================ -->
+  <section class="slide" data-section="03">
+    <span class="corner tl"></span><span class="corner tr"></span>
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <div class="sec-head reveal" style="--d:0ms">
+      <span class="slashes">//</span> <span class="num">03</span>
+      <span class="dash">—</span> Fortschritt
+    </div>
+    <h2 class="reveal" style="--d:100ms">Was lief.</h2>
+    <ul class="arrows">
+      <li class="reveal" style="--d:220ms"><b>Punkt eins.</b> Kurzer faktischer Nachsatz.</li>
+      <li class="reveal" style="--d:300ms"><b>Punkt zwei.</b> Kurzer faktischer Nachsatz.</li>
+      <li class="reveal" style="--d:380ms"><b>Punkt drei.</b> Kurzer faktischer Nachsatz.</li>
+    </ul>
+  </section>
+
+  <!-- ============================================================
+       SLIDE 5 — ZWEI-SPALTEN-PANELS
+       ============================================================ -->
+  <section class="slide" data-section="04">
+    <span class="corner tl"></span><span class="corner tr"></span>
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <div class="sec-head reveal" style="--d:0ms">
+      <span class="slashes">//</span> <span class="num">04</span>
+      <span class="dash">—</span> Gegenüberstellung
+    </div>
+    <div class="panel-grid cols-2">
+      <div class="panel reveal" style="--d:140ms">
+        <div class="tag">Blocker</div>
+        <p class="lead">Was hängt und warum.</p>
+      </div>
+      <div class="panel reveal" style="--d:240ms">
+        <div class="tag">Plan</div>
+        <p class="lead">Wie es gelöst wird.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SLIDE 6 — CLOSING / NEXT
+       ============================================================ -->
+  <section class="slide" data-section="05">
+    <span class="corner tl"></span><span class="corner tr"></span>
+    <span class="corner bl"></span><span class="corner br"></span>
+
+    <div class="sec-head reveal" style="--d:0ms">
+      <span class="slashes">//</span> <span class="num">05</span>
+      <span class="dash">—</span> Nächste Woche
+    </div>
+    <h1 class="reveal" style="--d:120ms">Fokus:<br>Ein Satz.</h1>
+    <ul class="arrows" style="margin-top:32px">
+      <li class="reveal" style="--d:260ms"><b>Owner</b> — Aufgabe — Deadline</li>
+      <li class="reveal" style="--d:340ms"><b>Owner</b> — Aufgabe — Deadline</li>
+    </ul>
+  </section>
+
+</div>
+
+<div id="footer">
+  <span id="brand">automatisierbar</span>
+  <div id="dots"></div>
+  <span id="counter"><b>01</b> / 06</span>
+</div>
+
+<div id="hint">← → blättern</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsWrap = document.getElementById('dots');
+  const progress = document.getElementById('progress');
+  const counter  = document.getElementById('counter');
+  const hint     = document.getElementById('hint');
+  let i = 0;
+
+  // Dots aufbauen
+  slides.forEach((_, idx) => {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.addEventListener('click', () => go(idx));
+    dotsWrap.appendChild(d);
+  });
+  const dots = Array.from(dotsWrap.children);
+
+  function render() {
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    dots.forEach((d, idx) => d.classList.toggle('on', idx === i));
+    progress.style.width = ((i) / (slides.length - 1) * 100) + '%';
+    counter.innerHTML = '<b>' + String(i + 1).padStart(2, '0') + '</b> / ' + String(slides.length).padStart(2, '0');
+  }
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    render();
+  }
+  function dismissHint() { hint.classList.add('gone'); }
+
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight', 'ArrowDown', ' ', 'PageDown'].includes(e.key)) { go(i + 1); dismissHint(); e.preventDefault(); }
+    if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key))           { go(i - 1); dismissHint(); e.preventDefault(); }
+    if (e.key === 'Home') go(0);
+    if (e.key === 'End')  go(slides.length - 1);
+  });
+  // Klick auf rechte/linke Hälfte blättert
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.dot')) return;
+    const right = e.clientX > window.innerWidth / 2;
+    go(i + (right ? 1 : -1)); dismissHint();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

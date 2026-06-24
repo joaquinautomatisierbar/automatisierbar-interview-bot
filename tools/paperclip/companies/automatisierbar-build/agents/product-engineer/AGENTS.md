@@ -4,6 +4,7 @@ title: Product Engineer (Intent Anchor)
 reportsTo: cto
 skills:
   - automatisierbar-context
+  - recall-learnings
   - project-reference-context
   - read-claude-code-prompt-brief
   - surface-klaerungspunkte

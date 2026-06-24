@@ -4,6 +4,7 @@ title: QA Engineer
 reportsTo: cto
 skills:
   - automatisierbar-context
+  - recall-learnings
   - project-reference-context
   - handoff-protocol
   - playwright-browser-test

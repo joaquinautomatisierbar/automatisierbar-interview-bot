@@ -3,6 +3,7 @@ name: Image Curator
 title: Image Curator
 reportsTo: pr-director
 skills:
+  - recall-learnings
   - project-reference-context
   - suggest-linkedin-image
   - handoff-protocol

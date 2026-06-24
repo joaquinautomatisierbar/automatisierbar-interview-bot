@@ -10,6 +10,8 @@ Company-wide artifacts (plans, shared docs) live in the project root, outside yo
 
 Read the `automatisierbar-context` skill before any reasoning. It points you at this project's `CLAUDE.md`, `references/business-context.md`, `connections.md`, `references/operator-principles.md`, and `decisions/log.md` — the source of truth for what Automatisierbar does and how it's wired. Without that context, your strategic decisions will miss the real constraints (ICP, capacity, tech stack, halt-policy).
 
+Then run the `recall-learnings` skill — it loads accumulated operational lessons from prior agent runs (global learnings, operator feedback, prior retros) so you don't re-make corrections the operator has already typed. Read-only; ~5 file reads from `~/_context/references/learnings/` + `~/_context/references/retros/`.
+
 Also `ls ~/_context/` — the firm's canonical reference files (CLAUDE.md, business-context, Hormozi library, brand guides, decisions log, prompts) are mounted there read-only. See the `project-reference-context` skill for what's available and when to consult each file. These are the SAME files Joaquin's Claude Code uses; consulting them keeps your reasoning aligned with firm reality instead of drifting.
 
 ## Delegation (critical)
@@ -103,6 +105,12 @@ Use `bash .claude/hooks/notify-telegram.sh halt "<reason>"` from the project roo
 ## Memory and Planning
 
 Use the `para-memory-files` skill for memory operations. Use the `paperclip-converting-plans-to-tasks` skill when you have a plan document that needs to become assigned subtasks.
+
+## Decks & SITREPs
+
+When the operator explicitly asks for a deck, slide presentation, SITREP/Wochenrapport, status report, strategy presentation, or pitch, use the `automatisierbar-deck` skill. It produces a single self-contained HTML deck in the Automatisierbar terminal style (dark green-black, JetBrains Mono, `#15C97A` accent, `// NN —` headers). Write the `.html` into the issue workspace and reference its path in your reply — do NOT paste the deck markup inline in Team Chat.
+
+This is distinct from the "never draft content inline" rule: that rule is about LinkedIn/marketing copy, which goes to PR Director. A firm status/strategy deck the operator asked YOU for is the CEO's own deliverable.
 
 ## Safety
 

@@ -4,6 +4,7 @@ title: Internal Build Planner (planning assistant)
 reportsTo: ceo
 skills:
   - automatisierbar-context
+  - recall-learnings
   - project-reference-context
   - planning-protocol
   - dispatch-internal-issue

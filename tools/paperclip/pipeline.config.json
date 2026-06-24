@@ -16,8 +16,8 @@
   },
 
   "host": {
-    "ip": "72.61.106.8",
-    "hostname": "srv1677199",
+    "ip": "187.124.191.115",
+    "hostname": "srv1764835",
     "sshUser": "paperclip",
     "sshKey": "~/.ssh/paperclip_vps",
     "servicesDir": "/home/paperclip/services",

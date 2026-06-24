@@ -3,13 +3,19 @@
 
 For each agent: (1) run `paperclipai agent local-cli` to mint an API key + install the
 paperclipai-bundled skills under ./skills/ (without the `paperclip` skill an agent has no
-heartbeat procedure and never runs), then (2) force the SAFE heartbeat config —
-enabled:false, wakeOnDemand:false, cooldownSec:60, maxConcurrentRuns:1.
+heartbeat procedure and never runs), then (2) set the heartbeat config —
+enabled:false, wakeOnDemand:TRUE, cooldownSec:60, maxConcurrentRuns:1.
+
+IMPORTANT (learned 2026-06-13): wakeOnDemand MUST be true or the agent is completely inert —
+paperclip SKIPS every run, including explicit `heartbeat run`, when both enabled and
+wakeOnDemand are false ("Heartbeat invocation was skipped"). The loop-safety does NOT come
+from wakeOnDemand:false; it comes from the self-comment-exit guard in each AGENTS.md
+("if the last comment is yours, exit") + cooldownSec:60 + maxConcurrentRuns:1 + the budget
+governor kill-switch. This matches the working Automatisierbar config.
 
 Why not the shared bootstrap-new-agents.sh: that script has a shell-quoting bug (single
-quotes inside its embedded Python terminate the bash string → `urlKey` NameError) and it
-sets wakeOnDemand:true, which violates Revenue Lab's no-self-loop policy. This sets
-wakeOnDemand:false from the start — no risky window. Uses urllib (no shell-quoting).
+quotes inside its embedded Python terminate the bash string → `urlKey` NameError). Uses
+urllib (no shell-quoting).
 
 Run ON THE VPS from the company package dir (must contain ./skills/):
   cd /home/paperclip/revenue-lab
@@ -36,8 +42,9 @@ BUNDLED = [
     "paperclipai/paperclip/para-memory-files",
     "paperclipai/paperclip/terminal-bench-loop",
 ]
-# SAFE heartbeat config — the whole point of Revenue Lab's no-burn policy.
-HEARTBEAT = {"enabled": False, "wakeOnDemand": False, "cooldownSec": 60,
+# Triggerable + loop-safe heartbeat config. wakeOnDemand MUST be true (else inert);
+# loop-safety = self-comment-exit guard + cooldown + maxConcurrentRuns + budget governor.
+HEARTBEAT = {"enabled": False, "wakeOnDemand": True, "cooldownSec": 60,
              "intervalSec": 0, "maxConcurrentRuns": 1}
 
 

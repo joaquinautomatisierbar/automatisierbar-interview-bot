@@ -159,20 +159,40 @@ def _fire_marketing_dispatcher(*, brief_url: str, brief_db_id: str,
 
 
 def _telegram(mode: str, msg: str) -> None:
-    """Fire .claude/hooks/notify-telegram.sh. Silent on failure."""
+    """Send a Telegram notification. Tries two paths in order:
+       1. `.claude/hooks/notify-telegram.sh` if present (operator MacBook context — preserves
+          tag/halt behavior wired through the hook)
+       2. Direct HTTPS to Telegram Bot API (VPS context — hook script doesn't exist there)
+       Silent on failure either way; brief generation never blocks on Telegram."""
     script = _REPO_ROOT / ".claude" / "hooks" / "notify-telegram.sh"
-    if not script.exists():
+    if script.exists():
+        try:
+            subprocess.run(
+                ["bash", str(script), mode, msg],
+                cwd=str(_REPO_ROOT),
+                timeout=10,
+                capture_output=True,
+                check=False,
+            )
+            return
+        except Exception as e:
+            print(f"[brief] telegram {mode} hook dispatch failed: {e}", file=sys.stderr)
+
+    # Direct HTTP fallback (VPS systemd timer path).
+    token = os.environ.get("OPERATOR_TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("OPERATOR_TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
         return
+    project = (_REPO_ROOT.name or "linkedin-brief").replace("_", " ")
+    prefixed = f"[{project}] [{mode}] {msg}"
     try:
-        subprocess.run(
-            ["bash", str(script), mode, msg],
-            cwd=str(_REPO_ROOT),
-            timeout=10,
-            capture_output=True,
-            check=False,
+        requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": prefixed[:4000]},
+            timeout=8,
         )
     except Exception as e:
-        print(f"[brief] telegram {mode} dispatch failed: {e}", file=sys.stderr)
+        print(f"[brief] telegram {mode} HTTP dispatch failed: {e}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------

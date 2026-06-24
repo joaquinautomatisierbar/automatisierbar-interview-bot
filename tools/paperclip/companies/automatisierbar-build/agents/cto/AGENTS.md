@@ -4,6 +4,7 @@ title: Chief Technology Officer (Build Pipeline Lead)
 reportsTo: ceo
 skills:
   - automatisierbar-context
+  - recall-learnings
   - project-reference-context
   - read-claude-code-prompt-brief
   - pick-best-stack

@@ -4,6 +4,7 @@ title: Read-any-automation + generate-matching-input-data agent
 reportsTo: ceo
 skills:
   - automatisierbar-context
+  - recall-learnings
   - project-reference-context
   - generate-automation-test-data
   - handoff-protocol

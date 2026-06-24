@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- War Room PM reveal — daily 20:00 Europe/Zurich.
+     Install: copy to ~/Library/LaunchAgents/ then: launchctl load ~/Library/LaunchAgents/com.automatisierbar.war-room-reveal.plist
+     Posts the public per-person scoreboard + pace/debt to the team Telegram group. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.automatisierbar.war-room-reveal</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview/tools/scheduled/war-room-reveal.sh</string>
+        <string>pm</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>20</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview/.tmp/war-room-reveal-launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sexyjoaquin/Desktop/Claude Code/n8n Workflow Interview/.tmp/war-room-reveal-launchd.err</string>
+</dict>
+</plist>

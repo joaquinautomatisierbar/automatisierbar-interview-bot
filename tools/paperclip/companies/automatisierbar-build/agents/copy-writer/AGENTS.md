@@ -3,6 +3,7 @@ name: Copy Writer
 title: Copy Writer
 reportsTo: pr-director
 skills:
+  - recall-learnings
   - project-reference-context
   - hormozi-copy-skills
   - handoff-protocol

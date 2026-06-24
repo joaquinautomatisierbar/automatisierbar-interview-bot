@@ -1,0 +1,63 @@
+{
+  "name": "Cold Call — Voice Post-Call Handler (E)",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "voice-call-result", "responseMode": "onReceived", "options": {} },
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "webhookId": "voice-call-result"
+    },
+    {
+      "parameters": { "jsCode": "const inp = $input.first().json;\nconst b = inp.body || inp;\nconst m = b.message || b;\nconst meta = (m.call && m.call.metadata) || m.metadata || {};\nconst analysis = m.analysis || {};\nconst sd = analysis.structuredData || {};\nconst transcript = m.transcript || '';\nconst connected = !!transcript && (sd.connected !== false);\nconst firma = String(meta.firma || 'Unbekannt').replace(/[\\\\/:*?\"<>|]/g, '').trim() || 'Unbekannt';\nconst d = new Date();\nconst pad = (n) => String(n).padStart(2, '0');\nconst ts = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;\nconst il = sd.interest_level;\nconst outcome = il === 'hot' ? 'Hot' : il === 'warm' ? 'Borderline' : (connected ? 'Cold' : 'Direct-Abwimmlung');\nreturn [{ json: {\n  connected,\n  transcript,\n  drive_filename: `${firma}__joaquin.m4a_${ts}.txt`,\n  session_id: meta.session_id || '',\n  cost: m.cost || 0,\n  endedReason: m.endedReason || '',\n  app_payload: { lead_id: meta.lead_id || '', firma: meta.firma || '', branche: meta.branche || '', disclose_ai: !!meta.disclose_ai, transcript, outcome, analysis: sd }\n} }];" },
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "ADAPTER-IN (normalize)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }, "conditions": [ { "id": "c1", "leftValue": "={{ $json.connected }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } } ], "combinator": "and" }, "options": {} },
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Connected & transcript?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": { "resource": "file", "operation": "createFromText", "name": "={{ $json.drive_filename }}", "content": "={{ $json.transcript }}", "driveId": { "__rl": true, "mode": "list", "value": "My Drive" }, "folderId": { "__rl": true, "mode": "id", "value": "1PJUP0AOlU3SyT0NZF9_rzKfx19tRTVJh" }, "options": {} },
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Transcript to Drive (triggers Workflow A)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [680, -100]
+    },
+    {
+      "parameters": { "method": "POST", "url": "={{ $env.APP_BASE_URL }}/api/voice/session/{{ $json.session_id }}/call", "sendHeaders": true, "headerParameters": { "parameters": [ { "name": "X-API-Key", "value": "={{ $env.PDF_API_KEY }}" } ] }, "sendBody": true, "contentType": "json", "specifyBody": "json", "jsonBody": "={{ JSON.stringify($json.app_payload) }}", "options": {} },
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Feed Script-Tuner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [680, 100],
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "parameters": { "jsCode": "// Voicemail / no-answer: light log only, no Drive drop, retry-eligible.\nconst j = $input.first().json;\nreturn [{ json: { logged: true, endedReason: j.endedReason, note: 'not connected / no transcript' } }];" },
+      "id": "66666666-6666-6666-6666-666666666666",
+      "name": "Log not-connected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 260]
+    }
+  ],
+  "connections": {
+    "Vapi Webhook": { "main": [[{ "node": "ADAPTER-IN (normalize)", "type": "main", "index": 0 }]] },
+    "ADAPTER-IN (normalize)": { "main": [[{ "node": "Connected & transcript?", "type": "main", "index": 0 }]] },
+    "Connected & transcript?": { "main": [[{ "node": "Transcript to Drive (triggers Workflow A)", "type": "main", "index": 0 }, { "node": "Feed Script-Tuner", "type": "main", "index": 0 }], [{ "node": "Log not-connected", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "_import_notes": "Validated via n8n-mcp validate_workflow (valid:true, 0 errors). Before activating: (1) attach Google Drive OAuth credential to the Drive node; (2) set n8n env APP_BASE_URL (incl https://) + PDF_API_KEY; (3) set this webhook URL as the Vapi assistant server.url with serverMessages=['end-of-call-report']; (4) keep INACTIVE until tested. The Drive drop reuses existing Workflow A (9kra1rbKJacENksN) for classification via the __joaquin filename."
+}
