@@ -15,8 +15,10 @@ Open **claude.ai/code → the `automatisierbar-ops` environment → settings**.
 ### 1. Environment variables (secrets)
 Copy each value from your local `.env` into the environment's **Environment variables** section. They persist across sessions. Stored plaintext — fine for a private solo environment.
 
-**Core (set these first — most tools need them):**
+**Core (set these first — most tools + MCP servers need them):**
 `ANTHROPIC_API_KEY`, `NOTION_API_KEY`, `N8N_API_KEY`
+- `N8N_API_URL` = `https://oojoaquin.app.n8n.cloud`  ← **new**, not in local `.env`. Needed to put the `n8n-mcp` server into management mode in the cloud (create/update workflows). Without it, n8n-mcp stays docs-only.
+- `CONTEXT7_API_KEY` (optional) — only raises context7 rate limits; works without it.
 
 **Notion / briefs:** `NOTION_BRIEFS_DB_ID`, `NOTION_POST_VARIANTS_DB_ID`, `BRIEF_PERSON`
 **Telegram (operator + team):** `OPERATOR_TELEGRAM_BOT_TOKEN`, `OPERATOR_TELEGRAM_CHAT_ID`, `TEAM_TELEGRAM_BOT_TOKEN`, `JOAQUIN_CHAT_ID`, `PATRIK_CHAT_ID`, `NICO_CHAT_ID`, `TEJ_CHAT_ID`
@@ -58,8 +60,18 @@ Add to the setup script:
 [ -n "$GOOGLE_TOKEN_B64" ] && echo "$GOOGLE_TOKEN_B64" | base64 -d > token.json
 ```
 
-### 5. MCP connectors (Notion / Gmail / Calendar / Drive / n8n cloud)
-Account-level claude.ai connectors are user-scoped and may not appear in cloud sessions. `n8n-mcp` (node docs/validation) works via `.mcp.json`. If you want the Notion/Gmail/etc. tools in the cloud and they're missing, add them as MCP servers in `.mcp.json` or enable the equivalent plugins in the repo `.claude/settings.json`. The Python tools (`tools/notion_*`, etc.) work off `NOTION_API_KEY` regardless of MCP.
+### 5. MCP servers (wired in `.mcp.json` — portable, token-based)
+Account-level claude.ai connectors are user-scoped and don't reliably appear in cloud sessions, so the high-value ones are wired as portable stdio servers in `.mcp.json`. They read their secrets from the env vars you set in step 1 (empty default locally, so they stay inert on the Mac where you use the hosted connectors instead):
+
+| Server | Package | Needs (env) | Gives you |
+|---|---|---|---|
+| `n8n-mcp` | `n8n-mcp` | `N8N_API_URL` + `N8N_API_KEY` | n8n node docs, validation, **and** create/update/execute workflows on n8n cloud |
+| `notion` | `@notionhq/notion-mcp-server` | `NOTION_API_KEY` (passed as `NOTION_TOKEN`) | Read/write Notion pages + databases |
+| `context7` | `@upstash/context7-mcp` | `CONTEXT7_API_KEY` (optional) | Up-to-date library/framework docs |
+
+The Notion integration token must have access to the relevant pages (same one your Python tools use).
+
+**Gmail / Calendar / Drive:** not wired as MCP — those need interactive Google OAuth, which the sandbox can't do. Two options: (a) use the existing Python tools, which work off `credentials.json`/`token.json` (provide via the base64 method in step 4); or (b) ask to wire a refresh-token-based Google Workspace MCP as a follow-up. For most work here, (a) already covers it.
 
 ## Working interchangeably (local ↔ cloud)
 - Cloud sessions branch + open PRs against `automatisierbar-ops`. Default branch `main` holds the full state.
