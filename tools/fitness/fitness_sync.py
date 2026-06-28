@@ -314,6 +314,51 @@ def hrv_ampel(metrics):
     return base
 
 # ---------- compute ----------
+def week_bag(rows_for_week):
+    """Day-independent 'bag of sessions' for an ISO week.
+    Counts planned vs actually-done session TYPES across the whole week, so a
+    session done on a different day than planned still credits the week.
+    done is capped per-type at the weekly plan (min) -> never exceeds 100%."""
+    from collections import Counter
+    planned_bag, done_bag = Counter(), Counter()
+    for r in rows_for_week:
+        for t in r.get("planned", []): planned_bag[t] += 1
+        for t in r.get("done", []):    done_bag[t] += 1
+    planned_total = sum(planned_bag.values())
+    done_credited = sum(min(done_bag[t], planned_bag[t]) for t in planned_bag)
+    return planned_bag, done_bag, done_credited, planned_total
+
+def annotate_week_coverage(rows):
+    """Mark, per day, a planned type NOT done that day whose full WEEKLY quota was
+    still met (the session got done on another day) -> row['covered'] + row['moved'].
+    'covered' only fires when done_bag[t] >= planned_bag[t], so it never contradicts a
+    sub-100% week; 'doneOn' lists the surplus days (sessions done on a non-scheduled
+    day). Lets the week be judged as a whole instead of day-locked."""
+    from collections import defaultdict
+    by_week = defaultdict(list)
+    for r in rows:
+        y, m, dd = map(int, r["date"].split("-"))
+        iso = date(y, m, dd).isocalendar()
+        by_week[(iso[0], iso[1])].append(r)
+    for _wk, rs in by_week.items():
+        planned_bag, done_bag, _c, _t = week_bag(rs)
+        surplus_dates = defaultdict(list)   # type -> dates it was done on a NON-planned day
+        for r in rs:
+            pset = set(r.get("planned", []))
+            for t in r.get("done", []):
+                if t not in pset:
+                    surplus_dates[t].append(r["date"])
+        for r in rs:
+            done_today = set(r.get("done", []))
+            covered, moved = [], []
+            for t in sorted(set(r.get("planned", [])) - done_today):
+                if planned_bag.get(t, 0) > 0 and done_bag.get(t, 0) >= planned_bag.get(t, 0):
+                    covered.append(t)
+                    moved.append({"type": t, "doneOn": list(surplus_dates.get(t, []))})
+            r["covered"] = covered
+            r["moved"] = moved
+    return rows
+
 def compute_range(d_start, d_end):
     """Compute daily rows for [d_start, d_end] with rolling HRV trend. Returns list."""
     workouts = hevy_workouts()
@@ -357,14 +402,128 @@ def compute_range(d_start, d_end):
             "metrics": m,
             "strength_volume": hv["volume"] if hv["volume"] else None,
             "hevy_rows": hv["rows"],
+            "activities": [{"name": a.get("name"), "klass": classify_activity(a), "dur": a.get("duration_min")}
+                           for a in acts_by_date.get(ds, [])],
         }
         rows.append(row)
         d += timedelta(days=1)
+    annotate_week_coverage(rows)
     return rows
 
 def plan_label(planned):
     names = {"mobility":"Mobility","cuff":"Cuff","cardio":"Cardio","strength":"Kraft"}
     return " · ".join(names[p] for p in ["mobility","cuff","cardio","strength"] if p in planned) or "Ruhe"
+
+SESSION_NAMES = {"mobility":"Mobility","cuff":"Cuff & Schulter","cardio":"Cardio","strength":"Kraft"}
+def _ddmm(iso): return f"{iso[8:10]}.{iso[5:7]}" if iso and len(iso) >= 10 else (iso or "")
+
+def day_sessions(r, planned, done, covered, moved, dd, today):
+    """Per-day detail list for the tap-popup: each planned session + its status + real name.
+    Names come from the day's Hevy workout (strength) or classified Garmin activity (cardio/
+    mobility/cuff). Also surfaces 'extra' sessions done on a non-scheduled day."""
+    moved_by = {m["type"]: m.get("doneOn", []) for m in (moved or [])}
+    acts = (r.get("activities") if r else None) or []
+    hev  = (r.get("hevy_rows") if r else None) or []
+    def name_for(t):
+        if t == "strength" and hev:
+            h = hev[0]; sub = []
+            if h.get("sets"): sub.append(f"{h['sets']} Sätze")
+            if h.get("dur"):  sub.append(f"{round(h['dur'])} min")
+            return h.get("title"), " · ".join(sub) or None
+        for a in acts:
+            if a.get("klass") == t:
+                d = a.get("dur")
+                return a.get("name"), (f"{round(d)} min" if d else None)
+        return None, None
+    out = []
+    for t in ["mobility","cuff","cardio","strength"]:
+        if t not in planned: continue
+        if t in done:
+            nm, sub = name_for(t)
+            out.append({"type": t, "label": SESSION_NAMES[t], "status": "done", "name": nm, "sub": sub})
+        elif t in covered:
+            on = moved_by.get(t, [])
+            sub = ("erledigt am " + ", ".join(_ddmm(x) for x in on)) if on else "an anderem Tag erledigt"
+            out.append({"type": t, "label": SESSION_NAMES[t], "status": "moved", "name": None, "sub": sub})
+        else:
+            out.append({"type": t, "label": SESSION_NAMES[t],
+                        "status": ("upcoming" if dd > today else "missed"), "name": None, "sub": None})
+    for t in ["strength","cardio","cuff","mobility"]:
+        if t in done and t not in planned:
+            nm, sub = name_for(t)
+            out.append({"type": t, "label": SESSION_NAMES[t], "status": "extra", "name": nm, "sub": sub})
+    return out
+
+def day_entry(dd, by_date, today):
+    """One day's full record (shared by widget + week-view). Default strip look unchanged;
+    adds `iso` + `sessions` (tap-detail)."""
+    iso = dd.isoformat()
+    r = by_date.get(iso)
+    planned = set(r["planned"]) if r else planned_for(dd)
+    done    = set(r["done"]) if r else set()
+    covered = set(r.get("covered", [])) if r else set()
+    moved   = r.get("moved", []) if r else []
+    eff = done | covered
+    if dd > today:
+        state = "planned" if planned else "rest"
+    elif not planned:
+        state = "rest"
+    elif r is None and dd >= PROGRAM_START:
+        state = "unknown"            # past day outside the compute window — done data unavailable
+    elif planned <= eff:
+        state = "done"
+    elif dd == today:
+        state = "today"
+    else:
+        state = "missed" if not (planned & eff) else "partial"
+    primary = "mobility"
+    for t in ("cardio","strength","cuff","mobility"):
+        if t in planned: primary = t; break
+    return {
+        "day": DOW[dd.weekday()], "date": dd.strftime("%d.%m"), "iso": iso,
+        "type": primary if planned else "rest",
+        "label": plan_label(planned) if planned else "Ruhetag",
+        "types": sorted(planned), "state": state,
+        "done": sorted(done), "covered": sorted(covered), "moved": moved,
+        "sessions": day_sessions(r, planned, done, covered, moved, dd, today),
+    }
+
+def build_week_view(monday, by_date, today):
+    """A full ISO week (7 day_entry) + bag summary + a human label, for the swipe-pager.
+    Future weeks are planned-only (no Garmin cost — purely from planned_for)."""
+    from collections import Counter
+    days = [day_entry(monday + timedelta(days=i), by_date, today) for i in range(7)]
+    pbag, dbag = Counter(), Counter()          # full week (fill + final pct)
+    pbag_s, dbag_s = Counter(), Counter()      # days up to today (on-track colour)
+    for de in days:
+        ps = set(de["types"]); eff = set(de["done"]) | set(de["covered"])
+        for t in ps: pbag[t] += 1
+        for t in eff: dbag[t] += 1
+        if date.fromisoformat(de["iso"]) <= today:
+            for t in ps: pbag_s[t] += 1
+            for t in eff: dbag_s[t] += 1
+    planned_total = sum(pbag.values())
+    done_credited = sum(min(dbag[t], pbag[t]) for t in pbag)
+    planned_sofar = sum(pbag_s.values())
+    done_sofar = sum(min(dbag_s[t], pbag_s[t]) for t in pbag_s)
+    wk_no = week_index(monday)
+    phase = 1 if wk_no in (1,2,3) else (2 if wk_no in (4,5,6) else None)
+    cur_monday = (today - timedelta(days=today.weekday())) if today >= PROGRAM_START else PROGRAM_START
+    dw = (monday - cur_monday).days // 7
+    label = ({0:"Diese Woche", 1:"Nächste Woche", -1:"Letzte Woche"}.get(dw)
+             or (f"In {dw} Wochen" if dw > 1 else f"Vor {abs(dw)} Wochen"))
+    return {
+        "week_no": wk_no, "week_start": monday.isoformat(),
+        "week_end": (monday + timedelta(days=6)).isoformat(),
+        "phase": phase, "label": label, "delta_weeks": dw, "days": days,
+        "summary": {
+            "done": done_credited, "planned": planned_total,
+            "pct": round(done_credited / planned_total, 3) if planned_total else 0.0,
+            "pct_ontrack": round(done_sofar / planned_sofar, 3) if planned_sofar else None,
+            "done_sofar": done_sofar, "planned_sofar": planned_sofar,
+            "is_future": monday > today,
+        },
+    }
 
 # ---------- Notion write (optional: NOTION_TOKEN direct, else n8n relay) ----------
 NOTION_TOKEN = cfg("NOTION_TOKEN") or cfg("NOTION_API_KEY")  # reuse existing integration token
@@ -483,8 +642,7 @@ def compute_weekly_rows(daily_rows):
         rhr = avg([r["metrics"].get("rhr") for r in rs])
         slp = avg([r["metrics"].get("sleep_h") for r in rs])
         vo2 = avg([r["metrics"].get("vo2max") for r in rs])
-        planned = sum(len(r["planned"]) for r in rs)
-        done = sum(len(set(r["planned"]) & set(r["done"])) for r in rs)
+        _pbag, _dbag, done, planned = week_bag(rs)   # day-independent bag-of-sessions
         vol = sum((r.get("strength_volume") or 0) for r in rs)
         p = {"Woche": f"{yr}-W{wn:02d}", "Zeitraum": f"{rs[0]['date']} – {rs[-1]['date']}",
              "Sessions geplant": planned, "Sessions erledigt": done}
@@ -535,28 +693,11 @@ def build_widget_json(rows):
     done_cnt = planned_cnt = 0
     for i in range(7):
         dd = monday + timedelta(days=i)
-        r = by_date.get(dd.isoformat())
-        planned = set(r["planned"]) if r else planned_for(dd)
-        done = set(r["done"]) if r else set()
-        if dd > today:
-            state = "planned" if planned else "rest"
-        elif not planned:
-            state = "rest"
-        elif planned <= done:
-            state = "done"
-        elif dd == today:
-            state = "today"
-        else:
-            state = "missed" if not (planned & done) else "partial"
-        if dd <= today and planned:
-            planned_cnt += len(planned); done_cnt += len(planned & done)
-        primary = "mobility"
-        for t in ("cardio","strength","cuff","mobility"):
-            if t in planned: primary = t; break
-        week.append({"day": DOW[i], "date": dd.strftime("%d.%m"),
-                     "type": primary if planned else "rest",
-                     "label": plan_label(planned) if planned else "Ruhetag",
-                     "types": sorted(planned), "state": state})
+        de = day_entry(dd, by_date, today)
+        week.append(de)
+        if dd <= today and de["types"]:
+            ps = set(de["types"]); eff = set(de["done"]) | set(de["covered"])
+            planned_cnt += len(ps); done_cnt += len(ps & eff)
     # today / latest recovery
     latest = None
     for i in range(0, 4):
@@ -577,9 +718,11 @@ def build_widget_json(rows):
         r = by_date.get(d.isoformat())
         planned = set(r["planned"]) if r else planned_for(d)
         done = set(r["done"]) if r else set()
+        covered = set(r.get("covered", [])) if r else set()
+        eff = done | covered
         if not planned:
             d -= timedelta(days=1); continue
-        if "mobility" in done or planned <= done:
+        if "mobility" in eff or planned <= eff:
             streak += 1; d -= timedelta(days=1)
         else:
             break
@@ -589,6 +732,10 @@ def build_widget_json(rows):
     elif pct >= 0.8: headline = "Stark — bleib auf Kurs 💪"
     elif pct >= 0.4: headline = "Floor zählt. Dranbleiben."
     else: headline = "Heute ist ein neuer Tag."
+    from collections import Counter as _Counter
+    wt_bag = _Counter()
+    for i in range(7):
+        for t in planned_for(monday + timedelta(days=i)): wt_bag[t] += 1
     return {
         "updated": datetime.now(timezone.utc).isoformat(),
         "phase": (rows[-1]["phase"] if rows and rows[-1]["phase"] else 1),
@@ -597,6 +744,7 @@ def build_widget_json(rows):
         "week_start": monday.isoformat(),
         "week": week,
         "progress": {"done": done_cnt, "planned": planned_cnt, "pct": round(pct,3)},
+        "week_target": {"planned": sum(wt_bag.values()), "bag": dict(wt_bag)},
         "hrv": hrv, "streak_days": streak, "headline": headline,
     }
 
@@ -615,6 +763,67 @@ def push_widget(payload):
         except Exception as e:
             log(f"widget push fail: {str(e)[:80]}")
 
+# ---------- dashboard (web app) ----------
+def build_dashboard_json(rows):
+    """Richer payload for the fitness.automatisierbar.ch web dashboard.
+    Superset of the widget JSON: adds recovery trend series, recent workouts and
+    a bag-based weekly history on top of the current-week view."""
+    base = build_widget_json(rows)
+    def series(key):
+        return [{"date": r["date"], "val": r["metrics"][key]}
+                for r in rows if r["metrics"].get(key) is not None]
+    base["trends"] = {k: series(k) for k in
+                      ("hrv", "rhr", "sleep_h", "vo2max", "body_battery", "readiness")}
+    # today panel: hrv/ampel block + latest available extra metrics
+    today_extra = {}
+    for r in reversed(rows):
+        m = r.get("metrics") or {}
+        if m:
+            today_extra = {k: m.get(k) for k in
+                           ("sleep_h", "rhr", "body_battery", "readiness", "training_load", "vo2max")}
+            break
+    base["today"] = {**base.get("hrv", {}), **today_extra}
+    # recent workouts (flatten Hevy rows, newest first)
+    wk = []
+    for r in rows:
+        for hr in (r.get("hevy_rows") or []):
+            wk.append({"date": hr.get("date"), "title": hr.get("title"),
+                       "volume": hr.get("volume"), "sets": hr.get("sets"), "dur": hr.get("dur")})
+    wk.sort(key=lambda x: x.get("date") or "", reverse=True)
+    base["workouts"] = wk[:12]
+    # weekly history (bag-based, via compute_weekly_rows)
+    weeks = []
+    for _key, p in compute_weekly_rows(rows):
+        weeks.append({"week": p["Woche"], "adherence": p.get("Adhärenz"),
+                      "sessions_done": p.get("Sessions erledigt"),
+                      "sessions_planned": p.get("Sessions geplant"),
+                      "hrv_avg": p.get("HRV Ø"), "sleep_avg": p.get("Schlaf Ø h"),
+                      "vol": p.get("Kraft-Volumen kg")})
+    base["weeks"] = weeks
+    # multi-week swipe view (W1..W6): past/current from rows, future planned-only (no Garmin cost)
+    today = date.today()
+    by_date = {r["date"]: r for r in rows}
+    weeks_view = [build_week_view(PROGRAM_START + timedelta(days=7*i), by_date, today) for i in range(6)]
+    cur_monday = (today - timedelta(days=today.weekday())) if today >= PROGRAM_START else PROGRAM_START
+    base["current_week_index"] = next((i for i, w in enumerate(weeks_view)
+                                       if w["week_start"] == cur_monday.isoformat()), 0)
+    base["weeks_view"] = weeks_view
+    return base
+
+def push_dashboard(payload):
+    """Write dashboard.json into the web root (served verbatim by Caddy on the VPS).
+    DASHBOARD_DIR env overrides the default ./dashboard/ (VPS sets it to /srv/fitness,
+    a caddy-readable web root, since /home/paperclip is not traversable by the caddy user)."""
+    out_dir = cfg("DASHBOARD_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard")
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        out = os.path.join(out_dir, "dashboard.json")
+        with open(out, "w") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        log(f"dashboard JSON written -> {out}")
+    except Exception as e:
+        log(f"dashboard write fail: {e}")
+
 # ---------- main ----------
 def main():
     ap = argparse.ArgumentParser()
@@ -629,26 +838,30 @@ def main():
             w = write_daily_to_notion(rows)
             ww = write_weekly_to_notion(compute_weekly_rows(rows))
             push_widget(build_widget_json(rows))
+            push_dashboard(build_dashboard_json(rows))
             log(f"backfill: {len(rows)} days -> Notion daily {w}, weekly {ww}")
         elif args.mode == "emit":
             n = args.days or 30
             rows = compute_range(today - timedelta(days=n), today)
             print(json.dumps({"daily": rows, "mcp_daily": [daily_sqlite_props(r) for r in rows],
-                              "widget": build_widget_json(rows)}, ensure_ascii=False, indent=2))
+                              "widget": build_widget_json(rows),
+                              "dashboard": build_dashboard_json(rows)}, ensure_ascii=False, indent=2))
         elif args.mode == "widget":
-            rows = compute_range(today - timedelta(days=10), today)
+            rows = compute_range(today - timedelta(days=14), today)
             push_widget(build_widget_json(rows))
+            push_dashboard(build_dashboard_json(rows))
         elif args.mode == "weekly":
             rows = compute_range(today - timedelta(days=21), today)
             ww = write_weekly_to_notion(compute_weekly_rows(rows))
             push_widget(build_widget_json(rows))
             log(f"weekly: wrote {ww} week rows to Notion")
         else:  # daily — also refreshes current+prev ISO week so weekly stays current
-            n = args.days or 9
+            n = args.days or 14
             rows = compute_range(today - timedelta(days=n), today)
             w = write_daily_to_notion(rows)
             ww = write_weekly_to_notion(compute_weekly_rows(rows))
             push_widget(build_widget_json(rows))
+            push_dashboard(build_dashboard_json(rows))
             log(f"daily: {len(rows)} days -> Notion daily {w}, weekly {ww}")
     except Exception as e:
         log("FATAL: " + str(e)); traceback.print_exc()

@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E3B2E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Comeback">
+<title>Comeback</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --mist:#EAEDE9; --paper:#FFFFFF; --ink:#141A17; --muted:#5C6660; --faint:#9AA39D;
+    --line:#D6DBD6; --pine:#0E3B2E;
+    --go:#1F7A4D; --easy:#C0892D; --rest:#B4472F;
+    --r:18px;
+    --disp:'Space Grotesk',system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%;overflow-x:hidden}
+  body{
+    background:var(--mist); color:var(--ink); font-family:var(--disp);
+    line-height:1.4; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+    padding:max(16px,env(safe-area-inset-top)) 14px calc(28px + env(safe-area-inset-bottom));
+    max-width:440px; margin:0 auto; min-height:100vh;
+  }
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-top:12px}
+  /* ---- header ---- */
+  header{display:flex;justify-content:space-between;align-items:baseline;padding:6px 4px 2px}
+  header .brand{font-weight:700;font-size:15px;letter-spacing:.16em;text-transform:uppercase}
+  header .wk{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .headline{font-size:20px;font-weight:600;line-height:1.25;padding:8px 4px 2px;letter-spacing:-.01em}
+  /* ---- week pager ---- */
+  .pager{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;
+         scrollbar-width:none;margin-top:12px}
+  .pager::-webkit-scrollbar{display:none}
+  .slide{flex:0 0 100%;scroll-snap-align:center}
+  .slide .card{margin-top:0}
+  .slide-lbl{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+  .slide-lbl .l{font-weight:700;font-size:15px;letter-spacing:-.01em}
+  .slide-lbl .r{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .dots{display:flex;justify-content:center;gap:6px;margin-top:11px;height:6px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--line);transition:width .2s,background .2s}
+  .dot.on{background:var(--pine);width:18px;border-radius:3px}
+  /* ---- hero instrument ---- */
+  .hero{display:flex;gap:18px;align-items:center}
+  .gauge{position:relative;width:124px;height:124px;flex:0 0 auto}
+  .gauge svg{transform:rotate(-90deg)}
+  .gauge .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .gauge .big{font-family:var(--mono);font-weight:700;font-size:26px;letter-spacing:-.02em;line-height:1}
+  .gauge .sub{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+  .hero-r{flex:1;min-width:0}
+  .hero-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .sess{font-family:var(--mono);font-weight:700;font-size:30px;letter-spacing:-.02em;line-height:1}
+  .sess small{font-size:15px;color:var(--faint);font-weight:500}
+  .sess-sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:7px}
+  /* ---- today readiness strip ---- */
+  .readi{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;
+         font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .readi .v{font-weight:700;font-size:17px;color:var(--ink)}
+  .readi .verdict{font-weight:700;letter-spacing:.04em;padding:2px 9px;border-radius:20px;font-size:12px}
+  .readi .arrow.up{color:var(--go)} .readi .arrow.down{color:var(--rest)} .readi .arrow.flat{color:var(--muted)}
+  /* ---- week strip ---- */
+  .week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:16px}
+  .day{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px;border-radius:12px;position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .day:active{background:var(--mist)}
+  .day .dow{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.04em}
+  .day .dt{font-family:var(--mono);font-size:9px;color:var(--faint)}
+  .glyph-wrap{position:relative;display:inline-flex}
+  .mvb{position:absolute;top:-5px;right:-7px;font-size:9px;font-weight:700;color:var(--go);
+       background:var(--paper);border:1.5px solid var(--go);border-radius:50%;
+       width:15px;height:15px;display:flex;align-items:center;justify-content:center;line-height:1}
+  .glyph{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:14px;font-weight:700;border:1.5px solid transparent}
+  .g-done{background:var(--go);color:#fff}
+  .g-covered{background:#E3F0E8;color:var(--go);border-color:var(--go)}
+  .g-partial{background:#F6ECD7;color:var(--easy);border-color:var(--easy)}
+  .g-missed{background:transparent;color:var(--rest);border-color:#E2C9C2}
+  .g-today{background:transparent;color:var(--pine);border-color:var(--pine);box-shadow:0 0 0 3px rgba(14,59,46,.10)}
+  .g-unknown{background:transparent;color:var(--faint);border-color:var(--line);border-style:dashed}
+  .day.is-today .dow{color:var(--pine);font-weight:700}
+  .g-planned{background:transparent;color:var(--faint);border-color:var(--line)}
+  .g-rest{background:transparent;color:var(--faint);border-color:transparent}
+  .moved-note{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+  .moved-note b{color:var(--go);font-weight:700}
+  .tap-hint{text-align:center;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:10px}
+  /* ---- metrics grid ---- */
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:14px}
+  .metric .v{font-family:var(--mono);font-weight:700;font-size:19px;letter-spacing:-.01em}
+  .metric .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+  .metric .v small{font-size:11px;color:var(--faint)}
+  /* ---- sparklines ---- */
+  .spark-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .spark-row:last-child{border-bottom:0}
+  .spark-row .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);width:62px;flex:0 0 auto}
+  .spark-row svg{flex:1;height:30px}
+  .spark-row .val{font-family:var(--mono);font-weight:700;font-size:15px;width:52px;text-align:right;flex:0 0 auto}
+  /* ---- workouts ---- */
+  .wo{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .wo:last-child{border-bottom:0}
+  .wo .dot2{width:8px;height:8px;border-radius:50%;background:var(--pine);flex:0 0 auto}
+  .wo .ttl{flex:1;min-width:0;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wo .meta{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:right;flex:0 0 auto}
+  /* ---- weekly history ---- */
+  .wkrow{display:flex;align-items:center;gap:11px;padding:8px 0}
+  .wkrow .wn{font-family:var(--mono);font-size:11px;color:var(--muted);width:42px;flex:0 0 auto}
+  .bar{flex:1;height:9px;background:#E4E8E4;border-radius:5px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:5px;transition:width .6s ease}
+  .wkrow .pc{font-family:var(--mono);font-weight:700;font-size:12px;width:62px;text-align:right;flex:0 0 auto}
+  .wkrow .pc small{color:var(--faint);font-weight:400}
+  /* ---- section head ---- */
+  .shead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .shead .x{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.06em}
+  /* ---- footer ---- */
+  footer{display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:0 4px;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+  .streak b{color:var(--ink)}
+  /* ---- detail sheet ---- */
+  .sheet[hidden]{display:none}
+  .sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center}
+  .sheet-bg{position:absolute;inset:0;background:rgba(20,26,23,.45)}
+  .sheet-card{position:relative;width:100%;max-width:440px;background:var(--paper);
+              border-radius:22px 22px 0 0;padding:8px 18px calc(26px + env(safe-area-inset-bottom));
+              max-height:82vh;overflow:auto;animation:slideup .26s cubic-bezier(.2,.7,.2,1)}
+  @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheet-handle{width:38px;height:4px;border-radius:2px;background:var(--line);margin:6px auto 14px}
+  .sheet-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+  .sheet-day{font-weight:700;font-size:19px;letter-spacing:-.01em}
+  .sheet-date{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:1px}
+  .sheet-x{border:0;background:var(--mist);width:30px;height:30px;border-radius:50%;font-size:14px;color:var(--muted);cursor:pointer;flex:0 0 auto}
+  .srow{display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .srow:last-child{border-bottom:0}
+  .sic{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:0 0 auto;margin-top:1px}
+  .smain{flex:1;min-width:0}
+  .st{font-weight:600;font-size:15px}
+  .sn{font-size:13px;color:var(--muted);margin-top:2px}
+  .sst{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;margin-top:3px;font-weight:700}
+  .sheet-empty{color:var(--faint);text-align:center;padding:22px 0;font-size:14px}
+  /* ---- states ---- */
+  #err{display:none;margin-top:14px;text-align:center;color:var(--rest);font-size:14px}
+  #err code{font-family:var(--mono);font-size:12.5px;background:#F2E7E3;padding:2px 6px;border-radius:5px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+  <header>
+    <span class="brand">Comeback</span>
+    <span class="wk" id="wktag">– · –</span>
+  </header>
+  <div class="headline" id="headline">Lade …</div>
+
+  <div id="app"></div>
+  <div id="err"></div>
+
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-bg" data-close></div>
+    <div class="sheet-card">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <div><div class="sheet-day" id="sheetDay"></div><div class="sheet-date" id="sheetDate"></div></div>
+        <button class="sheet-x" data-close aria-label="Schliessen">✕</button>
+      </div>
+      <div id="sheetBody"></div>
+    </div>
+  </div>
+
+<script>
+const TYPES = {mobility:'Mobility', cuff:'Cuff', cardio:'Cardio', strength:'Kraft'};
+const esc = (s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ddmm = (iso)=>{ if(!iso) return ''; const p=iso.split('-'); return p[2]+'.'+p[1]; };
+const clean = (s)=>String(s||'').replace(/\s*\([^)]*\)\s*$/,'').trim();
+let DATA = null;
+
+// keep the URL token alive as a 1-year cookie so the home-screen app authorises every launch
+(function(){
+  const k = new URLSearchParams(location.search).get('k');
+  if(k){ document.cookie = 'k='+encodeURIComponent(k)+'; path=/; max-age=31536000; samesite=lax'; }
+})();
+
+// Garmin-style adherence colour ramp
+function adhColor(p){
+  if(p==null) return '#9AA39D';
+  if(p>=0.90) return '#fa37ff';
+  if(p>=0.70) return '#5fa6fe';
+  if(p>=0.50) return '#25e673';
+  if(p>=0.30) return '#fc7728';
+  return '#f04740';
+}
+
+function sparkline(series, opts={}){
+  const w=140,h=30,pad=3;
+  if(!series||series.length<2) return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"></svg>`;
+  const vals=series.map(p=>p.val);
+  let lo=Math.min(...vals), hi=Math.max(...vals); if(hi===lo){hi+=1;lo-=1;}
+  const n=series.length;
+  const x=i=> pad + i*(w-2*pad)/(n-1);
+  const y=v=> pad + (h-2*pad)*(1-(v-lo)/(hi-lo));
+  const pts=series.map((p,i)=>`${x(i).toFixed(1)},${y(p.val).toFixed(1)}`).join(' ');
+  const last=series[n-1];
+  const col=opts.color||'#0E3B2E';
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round"
+      stroke-linecap="round" points="${pts}" vector-effect="non-scaling-stroke"/>
+    <circle cx="${x(n-1).toFixed(1)}" cy="${y(last.val).toFixed(1)}" r="2.2" fill="${col}"/>
+  </svg>`;
+}
+
+// ring: fill = progress through week; colour = adherence; centre = big/sub
+function ringSvg(fillFrac, color, big, sub){
+  const R=54, C=2*Math.PI*R;
+  return `<div class="gauge">
+    <svg width="124" height="124" viewBox="0 0 124 124">
+      <circle cx="62" cy="62" r="${R}" fill="none" stroke="#E4E8E4" stroke-width="9"/>
+      <circle class="ring-fg" cx="62" cy="62" r="${R}" fill="none" stroke="${color}" stroke-width="9"
+        stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}"
+        data-off="${(C*(1-Math.max(0,Math.min(1,fillFrac)))).toFixed(1)}"
+        style="transition:stroke-dashoffset .9s cubic-bezier(.4,0,.2,1)"/>
+    </svg>
+    <div class="center"><div class="big" style="color:${big.color||'var(--ink)'}">${esc(big.text)}</div>
+      <div class="sub">${esc(sub)}</div></div>
+  </div>`;
+}
+
+function dayCell(d, wi, di){
+  const G = {done:'✓',covered:'↗',partial:'◐',missed:'✕',today:'◉',planned:'·',rest:'–',unknown:'?'};
+  const cls = {done:'g-done',covered:'g-covered',partial:'g-partial',missed:'g-missed',
+               today:'g-today',planned:'g-planned',rest:'g-rest',unknown:'g-unknown'}[d.state]||'g-planned';
+  const badge = (d.moved&&d.moved.length) ? `<span class="mvb">↗</span>` : '';
+  return `<div class="day ${d.state==='today'?'is-today':''}" data-wi="${wi}" data-di="${di}">
+    <span class="dow">${esc(d.day)}</span>
+    <span class="glyph-wrap"><span class="glyph ${cls}">${G[d.state]||'·'}</span>${badge}</span>
+    <span class="dt">${esc(d.date)}</span>
+  </div>`;
+}
+
+function metric(v,k,unit){
+  const val = (v==null||v==='') ? '–' : esc(v) + (unit?`<small> ${unit}</small>`:'');
+  return `<div class="metric"><div class="v">${val}</div><div class="k">${esc(k)}</div></div>`;
+}
+
+function slide(w, wi, today){
+  const s = w.summary||{};
+  const target = s.planned||0, done = s.done||0;
+  const fill = target>0 ? done/target : 0;
+  const future = s.is_future;
+  // colour basis: on-track for current/past, none for future
+  const colBasis = future ? null : (s.pct_ontrack!=null ? s.pct_ontrack : s.pct);
+  const col = future ? '#C9CFCA' : adhColor(colBasis);
+  const big = future ? {text:'–', color:'var(--faint)'} : {text:Math.round((colBasis||0)*100)+'%', color:col};
+  const ringSub = future ? 'geplant' : 'Adhärenz';
+  const moved = (w.days||[]).flatMap(x => (x.moved||[]).map(m =>
+      `<b>${esc(x.day)}</b> ${esc(TYPES[m.type]||m.type)} → ${ (m.doneOn||[]).map(ddmm).join(', ')||'anderer Tag'}`));
+  const movedHtml = moved.length ? `<div class="moved-note">↗ verschoben: ${moved.join(' · ')}</div>` : '';
+  return `<div class="slide"><div class="card">
+    <div class="slide-lbl"><span class="l">${esc(w.label||'Woche')}</span>
+      <span class="r">W${w.week_no} · Phase ${w.phase||'–'}</span></div>
+    <div class="hero">
+      ${ringSvg(fill, col, big, ringSub)}
+      <div class="hero-r">
+        <div class="hero-lbl">${future?'Geplant':'Sessions'}</div>
+        <div class="sess" style="color:${future?'var(--ink)':col}">${done}<small> / ${target}</small></div>
+        <div class="sess-sub">${future ? 'diese Woche anstehend' : (s.planned_sofar!=null && s.planned_sofar<target ? `${s.done_sofar||0}/${s.planned_sofar} bis heute` : 'für die Woche')}</div>
+      </div>
+    </div>
+    <div class="week">${(w.days||[]).map((d,di)=>dayCell(d,wi,di)).join('')}</div>
+    ${movedHtml}
+    <div class="tap-hint">Tag antippen für Details</div>
+  </div></div>`;
+}
+
+function render(d){
+  DATA = d;
+  document.getElementById('wktag').textContent = `W${d.week_no||'–'} · Phase ${d.phase||'–'}`;
+  document.getElementById('headline').textContent = d.headline || '';
+  const today = (d.weeks_view && d.weeks_view[d.current_week_index]) ? null : null; // today handled server-side
+
+  const wv = d.weeks_view || [];
+  const cwi = d.current_week_index || 0;
+  const t = d.today || d.hrv || {};
+  const arrowCls = t.arrow==='↑'?'up':(t.arrow==='↓'?'down':'flat');
+  const ampelCol = ({['grün']:'var(--go)',gelb:'var(--easy)',rot:'var(--rest)'})[t.ampel] || 'var(--faint)';
+
+  const pager = wv.length
+    ? `<div class="pager" id="pager">${wv.map((w,wi)=>slide(w,wi,today)).join('')}</div>
+       <div class="dots" id="dots">${wv.map((_,i)=>`<span class="dot ${i===cwi?'on':''}"></span>`).join('')}</div>`
+    : `<div class="card"><div class="sheet-empty">Keine Wochendaten</div></div>`;
+
+  const readi = (t.ms!=null || t.verdict) ? `
+    <div class="readi">
+      <span>HRV <span class="v">${t.ms==null?'–':t.ms}</span> <span class="arrow ${arrowCls}">${t.arrow||'→'}</span></span>
+      ${t.verdict && t.verdict!=='—' ? `<span class="verdict" style="color:#fff;background:${ampelCol}">${esc(t.verdict)}</span>` : ''}
+    </div>` : '';
+
+  const trends = d.trends||{};
+  const sp = (key,label,unit,color)=>{
+    const s=trends[key]||[]; const last=s.length?s[s.length-1].val:null;
+    return `<div class="spark-row"><span class="lbl">${label}</span>${sparkline(s,{color})}<span class="val">${last==null?'–':last}${unit?`<span style="color:var(--faint);font-size:10px"> ${unit}</span>`:''}</span></div>`;
+  };
+
+  const wos = (d.workouts||[]).slice(0,5).map(w=>`<div class="wo">
+      <span class="dot2"></span>
+      <span class="ttl">${esc(clean(w.title)||'Workout')}</span>
+      <span class="meta">${ddmm(w.date)} · ${w.sets||0} Sätze${w.dur?` · ${Math.round(w.dur)}min`:''}</span>
+    </div>`).join('') || `<div class="wo" style="color:var(--faint)">Noch kein Training geloggt</div>`;
+
+  const weeks = (d.weeks||[]).filter(w=>w.adherence!=null).slice(-6).reverse().map(w=>{
+    const pc = Math.round((w.adherence||0)*100), c = adhColor(w.adherence);
+    return `<div class="wkrow"><span class="wn">${esc((w.week||'').replace('2026-',''))}</span>
+      <span class="bar"><i style="width:${pc}%;background:${c}"></i></span>
+      <span class="pc" style="color:${c}">${pc}% <small>${w.sessions_done||0}/${w.sessions_planned||0}</small></span></div>`;
+  }).join('') || `<div class="wkrow" style="color:var(--faint)">Noch keine Wochenbilanz</div>`;
+
+  document.getElementById('app').innerHTML = `
+    ${pager}
+    ${readi}
+    <div class="card">
+      <div class="shead"><span class="eyebrow">Heute</span><span class="x">Garmin</span></div>
+      <div class="grid">
+        ${metric(t.sleep_h,'Schlaf','h')}${metric(t.rhr,'Ruhepuls','bpm')}${metric(t.body_battery,'Body Batt.','')}
+        ${metric(t.readiness,'Readiness','')}${metric(t.vo2max,'VO₂max','')}${metric(t.ms,'HRV','ms')}
+      </div>
+    </div>
+    <div class="card">
+      <div class="shead"><span class="eyebrow">Erholung</span><span class="x">14 Tage</span></div>
+      ${sp('hrv','HRV','ms','#1F7A4D')}${sp('rhr','Ruhepuls','bpm','#B4472F')}
+      ${sp('sleep_h','Schlaf','h','#0E3B2E')}${sp('vo2max','VO₂max','','#0E3B2E')}
+    </div>
+    <div class="card">
+      <div class="shead"><span class="eyebrow">Training</span><span class="x">zuletzt</span></div>${wos}
+    </div>
+    <div class="card">
+      <div class="shead"><span class="eyebrow">Wochen</span><span class="x">Adhärenz</span></div>${weeks}
+    </div>
+    <footer>
+      <span class="streak">Streak <b>${d.streak_days||0}</b> Tage</span>
+      <span>Sync ${d.updated?new Date(d.updated).toLocaleString('de-CH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'–'}</span>
+    </footer>`;
+
+  // animate rings in, snap pager to current week, wire dots
+  const pagerEl = document.getElementById('pager');
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.ring-fg').forEach(r=>{ r.style.strokeDashoffset = r.getAttribute('data-off'); });
+    if(pagerEl){ pagerEl.scrollLeft = pagerEl.clientWidth * cwi; }
+  });
+  if(pagerEl){
+    const dots=[...document.querySelectorAll('#dots .dot')];
+    pagerEl.addEventListener('scroll', ()=>{
+      const i=Math.round(pagerEl.scrollLeft/pagerEl.clientWidth);
+      dots.forEach((dd,k)=>dd.classList.toggle('on',k===i));
+    }, {passive:true});
+    pagerEl.addEventListener('click', e=>{
+      const cell=e.target.closest('.day'); if(!cell) return;
+      openSheet(+cell.dataset.wi, +cell.dataset.di);
+    });
+  }
+}
+
+const ST = {
+  done:   {ic:'✓', cls:'g-done',    txt:'erledigt',   col:'var(--go)'},
+  extra:  {ic:'✚', cls:'g-done',    txt:'Bonus',      col:'var(--go)'},
+  moved:  {ic:'↗', cls:'g-covered', txt:'verschoben', col:'var(--go)'},
+  missed: {ic:'✕', cls:'g-missed',  txt:'verpasst',   col:'var(--rest)'},
+  upcoming:{ic:'○',cls:'g-planned', txt:'anstehend',  col:'var(--muted)'},
+};
+function openSheet(wi, di){
+  const w = (DATA.weeks_view||[])[wi]; if(!w) return;
+  const day = (w.days||[])[di]; if(!day) return;
+  document.getElementById('sheetDay').textContent = `${day.day} · ${w.label}`;
+  document.getElementById('sheetDate').textContent = `${day.date} · ${day.label||'Ruhetag'}`;
+  const sess = day.sessions||[];
+  document.getElementById('sheetBody').innerHTML = sess.length ? sess.map(s=>{
+    const st = ST[s.status] || ST.upcoming;
+    const name = clean(s.name);
+    return `<div class="srow">
+      <span class="sic ${st.cls}">${st.ic}</span>
+      <div class="smain">
+        <div class="st">${esc(s.label)}</div>
+        ${name?`<div class="sn">${esc(name)}${s.sub?` · ${esc(s.sub)}`:''}</div>`:(s.sub?`<div class="sn">${esc(s.sub)}</div>`:'')}
+        <div class="sst" style="color:${st.col}">${st.txt}</div>
+      </div></div>`;
+  }).join('') : `<div class="sheet-empty">Ruhetag — kein Training geplant.</div>`;
+  const sheet=document.getElementById('sheet'); sheet.hidden=false;
+}
+document.getElementById('sheet').addEventListener('click', e=>{
+  if(e.target.hasAttribute('data-close')) document.getElementById('sheet').hidden=true;
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') document.getElementById('sheet').hidden=true; });
+
+function fail(msg, hint){
+  document.getElementById('headline').textContent = 'Keine Daten';
+  document.getElementById('app').innerHTML='';
+  const e=document.getElementById('err'); e.style.display='block';
+  e.innerHTML = esc(msg) + (hint?`<br><br>${hint}`:'');
+}
+
+fetch('dashboard.json?ts='+Date.now(), {cache:'no-store', credentials:'same-origin'})
+  .then(r=>{ if(!r.ok) throw new Error(r.status); return r.json(); })
+  .then(render)
+  .catch(e=>{
+    if(String(e.message)==='401') fail('Zugriff gesperrt.', 'Öffne die App über <code>fitness.automatisierbar.ch/?k=…</code> mit deinem Token.');
+    else fail('Daten konnten nicht geladen werden.', '<code>'+esc(e.message)+'</code> — versuch es gleich nochmal.');
+  });
+
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+</script>
+</body>
+</html>

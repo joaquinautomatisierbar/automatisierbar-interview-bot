@@ -3,8 +3,8 @@ title: Fitness Tracking & Motivation System
 autonomy-level: L3
 bike-method-phase: 2
 kpi-bucket: more value per customer (personal — operator health/consistency/regeneration)
-status: live — daily sync + dashboard + widget feed; ongoing Notion write needs token (see below)
-last_updated: 2026-06-09
+status: live — daily sync + Notion + Scriptable widget + web dashboard (fitness.automatisierbar.ch); week-as-a-whole adherence
+last_updated: 2026-06-28
 ---
 
 # Fitness Tracking & Motivation System
@@ -60,6 +60,7 @@ Hevy ──────────────────────── ap
 - **Daily Log** (key Tag=ISO date): done flags (Mobility/Cuff/Cardio/Kraft from Garmin activities + Hevy), HRV ms + **HRV-Ampel** (numeric vs Garmin baseline; sleep<6h downgrades green→gelb), RHR, Schlaf h (glitch <2h dropped), Schlaf-Score, Body Battery (day max), VO2max, Readiness, Training Load, Schritte, Kraft-Volumen, Adhärenz (done/planned), Trend arrow (HRV vs 7-day avg).
 - **Weekly Summary** (key Woche=ISO): sessions done/planned, Adhärenz, HRV/RHR Ø + Δ, Schlaf Ø, VO2max + Δ, volumes, Streak, Trajektorie headline, emoji Fortschritt bar.
 - **Adherence plan map** (`planned_for(date)`): Mobility daily; Cuff Mon/Wed/Fri; Cardio Wed+Sat; Strength Tue/Fri (Ph1) or Mon-Thu (Ph2). Tunable in the script; only applies W1-6 (Jun 22–Aug 2).
+- **Week-as-a-whole adherence (2026-06-28).** Weekly completeness is a day-independent **bag of sessions** (`week_bag`): it counts planned vs done session *types* across the whole ISO week and credits `Σ min(done[t], planned[t]) / Σ planned[t]`, capped per-type. So a session done on a different day than scheduled (swim Mon instead of Wed; full-body on Sun instead of Tue) still credits the week. `annotate_week_coverage` flags such days `covered` + `moved` (only when the type's full weekly quota is met, so it never contradicts a sub-100% week). Daily checkboxes stay literal (honest per-day record); only the *weekly* number + widget/dashboard use the bag. Verified with synthetic + live data.
 
 ## Ongoing Notion write path — RESOLVED (2026-06-11)
 **Live + autonomous.** The VPS reuses the existing Notion integration token from `/etc/paperclip/secrets` (`NOTION_API_KEY`, ntn_ — the hub + 3 DBs are connected to that integration). It's copied into VPS `~/comeback-sync/.env`; the script's `NOTION_TOKEN` falls back to `NOTION_API_KEY`. Daily cron upserts daily rows **and** current/prev ISO-week summaries (idempotent by Tag/Woche; verified 36 daily rows, no duplicates). No token paste was needed.
@@ -80,6 +81,36 @@ The cron currently pushes the **widget** every run (no token needed) and writes 
 - **Run now:** `launchctl start com.automatisierbar.fitnesssync` (or run the script directly).
 - **Verify widget:** `curl https://oojoaquin.app.n8n.cloud/webhook/fitness-widget`.
 - **Garmin token refresh (≈yearly):** re-run garth login (see workflows/fitness_comeback.md) and copy the token to `~/.garminconnect`.
+
+## Dashboard — fitness.automatisierbar.ch (phone web app)
+Phone-first PWA (Clean-Minimal, "instrument readout": Space Grotesk + JetBrains Mono, pine/mist palette).
+Built 2026-06-28. Source: `tools/fitness/dashboard/` (`index.html` single-file + `manifest.webmanifest` +
+`sw.js` offline cache + `icon.svg`/`icon-{180,192,512}.png`, icons rasterized by `scratchpad/gen_icons.py`).
+**v2 (2026-06-28):** the hero is a horizontal **week swipe-pager** over `weeks_view` (W1–W6; future weeks
+planned-only from `planned_for`, no Garmin cost) — swipe to preview upcoming weeks. The ring is **Garmin-
+style adherence-coloured** (`adhColor`: ≥90% #fa37ff · 70–90% #5fa6fe · 50–70% #25e673 · 30–50% #fc7728 ·
+<30% #f04740; fill = week progress, colour = on-track adherence; future = neutral); WOCHEN history bars use
+the same ramp. **Tapping a day** opens a bottom-sheet with that day's `sessions` (each planned type + status
+done/verschoben/verpasst/anstehend + real name: "Leg Day · 15 Sätze · 88 min", "Schwimmen · 35 min").
+Today's HRV+verdict is a slim global strip under the pager. Other panels: today's Garmin metrics ·
+HRV/RHR/Schlaf/VO2max sparklines · recent Hevy workouts · 6-week adherence history · streak.
+- **Data:** `fitness_sync.py` writes `dashboard.json` (superset of the widget JSON: `build_dashboard_json`) on
+  every cron run. Target dir = env `DASHBOARD_DIR` (VPS = `/srv/fitness`), else `<script_dir>/dashboard`.
+  Per-day `sessions` come from `day_sessions` (Hevy titles for strength, classified Garmin activities for
+  cardio/mobility/cuff); `weeks_view` from `build_week_view`; rows carry `activities` (name+klass+dur).
+- **Hosting:** Caddy on the VPS (`187.124.188.2`) serves `/srv/fitness` (file_server). Web root is `/srv/fitness`
+  — NOT `~/comeback-sync/dashboard` — because the `caddy` user can't traverse `/home/paperclip` (mode 750).
+  `/srv/fitness` is `paperclip:paperclip 755` so the cron writes it and caddy reads it.
+- **Auth = URL token** (no login; mobile-friendly). Caddy gates ONLY the data file (`/dashboard.json`) on
+  `?k=<TOKEN>` OR cookie `k` — the app shell (html/manifest/icons) is public, which avoids a cookie-race on the
+  manifest/icon sub-requests at first load (only `dashboard.json` holds personal data). `index.html`
+  turns the `?k=` into a 1-year cookie so the saved home-screen app authorises every launch. Token lives only in
+  the Caddyfile + the operator's saved URL (it's personal, low-stakes). Block appended to `/etc/caddy/Caddyfile`
+  (backup at `/etc/caddy/Caddyfile.bak.<ts>`); `sudo caddy validate` then `systemctl reload caddy`.
+- **DNS:** needs an A-record `fitness.automatisierbar.ch → 187.124.188.2` (Infomaniak). Until it exists Caddy
+  retries the LE cert every 60s (harmless NXDOMAIN errors); the cert auto-issues once DNS resolves.
+- **Redeploy frontend:** `scp tools/fitness/dashboard/{index.html,manifest.webmanifest,sw.js,icon*} paperclip@187.124.188.2:/srv/fitness/`
+  then bump the `comeback-v<n>` cache name in `sw.js` to bust the service-worker cache.
 
 ## Known limits / next
 - Weekly Notion rollup is seeded manually for now; flesh out `--mode weekly` to upsert weekly rows once `NOTION_TOKEN` is in (then add a Monday launchd entry).

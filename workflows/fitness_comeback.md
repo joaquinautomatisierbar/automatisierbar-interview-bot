@@ -42,6 +42,7 @@ Phase 3 (W7–10) is deliberately not programmed — it's built later from real 
   - 🔱 Chest & Triceps — Push `6f930fde-8a7e-463e-af18-747680e6e468`
   - 🔥 Abs — regressiert `285134a3-48f9-4970-9920-f851725c9ba4`
   - 🛡️ Cuff & Schulter-Reha `486445c4-5ad7-4339-b878-fe606e682374`
+  - 🟦 Full Body — reduziert `993c1473-de83-41c2-a149-3b34573b45f8` (Phase-1 Fr, Calisthenics/Home variant; horizontal-pull-biased, no overhead/deep-dips, RIR 3–4; added 2026-06-28)
 - Credential (n8n, unused by curl path): Hevy API KEY (httpHeaderAuth `6bF3t3aZ0GpEDcu2`, header `api-key`).
 - Created directly via Hevy API (curl), not an n8n workflow — routines are one-time templates; re-running a creator would duplicate (use PUT `/v1/routines/{id}` to edit).
 
@@ -61,7 +62,7 @@ Phase 3 (W7–10) is deliberately not programmed — it's built later from real 
 - **Hevy:** `POST /v1/routine_folders` body `{"routine_folder":{"title":...}}`; `POST /v1/routines` body `{"routine":{title,folder_id,notes,exercises:[{exercise_template_id,superset_id,rest_seconds,notes,sets:[{type:"normal",reps|weight_kg|duration_seconds}]}]}}`. Set field depends on template `type` (reps_only→reps, weight_reps→weight_kg+reps, duration→duration_seconds). Custom-template creation via API not cleanly supported.
 
 ## Open items
-- **Full Body** + **Increase Repetitions** day-tiles: exercises never provided → not in Hevy/Calendar yet.
+- **Full Body** (Phase-1 Fr) built in Hevy 2026-06-28 (Calisthenics/Home variant, derived from plan constraints since the original list was never provided). Still **not on Calendar** + **Increase Repetitions** day-tile remains unbuilt (exercises never provided).
 - Door-frame isometric rotations + Mobility flow stay in Notion (holds aren't Hevy-loggable).
 - Shoulder physio assessment gates all overhead/push progression (Phase 3) — surfaced in notes, not enforceable.
 
