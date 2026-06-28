@@ -329,11 +329,12 @@ def week_bag(rows_for_week):
     return planned_bag, done_bag, done_credited, planned_total
 
 def annotate_week_coverage(rows):
-    """Mark, per day, a planned type NOT done that day whose full WEEKLY quota was
-    still met (the session got done on another day) -> row['covered'] + row['moved'].
-    'covered' only fires when done_bag[t] >= planned_bag[t], so it never contradicts a
-    sub-100% week; 'doneOn' lists the surplus days (sessions done on a non-scheduled
-    day). Lets the week be judged as a whole instead of day-locked."""
+    """Mark a planned type NOT done on its scheduled day but done as a SURPLUS session on
+    another (non-scheduled) day of the same ISO week -> row['covered'] + row['moved'].
+    Greedy 1:1 assignment: each surplus session covers the earliest still-missed planned slot
+    of that type (so 1 swim done early covers 1 of 2 planned cardio slots, the other stays
+    missed). This is a DISPLAY flag only — the surplus session is already counted once in the
+    week bag via its `done` day, so coverage never inflates the adherence number."""
     from collections import defaultdict
     by_week = defaultdict(list)
     for r in rows:
@@ -341,20 +342,26 @@ def annotate_week_coverage(rows):
         iso = date(y, m, dd).isocalendar()
         by_week[(iso[0], iso[1])].append(r)
     for _wk, rs in by_week.items():
-        planned_bag, done_bag, _c, _t = week_bag(rs)
-        surplus_dates = defaultdict(list)   # type -> dates it was done on a NON-planned day
+        rs = sorted(rs, key=lambda r: r["date"])
+        surplus = defaultdict(list)   # type -> dates done on a NON-planned day (date order)
+        missed  = defaultdict(list)   # type -> scheduled days it was NOT done (date order)
         for r in rs:
-            pset = set(r.get("planned", []))
-            for t in r.get("done", []):
-                if t not in pset:
-                    surplus_dates[t].append(r["date"])
+            pset = set(r.get("planned", [])); done_today = set(r.get("done", []))
+            for t in done_today - pset:
+                surplus[t].append(r["date"])
+            for t in pset - done_today:
+                missed[t].append(r["date"])
+        cover = defaultdict(dict)     # missed_date -> {type: [surplus_date]}
+        for t, miss_days in missed.items():
+            sup = surplus.get(t, [])
+            for i, mday in enumerate(miss_days):
+                if i < len(sup):
+                    cover[mday][t] = [sup[i]]
         for r in rs:
-            done_today = set(r.get("done", []))
             covered, moved = [], []
-            for t in sorted(set(r.get("planned", [])) - done_today):
-                if planned_bag.get(t, 0) > 0 and done_bag.get(t, 0) >= planned_bag.get(t, 0):
-                    covered.append(t)
-                    moved.append({"type": t, "doneOn": list(surplus_dates.get(t, []))})
+            for t in sorted(cover.get(r["date"], {})):
+                covered.append(t)
+                moved.append({"type": t, "doneOn": cover[r["date"]][t]})
             r["covered"] = covered
             r["moved"] = moved
     return rows
@@ -496,12 +503,12 @@ def build_week_view(monday, by_date, today):
     pbag, dbag = Counter(), Counter()          # full week (fill + final pct)
     pbag_s, dbag_s = Counter(), Counter()      # days up to today (on-track colour)
     for de in days:
-        ps = set(de["types"]); eff = set(de["done"]) | set(de["covered"])
-        for t in ps: pbag[t] += 1
-        for t in eff: dbag[t] += 1
+        ps = set(de["types"]); dn = set(de["done"])   # DONE only — surplus already sits in `done`;
+        for t in ps: pbag[t] += 1                       # `covered` is a display flag, must not re-count
+        for t in dn: dbag[t] += 1
         if date.fromisoformat(de["iso"]) <= today:
             for t in ps: pbag_s[t] += 1
-            for t in eff: dbag_s[t] += 1
+            for t in dn: dbag_s[t] += 1
     planned_total = sum(pbag.values())
     done_credited = sum(min(dbag[t], pbag[t]) for t in pbag)
     planned_sofar = sum(pbag_s.values())
