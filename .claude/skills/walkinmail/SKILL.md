@@ -73,9 +73,18 @@ ORT        = Baden
    - Subject: `Unser Besuch bei Ihnen, kurzer nächster Schritt` (or a script variant).
    - Warm anchor: `wie besprochen, wir waren diese Woche kurz bei Ihnen im Büro. Sie haben uns
      empfohlen, Ihnen eine kurze Nachricht zu schicken …` (use the actual weekday if known).
-   - Mini-pitch: **the pain is the pitch**, ≤3 sentences, the sector hypothesis, **no jargon**
-     (never "API", "n8n", "Automatisierung" in the tech sense), **no prices**.
-   - Risk-reversal: `… zwei Wochen … Bringt's nichts, ist auch gut, kostet Sie keinen Rappen.`
+   - Pain hook (1 sentence): the sector hypothesis framed as the weekly time it costs them
+     (**the pain is the pitch**), **no jargon** (never "API", "n8n", "Automatisierung" in the
+     tech sense), **no prices**.
+   - The offer = our **Grand Slam Offer**, used close to verbatim (it sits at the top of the
+     Notion Final Script + as the red callout on the Operations Cockpit):
+     *„Wir schauen uns Ihren Betrieb und Ihre Prozesse genau an, von A bis Z. Dann optimieren wir
+     den Prozess, der am meisten Zeit kostet, und kommen mit etwas zurück, das Sie in Ruhe testen
+     können. Bis dahin kostet es Sie nichts, und erst wenn es Sie überzeugt, sprechen wir über
+     alles Weitere."* This is the confident risk-reversal: say it once, do not pile on.
+   - **Sell the value, never sound cheap.** State that it costs nothing **exactly once**, inside
+     the offer above. **Never** write "gratis"/"kostenlos" repeatedly, "kostet keinen Rappen", or
+     self-deprecating lines like "Bringt's nichts, ist auch gut". Confident, not billig.
    - CTA (two options): the `BOOKING` link **or** a quick reply.
    - Sign-off: `Freundliche Grüsse aus {ORT}, / {SENDER} / Automatisierbar / {PHONE}`.
    - **Honor the per-line note:** if it says the contact forwards to the team (e.g. Q27, Avantec),
@@ -133,7 +142,10 @@ Notion archive as the fallback.
 - **Creds-missing / IMAP failure is non-fatal** — fall back to the Notion archive, report it, keep going.
 - **Best-guess address → empty An-field**, never a guessed recipient pre-filled for one-click send.
 - **Never fabricate** an email address or a sector — flag instead.
-- **Siezen, no tech jargon, no prices, pitch ≤3 sentences** — enforce the script's rules.
+- **Sell value, not cheap.** The Grand Slam Offer is the pitch; mention that it costs nothing
+  **once**, confidently. Banned phrasings: repeated "gratis"/"kostenlos", "kostet keinen Rappen",
+  "Bringt's nichts, ist auch gut" — they make us look billig.
+- **Siezen, no tech jargon, no prices** — enforce the script's rules.
 - **Keine Gedankenstriche (—/–) im E-Mail-Text.** Stattdessen Komma / Doppelpunkt / Punkt.
   Bindestriche in zusammengesetzten Wörtern (z. B. `30-Minuten-Termin`,
   `Lizenz- und Vertragsverlängerungen`) bleiben — die sind grammatikalisch korrekt.

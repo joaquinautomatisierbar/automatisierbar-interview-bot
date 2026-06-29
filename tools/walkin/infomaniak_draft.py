@@ -30,6 +30,7 @@ Defaults (host/port/subfolder/identity) live in walkin_config.json; env vars ove
 import os, sys, json, argparse, re, time, imaplib
 from email.message import EmailMessage
 from email.utils import make_msgid, formatdate
+from email.header import decode_header, make_header
 import email.policy
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -186,13 +187,29 @@ def _appenduid(append_data):
     return None
 
 
-def _is_dup(imap, target, company):
+def _existing_companies(imap, target):
+    """Set of X-Walkin-Company values already in the folder. Fetches + decodes headers in Python
+    rather than a server-side HEADER SEARCH, which imaplib can't encode for non-ASCII criteria
+    (e.g. 'Helvetia Zürich') and which Dovecot won't match on an empty string."""
+    out = set()
     try:
         imap.select(_q(target))
-        typ, data = imap.search(None, "HEADER", "X-Walkin-Company", _q(company))
-        return typ == "OK" and bool(data and data[0].split())
+        typ, data = imap.search(None, "ALL")
+        if typ != "OK" or not data or not data[0]:
+            return out
+        for num in data[0].split():
+            t, d = imap.fetch(num, "(BODY.PEEK[HEADER.FIELDS (X-WALKIN-COMPANY)])")
+            if t != "OK" or not d or not d[0]:
+                continue
+            raw = d[0][1]
+            if isinstance(raw, (bytes, bytearray)):
+                raw = raw.decode("utf-8", "replace")
+            m = re.search(r"X-Walkin-Company:\s*(.+)", raw)
+            if m:
+                out.add(str(make_header(decode_header(m.group(1).strip()))))
     except Exception:
-        return False
+        pass
+    return out
 
 
 def _connect(cfg, args):
@@ -275,11 +292,12 @@ def cmd_push(payload, cfg, args):
         target = _resolve_target(imap, cfg, args)
         ensure_folder(imap, target)
         print(f"[info] Ziel-Ordner: {target}")
+        existing = _existing_companies(imap, target) if args.dedup else set()
         fails = 0
         for d in drafts:
             company = (d.get("company") or "(?)").strip()
             try:
-                if args.dedup and _is_dup(imap, target, company):
+                if args.dedup and company in existing:
                     print(f"[skip] {company} (Duplikat schon im Ordner)")
                     continue
                 msg = build_message(d, from_addr)

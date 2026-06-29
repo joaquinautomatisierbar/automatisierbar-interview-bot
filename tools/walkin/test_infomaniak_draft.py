@@ -86,7 +86,9 @@ check("Quoting escaped", ifd._q('a"b') == '"a\\"b"')
 # --- config defaults -----------------------------------------------------------
 cfg = ifd.load_config()
 check("config host default", cfg["imap_host"] == "mail.infomaniak.com")
-check("config subfolder default", cfg["drafts_subfolder"] == "Walk-in")
+check("config subfolder leer => Haupt-Drafts", cfg["drafts_subfolder"] == "")
+# empty subfolder must resolve the target to the bare Drafts parent
+check("leerer Subfolder => Ziel = Drafts", ifd.build_target("Drafts", "/", cfg["drafts_subfolder"]) == "Drafts")
 
 print()
 if FAIL:
