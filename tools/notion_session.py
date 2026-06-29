@@ -15,6 +15,7 @@ Leads DB ID: NOTION_LEADS_DB_ID env var, falls back to hardcoded fallback below.
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
