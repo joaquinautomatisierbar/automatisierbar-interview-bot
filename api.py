@@ -2848,6 +2848,406 @@ def cockpit_sessions():
 
 
 # ---------------------------------------------------------------------------
+# Cockpit — public booking ("Prozessermittlung vor Ort") + slot engine
+#
+# A custom Calendly: prospects book a 60-min on-site process-discovery
+# appointment with Automatisierbar (the company, not an individual). The team
+# decides who takes it afterward (Phase 2 claim flow). Availability = our weekly
+# bookable windows minus busy time on the shared Automatisierbar calendar.
+# Confirm → match/create a lead + write an Appointment row + notify the team.
+#
+# Calendar integration degrades gracefully: with no Google credential bound the
+# slot engine serves windows-only slots and the calendar write no-ops, so the
+# page is fully usable before the credential lands.
+# ---------------------------------------------------------------------------
+
+from datetime import (datetime as _dt2, timedelta as _td2, date as _date2,
+                      time as _time2, timezone as _tz2)
+
+BOOKING_TZ = "Europe/Zurich"
+SLOT_MINUTES = int(os.environ.get("COCKPIT_SLOT_MINUTES", "60"))
+# Weekly bookable windows in local time, keyed by weekday() (Mon=0 … Sun=6).
+# Edit here to change availability (later: move to Notion-backed config).
+BOOKING_WINDOWS = {
+    0: [("09:00", "12:00"), ("14:00", "17:00")],  # Mon
+    1: [("09:00", "12:00"), ("14:00", "17:00")],  # Tue
+    2: [("09:00", "12:00"), ("14:00", "17:00")],  # Wed
+    3: [("09:00", "12:00"), ("14:00", "17:00")],  # Thu
+    4: [("09:00", "12:00"), ("14:00", "16:00")],  # Fri
+}
+BOOKING_LEAD_DAYS = int(os.environ.get("COCKPIT_LEAD_DAYS", "1"))      # earliest = now +N days
+BOOKING_HORIZON_DAYS = int(os.environ.get("COCKPIT_HORIZON_DAYS", "21"))
+
+COCKPIT_APPOINTMENTS_DB_ID = os.environ.get("COCKPIT_APPOINTMENTS_DB_ID", "")
+COCKPIT_CALENDAR_ID = os.environ.get("COCKPIT_CALENDAR_ID", "")
+COCKPIT_BOOK_SECRET = os.environ.get("COCKPIT_BOOK_SECRET", "")        # optional confirm gate
+COCKPIT_TEAM_CHAT_ID = os.environ.get("COCKPIT_TEAM_CHAT_ID", "-5026363666")
+COCKPIT_TELEGRAM_BOT_TOKEN = (os.environ.get("COCKPIT_TELEGRAM_BOT_TOKEN")
+                              or os.environ.get("OPERATOR_TELEGRAM_BOT_TOKEN", ""))
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_CAL_DISABLED_LOGGED = False
+_GCAL_SVC = None
+_GCAL_TRIED = False
+
+
+def _zurich():
+    from zoneinfo import ZoneInfo
+    return ZoneInfo(BOOKING_TZ)
+
+
+def _now_local():
+    return _dt2.now(_zurich())
+
+
+def _parse_hhmm(s: str) -> _time2:
+    h, m = s.split(":")
+    return _time2(int(h), int(m))
+
+
+def _window_slots_for_date(d: _date2) -> list:
+    """Tz-aware (start,end) slot candidates for local date `d`, pre busy-filter."""
+    tz = _zurich()
+    out = []
+    step = _td2(minutes=SLOT_MINUTES)
+    for (w_start, w_end) in BOOKING_WINDOWS.get(d.weekday(), []):
+        ws = _dt2.combine(d, _parse_hhmm(w_start), tzinfo=tz)
+        we = _dt2.combine(d, _parse_hhmm(w_end), tzinfo=tz)
+        cur = ws
+        while cur + step <= we:
+            out.append((cur, cur + step))
+            cur += step
+    return out
+
+
+def _overlaps(a_s, a_e, b_s, b_e) -> bool:
+    return a_s < b_e and b_s < a_e
+
+
+def _gcal_credentials():
+    """Load Google credentials from a service-account JSON (GOOGLE_SERVICE_ACCOUNT_JSON,
+    raw or base64) or an OAuth token file (GOOGLE_TOKEN_JSON). Returns None if none
+    configured."""
+    import base64
+    import json as _json2
+    raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    if raw:
+        try:
+            if not raw.lstrip().startswith("{"):
+                raw = base64.b64decode(raw).decode("utf-8")
+            info = _json2.loads(raw)
+            from google.oauth2 import service_account
+            return service_account.Credentials.from_service_account_info(
+                info, scopes=["https://www.googleapis.com/auth/calendar"])
+        except Exception as e:
+            app.logger.error("service-account creds load failed: %s", e)
+            return None
+    token_path = os.environ.get("GOOGLE_TOKEN_JSON", "")
+    if token_path and os.path.exists(token_path):
+        try:
+            from google.oauth2.credentials import Credentials
+            return Credentials.from_authorized_user_file(
+                token_path, scopes=["https://www.googleapis.com/auth/calendar"])
+        except Exception as e:
+            app.logger.error("oauth token creds load failed: %s", e)
+            return None
+    return None
+
+
+def _gcal_service():
+    """Build a Google Calendar API client, or None if unavailable. Imports are
+    guarded so the app runs without the google libraries installed (degradation)."""
+    global _GCAL_SVC, _GCAL_TRIED
+    if _GCAL_SVC is not None:
+        return _GCAL_SVC
+    if _GCAL_TRIED:
+        return None
+    _GCAL_TRIED = True
+    try:
+        from googleapiclient.discovery import build
+    except Exception:
+        app.logger.warning("google-api-python-client not installed — calendar disabled")
+        return None
+    creds = _gcal_credentials()
+    if creds is None:
+        return None
+    try:
+        _GCAL_SVC = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        return _GCAL_SVC
+    except Exception as e:
+        app.logger.error("gcal service build failed: %s", e)
+        return None
+
+
+def _calendar_busy(start_dt, end_dt) -> list:
+    """Busy (start,end) intervals on the shared calendar in [start_dt, end_dt].
+    Returns [] when no calendar is configured/reachable — graceful degradation to
+    windows-only availability."""
+    global _CAL_DISABLED_LOGGED
+    if not COCKPIT_CALENDAR_ID:
+        if not _CAL_DISABLED_LOGGED:
+            app.logger.warning("COCKPIT_CALENDAR_ID unset — serving windows-only slots")
+            _CAL_DISABLED_LOGGED = True
+        return []
+    svc = _gcal_service()
+    if svc is None:
+        return []
+    try:
+        body = {
+            "timeMin": start_dt.astimezone(_tz2.utc).isoformat(),
+            "timeMax": end_dt.astimezone(_tz2.utc).isoformat(),
+            "timeZone": BOOKING_TZ,
+            "items": [{"id": COCKPIT_CALENDAR_ID}],
+        }
+        resp = svc.freebusy().query(body=body).execute()
+        out = []
+        for blk in resp.get("calendars", {}).get(COCKPIT_CALENDAR_ID, {}).get("busy", []):
+            bs = _dt2.fromisoformat(blk["start"].replace("Z", "+00:00"))
+            be = _dt2.fromisoformat(blk["end"].replace("Z", "+00:00"))
+            out.append((bs, be))
+        return out
+    except Exception as e:
+        app.logger.error("freebusy query failed (degrading to windows-only): %s", e)
+        return []
+
+
+def _bookable_slots(date_from: _date2, date_to: _date2) -> list:
+    """All free (start,end) slots between two local dates inclusive. Honours lead
+    time, 'now', and busy intervals from the shared calendar (if configured)."""
+    tz = _zurich()
+    earliest = _dt2.now(tz) + _td2(days=BOOKING_LEAD_DAYS)
+    candidates = []
+    d = date_from
+    while d <= date_to:
+        for (s, e) in _window_slots_for_date(d):
+            if s >= earliest:
+                candidates.append((s, e))
+        d += _td2(days=1)
+    if not candidates:
+        return []
+    busy = _calendar_busy(candidates[0][0], candidates[-1][1])
+    if not busy:
+        return candidates
+    return [(s, e) for (s, e) in candidates
+            if not any(_overlaps(s, e, bs, be) for (bs, be) in busy)]
+
+
+def _gcal_create_event(start_dt, end_dt, summary, description, location, attendee_email) -> str:
+    """Create the event on the shared calendar (prospect invited). Returns the event
+    id, or '' if the calendar isn't configured / fails — booking still proceeds."""
+    if not COCKPIT_CALENDAR_ID:
+        return ""
+    svc = _gcal_service()
+    if svc is None:
+        return ""
+    try:
+        ev = {
+            "summary": summary,
+            "description": description,
+            "location": location,
+            "start": {"dateTime": start_dt.isoformat(), "timeZone": BOOKING_TZ},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": BOOKING_TZ},
+        }
+        if attendee_email:
+            ev["attendees"] = [{"email": attendee_email}]
+        created = svc.events().insert(
+            calendarId=COCKPIT_CALENDAR_ID, body=ev, sendUpdates="all").execute()
+        return created.get("id", "")
+    except Exception as e:
+        app.logger.error("gcal create event failed: %s", e)
+        return ""
+
+
+def _send_team_telegram(text: str) -> bool:
+    """Notify the team group of a new booking. No-ops (logged) if no bot token."""
+    if not COCKPIT_TELEGRAM_BOT_TOKEN:
+        app.logger.warning("COCKPIT_TELEGRAM_BOT_TOKEN unset — booking Telegram skipped")
+        return False
+    try:
+        import requests as _rq
+        r = _rq.post(
+            f"https://api.telegram.org/bot{COCKPIT_TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": COCKPIT_TEAM_CHAT_ID, "text": text,
+                  "parse_mode": "HTML", "disable_web_page_preview": True},
+            timeout=15)
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        app.logger.error("team telegram failed: %s", e)
+        return False
+
+
+def _parse_plz_city(addr: str):
+    """Best-effort: pull a 4-digit Swiss PLZ + city out of a free-text address."""
+    m = re.search(r"(\d{4})\s+([A-Za-zÄÖÜäöüéèàç .\-]{2,40})", addr or "")
+    if m:
+        return m.group(1), m.group(2).strip().rstrip(",")
+    return "", ""
+
+
+@app.route("/book", methods=["GET"])
+def book_page():
+    return send_from_directory("static", "book.html")
+
+
+@app.route("/api/book/slots", methods=["GET"])
+def book_slots():
+    """Bookable slots. ?date=YYYY-MM-DD for one day, else the next horizon grouped
+    by day. Public (no auth)."""
+    try:
+        if request.args.get("date"):
+            d = _date2.fromisoformat(request.args["date"])
+            slots = _bookable_slots(d, d)
+        else:
+            today = _now_local().date()
+            slots = _bookable_slots(today, today + _td2(days=BOOKING_HORIZON_DAYS))
+    except ValueError:
+        return jsonify({"error": "bad date"}), 400
+    days: dict = {}
+    for (s, e) in slots:
+        days.setdefault(s.date().isoformat(), []).append(
+            {"start": s.isoformat(), "label": s.strftime("%H:%M")})
+    out = [{"date": k, "slots": v} for k, v in sorted(days.items())]
+    return jsonify({"slot_minutes": SLOT_MINUTES, "tz": BOOKING_TZ, "days": out})
+
+
+@app.route("/api/book/confirm", methods=["POST"])
+def book_confirm():
+    """Confirm a booking: validate → re-check slot → calendar event → match/create
+    lead → Appointment row → team Telegram. Public (optional secret gate)."""
+    data = request.get_json(silent=True) or {}
+    if COCKPIT_BOOK_SECRET and data.get("secret") != COCKPIT_BOOK_SECRET:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    firma = (data.get("firma") or "").strip()
+    adresse = (data.get("adresse") or "").strip()
+    start_raw = (data.get("start") or "").strip()
+
+    missing = [k for k, v in {"name": name, "email": email, "phone": phone,
+                              "firma": firma, "adresse": adresse,
+                              "start": start_raw}.items() if not v]
+    if missing:
+        return jsonify({"error": "Bitte alle Felder ausfüllen.", "fields": missing}), 400
+    if not _EMAIL_RE.match(email):
+        return jsonify({"error": "Bitte eine gültige E-Mail-Adresse angeben."}), 400
+
+    tz = _zurich()
+    try:
+        start_dt = _dt2.fromisoformat(start_raw)
+        start_dt = (start_dt.replace(tzinfo=tz) if start_dt.tzinfo is None
+                    else start_dt.astimezone(tz))
+    except ValueError:
+        return jsonify({"error": "Ungültiger Termin."}), 400
+    end_dt = start_dt + _td2(minutes=SLOT_MINUTES)
+
+    # Re-check the slot is still offered + free (guards races + tampering).
+    same_day = _bookable_slots(start_dt.date(), start_dt.date())
+    if not any(abs((s - start_dt).total_seconds()) < 60 for (s, _e) in same_day):
+        return jsonify({"error": "Dieser Termin ist leider nicht mehr verfügbar.",
+                        "code": "slot_taken"}), 409
+
+    when_label = start_dt.strftime("%d.%m.%Y %H:%M")
+    summary = f"Prozessermittlung — {firma}"
+    description = (f"Prozessermittlung (vor Ort) mit {name}\n"
+                   f"Firma: {firma}\nTelefon: {phone}\nE-Mail: {email}\n"
+                   f"Adresse: {adresse}\n\nGebucht über cockpit.automatisierbar.ch")
+    event_id = _gcal_create_event(start_dt, end_dt, summary, description, adresse, email)
+
+    # Match or create the lead (best-effort — never blocks the booking).
+    lead_id = ""
+    try:
+        import notion_session as _ns
+        if _ns.available():
+            plz, city = _parse_plz_city(adresse)
+            lead_fields = {
+                "Firma": firma, "Geschäftsführer / CEO": name,
+                "email": email, "phone": phone,
+            }
+            if plz:
+                lead_fields["postalCode"] = plz
+            if city:
+                lead_fields["city"] = city
+            existing = _ns.find_lead_by_email_or_phone(email=email, phone=phone)
+            if existing:
+                lead_id = _ns.expand_lead(existing, lead_fields)
+            else:
+                lead_fields["Name"] = (f"{firma} {city}".strip() or firma or name)
+                lead_fields["Context"] = (
+                    "INBOUND BOOKING (Prozessermittlung vor Ort)\n"
+                    f"Kontakt: {name}\nAdresse: {adresse}\nTermin: {when_label}")
+                lead_fields["Outreach Channel"] = "E-Mail"
+                lead_fields["Pipeline Stage"] = "Problem Interview"
+                lead_fields["War-Room Status"] = "◑ Reagiert – Termin fixieren"
+                lead_id = _ns.create_inbound_lead(lead_fields)
+            _ns.append_booking_note(
+                lead_id, f"Termin gebucht: {when_label}",
+                [f"Prozessermittlung vor Ort bei {firma}",
+                 f"Adresse: {adresse}",
+                 f"Kontakt: {name} · {phone} · {email}",
+                 "Quelle: cockpit.automatisierbar.ch"])
+    except Exception as e:
+        app.logger.error("booking lead upsert failed: %s", e)
+
+    # Write the Appointment row.
+    try:
+        import notion_session as _ns
+        if _ns.available() and COCKPIT_APPOINTMENTS_DB_ID:
+            _ns.create_appointment(COCKPIT_APPOINTMENTS_DB_ID, {
+                "Name": f"Prozessermittlung — {firma} ({when_label})",
+                "Lead": [lead_id] if lead_id else None,
+                "Start": start_dt.isoformat(),
+                "End": end_dt.isoformat(),
+                "Status": "Gebucht",
+                "Claimed By": "(unassigned)",
+                "Calendar Event ID": event_id,
+                "Quelle": "Cockpit Booking",
+                "Kontakt": f"{name} · {phone} · {email}",
+                "Adresse": adresse,
+            })
+    except Exception as e:
+        app.logger.error("appointment write failed: %s", e)
+
+    # Notify the team — unassigned.
+    _send_team_telegram(
+        "📅 <b>Neue Buchung</b> (Prozessermittlung vor Ort) — <b>UNASSIGNED</b>\n"
+        f"🏢 {firma}\n👤 {name} · {phone}\n📍 {adresse}\n"
+        f"🕐 {when_label} ({SLOT_MINUTES} Min)\n❓ Wer übernimmt?")
+
+    return jsonify({"ok": True, "when": when_label, "slot_minutes": SLOT_MINUTES,
+                    "calendar": bool(event_id)})
+
+
+# Default parent for the appointments DB: the Operations Cockpit page (the prod
+# integration already has access to that page tree, so the new DB inherits it).
+COCKPIT_PARENT_PAGE_ID = os.environ.get(
+    "COCKPIT_PARENT_PAGE_ID", "311bebb0c2f980de89a0f3d463a0fbce")
+
+
+@app.route("/api/cockpit/setup-appointments-db", methods=["POST"])
+def cockpit_setup_appointments_db():
+    """One-time: create the Termine/Appointments DB (owned by the prod Notion
+    integration). Returns the new id to set as COCKPIT_APPOINTMENTS_DB_ID."""
+    if not _cockpit_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    parent = (data.get("parent_page_id") or COCKPIT_PARENT_PAGE_ID).replace("-", "")
+    if len(parent) != 32:
+        return jsonify({"error": "parent_page_id must be a 32-char Notion page ID"}), 400
+    formatted = f"{parent[0:8]}-{parent[8:12]}-{parent[12:16]}-{parent[16:20]}-{parent[20:32]}"
+    try:
+        import notion_session as _ns
+        db_id = _ns.create_appointments_db(formatted)
+        return jsonify({"ok": True, "database_id": db_id,
+                        "next_step": f"Set COCKPIT_APPOINTMENTS_DB_ID={db_id}"})
+    except Exception as e:
+        app.logger.error("setup-appointments-db error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 

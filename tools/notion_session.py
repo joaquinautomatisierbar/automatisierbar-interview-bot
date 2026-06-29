@@ -1084,6 +1084,259 @@ def create_briefs_db(parent_page_id: str) -> str:
     return r.json()["id"]
 
 
+# ---------------------------------------------------------------------------
+# Cockpit booking — schema-aware property formatting + inbound lead match/create
+# + appointment write. Used by api.py's /api/book/* routes.
+#
+# These helpers are schema-aware: they fetch each DB's property types once
+# (cached per process) and format the payload to match, so a property like
+# `email` works whether the DB defines it as rich_text, email, or phone_number.
+# This removes all guesswork on read AND write.
+# ---------------------------------------------------------------------------
+
+_db_schema_cache: dict = {}  # database_id -> {prop_name: prop_type}
+
+
+def _db_schema(database_id: str) -> dict:
+    """Return {property_name: notion_type} for a DB, cached for the process life."""
+    if database_id in _db_schema_cache:
+        return _db_schema_cache[database_id]
+    r = requests.get(
+        f"https://api.notion.com/v1/databases/{database_id}",
+        headers=_notion_headers(),
+        timeout=15,
+    )
+    r.raise_for_status()
+    props = {name: p.get("type") for name, p in r.json().get("properties", {}).items()}
+    _db_schema_cache[database_id] = props
+    return props
+
+
+def _fmt_prop(ptype: str, value):
+    """Build a Notion property-value payload for the given property type."""
+    if value is None or value == "":
+        return None
+    if ptype == "title":
+        return {"title": [{"text": {"content": str(value)[:1999]}}]}
+    if ptype == "rich_text":
+        return {"rich_text": _rt(value)}
+    if ptype == "email":
+        return {"email": str(value)[:200]}
+    if ptype == "phone_number":
+        return {"phone_number": str(value)[:100]}
+    if ptype == "url":
+        return {"url": str(value)[:1999]}
+    if ptype == "select":
+        return {"select": {"name": str(value)[:100]}}
+    if ptype == "status":
+        return {"status": {"name": str(value)[:100]}}
+    if ptype == "date":
+        # value may be an ISO string (start only) or a (start, end) tuple/list
+        if isinstance(value, (list, tuple)):
+            start, end = (list(value) + [None, None])[:2]
+            d = {"start": start}
+            if end:
+                d["end"] = end
+            return {"date": d}
+        return {"date": {"start": str(value)}}
+    if ptype == "number":
+        try:
+            return {"number": float(value)}
+        except (TypeError, ValueError):
+            return None
+    if ptype == "checkbox":
+        return {"checkbox": bool(value)}
+    if ptype == "relation":
+        ids = value if isinstance(value, list) else [value]
+        return {"relation": [{"id": i} for i in ids if i]}
+    return None
+
+
+def build_props(database_id: str, fields: dict) -> dict:
+    """Map a {prop_name: value} dict to a schema-correct Notion properties payload.
+    Silently skips properties the DB doesn't define and empty values."""
+    schema = _db_schema(database_id)
+    out: dict = {}
+    for name, val in fields.items():
+        ptype = schema.get(name)
+        if not ptype:
+            continue
+        payload = _fmt_prop(ptype, val)
+        if payload is not None:
+            out[name] = payload
+    return out
+
+
+def _prop_value(prop: dict) -> str:
+    """Read a plain-string value from any Notion property object, type-agnostic."""
+    if not isinstance(prop, dict):
+        return ""
+    t = prop.get("type")
+    if t == "title":
+        return "".join(s.get("plain_text", "") for s in prop.get("title", []))
+    if t == "rich_text":
+        return "".join(s.get("plain_text", "") for s in prop.get("rich_text", []))
+    if t == "email":
+        return prop.get("email") or ""
+    if t == "phone_number":
+        return prop.get("phone_number") or ""
+    if t == "url":
+        return prop.get("url") or ""
+    if t == "select":
+        return (prop.get("select") or {}).get("name", "")
+    if t == "status":
+        return (prop.get("status") or {}).get("name", "")
+    return ""
+
+
+def _norm_phone(p: str) -> str:
+    """Digits only, dropping a leading country/trunk code so +41 76… and 076…
+    compare equal on their last 8 digits."""
+    digits = re.sub(r"\D", "", p or "")
+    return digits[-8:] if len(digits) >= 8 else digits
+
+
+def find_lead_by_email_or_phone(email: str = "", phone: str = "") -> Optional[dict]:
+    """Return the Leads-DB page that matches the email (exact, case-insensitive) or
+    phone (last-8-digits), or None. Email is matched server-side (cheap); phone is a
+    Python scan fallback. Returns the raw Notion page dict so callers can inspect
+    existing properties before deciding to expand."""
+    if not available():
+        return None
+    email = (email or "").strip().lower()
+    phone_key = _norm_phone(phone)
+    db = _leads_db()
+
+    # 1) Server-side email filter using the actual property type.
+    if email:
+        try:
+            etype = _db_schema(db).get("email")
+            if etype in ("email", "rich_text", "title", "url"):
+                key = "rich_text" if etype == "rich_text" else etype
+                flt = {"property": "email", key: {"equals": email}}
+                r = _query_db(db, filter_body=flt, page_size=2)
+                for pg in r.get("results", []):
+                    if _prop_value(pg["properties"].get("email", {})).strip().lower() == email:
+                        return pg
+        except (requests.HTTPError, KeyError) as e:
+            print(f"[notion] find_lead email filter failed, will scan: {e}")
+
+    # 2) Phone (and email fallback): scan recent leads in Python.
+    if not phone_key and not email:
+        return None
+    try:
+        for pg in _query_db_all(db, max_pages=5):
+            props = pg["properties"]
+            if email and _prop_value(props.get("email", {})).strip().lower() == email:
+                return pg
+            if phone_key and _norm_phone(_prop_value(props.get("phone", {}))) == phone_key:
+                return pg
+    except Exception as e:
+        print(f"[notion] find_lead scan failed: {e}")
+    return None
+
+
+def expand_lead(page: dict, fields: dict) -> str:
+    """Fill ONLY the empty properties of an existing lead (never clobber existing
+    data). `fields` is {prop_name: value}. Returns the page id."""
+    page_id = page["id"]
+    existing = page.get("properties", {})
+    to_set = {}
+    for name, val in fields.items():
+        if not val:
+            continue
+        if not _prop_value(existing.get(name, {})).strip():
+            to_set[name] = val
+    if to_set:
+        _update_page(page_id, build_props(_leads_db(), to_set))
+    return page_id
+
+
+def create_inbound_lead(fields: dict) -> str:
+    """Create a new lead in the Leads DB from a booking. `fields` is a
+    {prop_name: value} dict; formatting is schema-aware. Returns the new page id."""
+    props = build_props(_leads_db(), fields)
+    return _create_page(_leads_db(), props)["id"]
+
+
+def append_booking_note(lead_page_id: str, title: str, lines: list) -> None:
+    """Append a callout block summarising an inbound booking to the lead page,
+    for traceability (mirrors the walk-in-notiz pattern)."""
+    if not available() or not lead_page_id:
+        return
+    try:
+        body = "\n".join(str(x) for x in lines if x)
+        _append_blocks(lead_page_id, [{
+            "object": "block", "type": "callout",
+            "callout": {
+                "icon": {"type": "emoji", "emoji": "📅"},
+                "rich_text": _rt(f"{title}\n{body}"),
+            },
+        }])
+    except Exception as e:
+        print(f"[notion] append_booking_note failed: {e}")
+
+
+def create_appointments_db(parent_page_id: str) -> str:
+    """One-time bootstrap: create the 'Termine / Appointments' DB under
+    parent_page_id, OWNED BY THE PROD INTEGRATION (so api.py can write to it
+    without a manual share). Returns the new DB id — persist as
+    COCKPIT_APPOINTMENTS_DB_ID. Status is a `select` (the Notion API can't create
+    `status`-type properties); the schema-aware writer adapts either way."""
+    if not available():
+        raise RuntimeError("NOTION_API_KEY not set")
+    body = {
+        "parent": {"type": "page_id", "page_id": parent_page_id},
+        "title": [{"type": "text", "text": {"content": "Termine / Appointments"}}],
+        "properties": {
+            "Name": {"title": {}},
+            "Lead": {"relation": {"database_id": _leads_db(), "single_property": {}}},
+            "Start": {"date": {}},
+            "End": {"date": {}},
+            "Status": {"select": {"options": [
+                {"name": "Gebucht", "color": "blue"},
+                {"name": "Bestätigt", "color": "green"},
+                {"name": "Abgesagt", "color": "red"},
+                {"name": "Erledigt", "color": "gray"},
+                {"name": "No-Show", "color": "orange"},
+            ]}},
+            "Claimed By": {"select": {"options": [
+                {"name": "(unassigned)", "color": "default"},
+                {"name": "Tej", "color": "purple"},
+                {"name": "Joaquin", "color": "green"},
+                {"name": "Nico", "color": "blue"},
+                {"name": "Patrik", "color": "yellow"},
+            ]}},
+            "Calendar Event ID": {"rich_text": {}},
+            "Quelle": {"select": {"options": [
+                {"name": "Cockpit Booking", "color": "green"},
+                {"name": "Cold Call F", "color": "blue"},
+                {"name": "Walk-In", "color": "orange"},
+            ]}},
+            "Kontakt": {"rich_text": {}},
+            "Adresse": {"rich_text": {}},
+            "Notiz": {"rich_text": {}},
+        },
+    }
+    r = requests.post(
+        "https://api.notion.com/v1/databases",
+        headers=_notion_headers(),
+        json=body,
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()["id"]
+
+
+def create_appointment(appointments_db_id: str, fields: dict) -> dict:
+    """Create a row in the Termine/Appointments DB. `fields` is a {prop_name: value}
+    dict; formatting is schema-aware (Start/End accept ISO strings, Lead accepts a
+    page-id string or list). Returns {'id', 'url'}."""
+    props = build_props(appointments_db_id, fields)
+    page = _create_page(appointments_db_id, props)
+    return {"id": page["id"], "url": page.get("url", "")}
+
+
 def write_roi_to_page(lead_page_id: str, roi: dict, assumptions: list) -> None:
     if not available() or not lead_page_id:
         return

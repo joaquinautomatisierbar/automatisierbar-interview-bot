@@ -1,0 +1,9 @@
+# Caddy site block for cockpit.automatisierbar.ch — append to /etc/caddy/Caddyfile
+# (same box that serves fitness.automatisierbar.ch). Caddy auto-provisions the
+# Let's Encrypt TLS cert once the DNS A-record (cockpit -> 187.124.188.2) resolves.
+# After editing:  sudo systemctl reload caddy
+
+cockpit.automatisierbar.ch {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8082
+}
