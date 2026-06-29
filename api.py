@@ -3056,9 +3056,11 @@ def _bookable_slots(date_from: _date2, date_to: _date2) -> list:
     return out
 
 
-def _gcal_create_event(start_dt, end_dt, summary, description, location, attendee_email) -> str:
+def _gcal_create_event(start_dt, end_dt, summary, description, location, attendee_email,
+                       send_updates="all") -> str:
     """Create the event on the shared calendar (prospect invited). Returns the event
-    id, or '' if the calendar isn't configured / fails — booking still proceeds."""
+    id, or '' if the calendar isn't configured / fails — booking still proceeds.
+    `send_updates` controls Google's own invite email ('all' or 'none')."""
     if not COCKPIT_CALENDAR_ID:
         return ""
     svc = _gcal_service()
@@ -3076,7 +3078,7 @@ def _gcal_create_event(start_dt, end_dt, summary, description, location, attende
         if attendee_email:
             ev["attendees"] = [{"email": attendee_email}]
         created = svc.events().insert(
-            calendarId=COCKPIT_CALENDAR_ID, body=ev, sendUpdates="all").execute()
+            calendarId=COCKPIT_CALENDAR_ID, body=ev, sendUpdates=send_updates).execute()
         return created.get("id", "")
     except Exception as e:
         app.logger.error("gcal create event failed: %s", e)
@@ -3182,7 +3184,14 @@ def book_confirm():
                    f"Adresse: {adresse}"
                    + (f"\nNotiz: {notiz}" if notiz else "")
                    + "\n\nGebucht über cockpit.automatisierbar.ch")
-    event_id = _gcal_create_event(start_dt, end_dt, summary, description, adresse, email)
+    # If we'll send our own branded confirmation, suppress Google's duplicate invite.
+    try:
+        import cockpit_email as _ce
+        _own_email = _ce.smtp_configured()
+    except Exception:
+        _own_email = False
+    event_id = _gcal_create_event(start_dt, end_dt, summary, description, adresse, email,
+                                  send_updates=("none" if _own_email else "all"))
 
     # Match or create the lead (best-effort — never blocks the booking).
     lead_id = ""
@@ -3240,6 +3249,18 @@ def book_confirm():
     except Exception as e:
         app.logger.error("appointment write failed: %s", e)
 
+    # Branded confirmation email + calendar invite (.ics) to the prospect. Graceful —
+    # the booking is already done; a send failure just logs.
+    try:
+        import cockpit_email as _ce
+        if not _ce.send_confirmation(
+                to_email=email, to_name=name, when_label=when_label, address=adresse,
+                slot_minutes=SLOT_MINUTES, start_dt=start_dt, end_dt=end_dt,
+                summary=summary, description=description):
+            app.logger.warning("confirmation email skipped (SMTP not configured)")
+    except Exception as e:
+        app.logger.error("confirmation email failed: %s", e)
+
     # Notify the team — unassigned.
     _send_team_telegram(
         "📅 <b>Neue Buchung</b> (Prozessermittlung vor Ort) — <b>UNASSIGNED</b>\n"
@@ -3250,7 +3271,7 @@ def book_confirm():
                     "calendar": bool(event_id)})
 
 
-CONTACT_EMAIL = os.environ.get("COCKPIT_CONTACT_EMAIL", "joaquin@automatisierbar.ch")
+CONTACT_EMAIL = os.environ.get("COCKPIT_CONTACT_EMAIL", "info@automatisierbar.ch")
 
 
 @app.route("/api/book/request", methods=["POST"])

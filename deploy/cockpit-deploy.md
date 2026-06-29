@@ -76,7 +76,12 @@ sudo systemctl restart cockpit
    - *(or an OAuth token file at `GOOGLE_TOKEN_JSON`.)*
 4. **Team Telegram bot token** — set `OPERATOR_TELEGRAM_BOT_TOKEN` (the team group
    `-5026363666` is already the default `COCKPIT_TEAM_CHAT_ID`).
-5. **Website** — once live, swap the Google appointment-schedule link on automatisierbar.ch
+5. **Confirmation email (Infomaniak SMTP)** — set `INFOMANIAK_IMAP_USER` (e.g.
+   info@automatisierbar.ch) + `INFOMANIAK_IMAP_PASSWORD` (application password) so the
+   prospect gets a branded confirmation + `.ics` calendar invite. When set, Google's own
+   invite is suppressed to avoid a duplicate. Until set, the email is skipped (booking
+   still works); if the Google calendar IS wired, Google sends its default invite instead.
+6. **Website** — once live, swap the Google appointment-schedule link on automatisierbar.ch
    for `https://cockpit.automatisierbar.ch/book`.
 
 ## Verify end-to-end (use a throwaway lead first)
