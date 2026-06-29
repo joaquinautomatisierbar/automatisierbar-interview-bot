@@ -11,6 +11,8 @@ BRANCH=feat/cockpit-booking
 
 echo "[1/7] repo"
 mkdir -p /srv/cockpit
+# Allow root to operate on the repo even if a prior run chowned it to paperclip.
+git config --global --add safe.directory /srv/cockpit/app || true
 if [ -d /srv/cockpit/app/.git ]; then
   git -C /srv/cockpit/app fetch -q origin "$BRANCH"
   git -C /srv/cockpit/app checkout -q -B "$BRANCH" origin/"$BRANCH"
