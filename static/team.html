@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0F0D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AB Team">
+<meta name="robots" content="noindex">
+<title>Team · Automatisierbar</title>
+<link rel="manifest" href="/team.webmanifest">
+<link rel="icon" href="/static/automatisierbar-logo.svg">
+<link rel="apple-touch-icon" href="/static/team-icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0F0D; --surface-1:#111815; --surface-2:#18211D; --surface-3:#1F2A25;
+    --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.14);
+    --text:#ECF3EF; --muted:#8A9892; --dim:#5A655F;
+    --green:#15C97A; --green-dark:#0A8F54; --green-soft:#5EE0A6; --green-glow:rgba(21,201,122,.16);
+    --yellow:#EAB308; --red:#EF4444;
+    --radius:14px; --radius-sm:9px; --radius-pill:999px;
+    --ease:.18s cubic-bezier(.2,.6,.2,1);
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    font-family:var(--sans);background:var(--bg);color:var(--text);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    padding:max(14px,env(safe-area-inset-top)) 14px calc(28px + env(safe-area-inset-bottom));
+    background-image:radial-gradient(900px 500px at 50% -10%,rgba(21,201,122,.10),transparent 70%);
+    line-height:1.5;
+  }
+  .wrap{max-width:540px;margin:0 auto}
+
+  header{display:flex;align-items:center;gap:11px;padding:6px 2px 16px}
+  .logo{width:36px;height:36px;border-radius:10px;overflow:hidden;flex:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06),0 6px 18px var(--green-glow);display:block}
+  .logo svg{width:100%;height:100%;display:block}
+  .brand b{font-weight:700;letter-spacing:-.2px;font-size:15px;display:block}
+  .brand .sub{color:var(--dim);font-size:11.5px;font-weight:500}
+  .refresh{margin-left:auto;background:var(--surface-2);border:1px solid var(--border-2);
+    color:var(--muted);width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+    cursor:pointer;transition:var(--ease)}
+  .refresh:active{transform:scale(.94)}
+  .refresh svg{width:18px;height:18px}
+  .refresh.spin svg{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .hello{font-size:21px;font-weight:700;letter-spacing:-.3px;margin:2px 2px 4px}
+  .hello .nm{color:var(--green-soft)}
+  .sub2{color:var(--muted);font-size:13px;margin:0 2px 14px}
+
+  .chips{display:flex;gap:8px;margin:0 0 16px}
+  .chip{flex:1;text-align:center;background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius-pill);padding:9px 4px;font-size:13px;font-weight:600;color:var(--muted);
+    cursor:pointer;transition:var(--ease);-webkit-tap-highlight-color:transparent}
+  .chip .ct{font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:5px}
+  .chip.on{background:var(--green-glow);border-color:rgba(21,201,122,.4);color:var(--green-soft)}
+  .chip.on .ct{color:var(--green-soft)}
+
+  .card{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);
+    padding:15px 15px 13px;margin-bottom:12px}
+  .card.mine{border-color:rgba(21,201,122,.35);background:linear-gradient(180deg,var(--green-glow),transparent),var(--surface-1)}
+  .card .when{font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--green-soft);letter-spacing:.2px}
+  .card .firma{font-size:16px;font-weight:700;margin:5px 0 2px;letter-spacing:-.2px}
+  .card .meta{color:var(--muted);font-size:13px;line-height:1.6}
+  .card .meta .lbl{color:var(--dim)}
+  .row{display:flex;align-items:center;gap:10px;margin-top:13px}
+  .badge{font-size:12px;font-weight:600;padding:5px 10px;border-radius:var(--radius-pill);
+    display:inline-flex;align-items:center;gap:6px}
+  .badge.open{background:var(--surface-3);color:var(--muted)}
+  .badge.taken{background:var(--green-glow);color:var(--green-soft)}
+  .badge.other{background:var(--surface-3);color:var(--text)}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+  .spacer{flex:1}
+  .btn{font-family:var(--sans);font-weight:700;font-size:13.5px;border:none;border-radius:var(--radius-sm);
+    padding:10px 16px;cursor:pointer;transition:var(--ease);-webkit-tap-highlight-color:transparent}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{color:#04130c;background:linear-gradient(135deg,var(--green-soft),var(--green));
+    box-shadow:0 6px 18px var(--green-glow)}
+  .btn.ghost{background:var(--surface-2);color:var(--text);border:1px solid var(--border-2)}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+
+  .state{text-align:center;color:var(--muted);padding:48px 20px}
+  .state .ic{width:54px;height:54px;border-radius:50%;background:var(--green-glow);display:grid;
+    place-items:center;margin:0 auto 16px}
+  .state .ic svg{width:28px;height:28px;color:var(--green-soft)}
+  .state h2{font-size:18px;color:var(--text);font-weight:700;margin-bottom:7px}
+  .state p{font-size:14px;line-height:1.6}
+  .state code{font-family:var(--mono);font-size:12.5px;color:var(--green-soft);background:var(--surface-2);
+    padding:2px 7px;border-radius:6px}
+  .hidden{display:none !important}
+  .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    background:var(--surface-3);border:1px solid var(--border-2);color:var(--text);font-size:13.5px;
+    font-weight:600;padding:11px 18px;border-radius:var(--radius-pill);box-shadow:var(--shadow);
+    opacity:0;pointer-events:none;transition:.22s;z-index:50}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <div class="brand"><b>Automatisierbar</b><span class="sub">Team · Terminvergabe</span></div>
+    <button class="refresh" id="refresh" title="Aktualisieren" aria-label="Aktualisieren">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    </button>
+  </header>
+
+  <!-- authed view -->
+  <div id="main" class="hidden">
+    <div class="hello">Hallo <span class="nm" id="me">…</span></div>
+    <p class="sub2">Anstehende Buchungen. Tippe <b>Übernehmen</b>, um einen Termin zu fixieren.</p>
+    <div class="chips">
+      <div class="chip on" data-f="offen">Offen<span class="ct" id="c-offen">0</span></div>
+      <div class="chip" data-f="meine">Meine<span class="ct" id="c-meine">0</span></div>
+      <div class="chip" data-f="alle">Alle<span class="ct" id="c-alle">0</span></div>
+    </div>
+    <div id="list"></div>
+    <div id="empty" class="state hidden">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <h2>Nichts offen</h2>
+      <p>Keine Buchungen in dieser Ansicht.</p>
+    </div>
+  </div>
+
+  <!-- auth gate -->
+  <div id="gate" class="state hidden">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+    <h2>Persönlicher Zugang nötig</h2>
+    <p>Öffne die App über deinen persönlichen Link<br>(<code>cockpit.automatisierbar.ch/team?k=…</code>).<br>Frag Joaquin, falls du ihn nicht hast.</p>
+  </div>
+
+  <!-- error -->
+  <div id="err" class="state hidden">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></div>
+    <h2>Verbindungsfehler</h2>
+    <p>Konnte die Termine nicht laden. Zieh zum Aktualisieren oben rechts.</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TEAM = ['Tej','Joaquin','Nico','Patrik'];
+let ME = null, APPTS = [], FILTER = 'offen';
+
+const $ = (id) => document.getElementById(id);
+function show(el){ el.classList.remove('hidden'); }
+function hide(el){ el.classList.add('hidden'); }
+let toastT;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+function firmaOf(a){ const m=(a.name||'').match(/[—-]\s*(.+?)\s*\(/); return m?m[1]:(a.name||'Termin'); }
+function isClaimed(a){ return a.claimed_by && a.claimed_by !== '(unassigned)'; }
+function fmtWhen(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d)) return iso;
+  const day = d.toLocaleDateString('de-CH',{weekday:'short',day:'2-digit',month:'2-digit',timeZone:'Europe/Zurich'});
+  const time = d.toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Zurich'});
+  return day.replace(/\.$/,'') + ' · ' + time;
+}
+
+function counts(){
+  const c = {offen:0, meine:0, alle:APPTS.length};
+  APPTS.forEach(a=>{ if(!isClaimed(a)) c.offen++; if(a.claimed_by===ME) c.meine++; });
+  $('c-offen').textContent = c.offen; $('c-meine').textContent = c.meine; $('c-alle').textContent = c.alle;
+}
+function filtered(){
+  if(FILTER==='offen') return APPTS.filter(a=>!isClaimed(a));
+  if(FILTER==='meine') return APPTS.filter(a=>a.claimed_by===ME);
+  return APPTS;
+}
+
+function cardHTML(a){
+  const claimed = isClaimed(a), mine = a.claimed_by===ME;
+  let badge, action;
+  if(!claimed){
+    badge = `<span class="badge open"><span class="dot"></span>Offen</span>`;
+    action = `<button class="btn primary" data-claim="${a.id}">Übernehmen</button>`;
+  } else if(mine){
+    badge = `<span class="badge taken"><span class="dot"></span>Du übernimmst</span>`;
+    action = `<button class="btn ghost" data-unclaim="${a.id}">Abgeben</button>`;
+  } else {
+    badge = `<span class="badge other"><span class="dot"></span>${a.claimed_by}</span>`;
+    action = `<button class="btn ghost" data-claim="${a.id}">Übernehmen</button>`;
+  }
+  const addr = a.adresse ? `<div class="meta"><span class="lbl">Ort</span> ${esc(a.adresse)}</div>` : '';
+  const kont = a.kontakt ? `<div class="meta"><span class="lbl">Kontakt</span> ${esc(a.kontakt)}</div>` : '';
+  const notiz = a.notiz ? `<div class="meta"><span class="lbl">Notiz</span> ${esc(a.notiz)}</div>` : '';
+  return `<div class="card ${mine?'mine':''}">
+    <div class="when">${esc(fmtWhen(a.start))}</div>
+    <div class="firma">${esc(firmaOf(a))}</div>
+    ${addr}${kont}${notiz}
+    <div class="row">${badge}<span class="spacer"></span>${action}</div>
+  </div>`;
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function render(){
+  counts();
+  const rows = filtered();
+  const list = $('list');
+  if(!rows.length){ list.innerHTML=''; show($('empty')); }
+  else { hide($('empty')); list.innerHTML = rows.map(cardHTML).join(''); }
+}
+
+async function api(path, opts){
+  const r = await fetch(path, Object.assign({credentials:'same-origin', headers:{'Content-Type':'application/json'}}, opts||{}));
+  if(r.status===401){ throw {auth:true}; }
+  if(!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+async function load(){
+  const btn = $('refresh'); btn.classList.add('spin');
+  try{
+    const data = await api('/api/team/appointments');
+    ME = data.me || ME; $('me').textContent = ME || '';
+    APPTS = data.appointments || [];
+    hide($('gate')); hide($('err')); show($('main'));
+    render();
+  }catch(e){
+    if(e && e.auth){ hide($('main')); hide($('err')); show($('gate')); }
+    else { hide($('main')); show($('err')); }
+  }finally{ btn.classList.remove('spin'); }
+}
+
+async function claim(id){
+  const a = APPTS.find(x=>x.id===id); if(!a) return;
+  const prev = a.claimed_by; a.claimed_by = ME; render();           // optimistic
+  try{ await api(`/api/team/appointments/${id}/claim`, {method:'POST', body:'{}'}); toast(`Übernommen ✓`); }
+  catch(e){ a.claimed_by = prev; render(); toast('Fehler – erneut versuchen'); if(e&&e.auth){show($('gate'));hide($('main'));} }
+}
+async function unclaim(id){
+  const a = APPTS.find(x=>x.id===id); if(!a) return;
+  const prev = a.claimed_by; a.claimed_by = '(unassigned)'; render(); // optimistic
+  try{ await api(`/api/team/appointments/${id}/unclaim`, {method:'POST', body:'{}'}); toast('Abgegeben'); }
+  catch(e){ a.claimed_by = prev; render(); toast('Fehler – erneut versuchen'); }
+}
+
+document.addEventListener('click', (e)=>{
+  const c = e.target.closest('[data-claim]'); if(c){ claim(c.getAttribute('data-claim')); return; }
+  const u = e.target.closest('[data-unclaim]'); if(u){ unclaim(u.getAttribute('data-unclaim')); return; }
+  const ch = e.target.closest('.chip'); if(ch){ FILTER = ch.getAttribute('data-f');
+    document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on', x===ch)); render(); }
+});
+$('refresh').addEventListener('click', load);
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/team-sw.js', {scope:'/team'}).catch(()=>{});
+}
+load();
+</script>
+</body>
+</html>

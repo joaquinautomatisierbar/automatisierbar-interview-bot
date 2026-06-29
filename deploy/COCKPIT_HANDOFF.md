@@ -23,7 +23,28 @@ branch `feat/cockpit-booking`.
 2. **Swap the website link** — point automatisierbar.ch's booking button to `https://cockpit.automatisierbar.ch/book` (replacing the old Google appointment-schedule link). *Check if the marketing site is in this repo; if so do it in a PR.*
 3. **(Optional) Google Calendar** — connect a Google calendar (service account: `COCKPIT_CALENDAR_ID` + `GOOGLE_SERVICE_ACCOUNT_JSON` in `/etc/cockpit/env`) so the page hides busy times AND auto-creates a real Google invite (truly-automatic calendar entry). Until then it serves windows-only slots and the email's add-to-calendar button covers it. Code is already written + graceful — just needs the credential.
 4. **(Optional) MCP connectors** — Hostinger MCP (needs a Hostinger API token) + Infomaniak Mail MCP (token already saved). Both need one Claude restart to load. *Note: SSH already gives full server control, so this is convenience only.*
-5. **Roadmap (later phases):** Phase 2 internal team PWA + per-person logins + claim flow; Phase 3 live IMAP inbox monitoring; Phase 4 follow-up-due aging zone.
+5. **Roadmap (later phases):** ~~Phase 2 internal team PWA + per-person logins + claim flow~~ **✅ BUILT** (see below); Phase 3 live IMAP inbox monitoring; Phase 4 follow-up-due aging zone.
+
+   **Phase 2 — Team PWA + claim flow (built 2026-06-29):** Installable phone app at
+   **`cockpit.automatisierbar.ch/team`** (`static/team.html` + `team.webmanifest` + `team-sw.js`).
+   Per-person **magic-link** login: each member opens `/team?k=<token>` once (no passwords);
+   identity is a signed 365-day session. The app lists upcoming Termine and lets a member tap
+   **Übernehmen** to claim (writes `Claimed By` in the Termine DB + posts "✅ {name} übernimmt"
+   to the team group). New API: `GET /api/team/whoami|appointments`, `POST
+   /api/team/appointments/<id>/claim|unclaim`. Notion fns: `list_appointments`,
+   `claim_appointment`, `unclaim_appointment` in `tools/notion_session.py`.
+
+   **Telegram claim buttons** (optional, needs a NEW bot): the booking alert can carry inline
+   `[Tej][Joaquin][Nico][Patrik]` buttons handled by `POST /api/team/telegram/webhook`. This uses
+   a **dedicated `COCKPIT_TEAM_BOT_TOKEN`** — NOT the operator bot (a webhook on the operator bot
+   would 409-break its `getUpdates` polling, per the Telegram-cred-scoping rule). Unset ⇒ the alert
+   falls back to the plain operator-bot ping; the PWA claim covers it either way. To enable: create a
+   bot via @BotFather, add it to the team group `-5026363666`, set `COCKPIT_TEAM_BOT_TOKEN` +
+   `COCKPIT_TELEGRAM_WEBHOOK_SECRET` in `/etc/cockpit/env`, then `POST /api/team/telegram/setup-webhook`
+   (X-API-Key) to register the webhook.
+
+   **Setup:** set `COCKPIT_TEAM_TOKENS` (JSON `{"<token>":"Name"}`, 4 tokens) in `/etc/cockpit/env`,
+   restart cockpit, hand each person their `/team?k=<token>` link.
 6. **🔐 Rotate the Infomaniak full-workspace token** (it was pasted in chat). Reissue (ideally mail-only scope), then update `.env` + `/etc/cockpit/env` `INFOMANIAK_MAIL_TOKEN`.
 7. **(Optional) Merge `feat/cockpit-booking` → `main`** (cleanup; deploy currently pulls the branch directly).
 

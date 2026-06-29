@@ -24,7 +24,7 @@ import os
 import re
 import sys
 
-from flask import Flask, request, jsonify, send_file, send_from_directory, session
+from flask import Flask, request, jsonify, send_file, send_from_directory, session, redirect
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "tools"))
 
@@ -2892,6 +2892,83 @@ COCKPIT_TEAM_CHAT_ID = os.environ.get("COCKPIT_TEAM_CHAT_ID", "-5026363666")
 COCKPIT_TELEGRAM_BOT_TOKEN = (os.environ.get("COCKPIT_TELEGRAM_BOT_TOKEN")
                               or os.environ.get("OPERATOR_TELEGRAM_BOT_TOKEN", ""))
 
+# --- Phase 2: per-person team login (magic link) + claim-button bot ----------
+# The claim buttons + webhook use a DEDICATED team bot (COCKPIT_TEAM_BOT_TOKEN),
+# separate from the operator bot — setting a webhook on the operator bot would
+# 409-break its getUpdates polling (see feedback_telegram_credentials). When the
+# team bot is unset the booking alert falls back to the plain operator-bot ping;
+# the team PWA claim covers the gap either way.
+COCKPIT_TEAM_BOT_TOKEN = os.environ.get("COCKPIT_TEAM_BOT_TOKEN", "")
+COCKPIT_TELEGRAM_WEBHOOK_SECRET = os.environ.get("COCKPIT_TELEGRAM_WEBHOOK_SECRET", "")
+COCKPIT_TEAM_MEMBERS = ("Tej", "Joaquin", "Nico", "Patrik")
+
+# 365-day session so an installed team PWA isn't logged out every month.
+app.config["PERMANENT_SESSION_LIFETIME"] = _td2(days=365)
+
+
+def _team_tokens() -> dict:
+    """{token: name} from COCKPIT_TEAM_TOKENS (JSON). Empty ⇒ team login disabled."""
+    raw = os.environ.get("COCKPIT_TEAM_TOKENS", "").strip()
+    if not raw:
+        return {}
+    try:
+        import json as _json
+        m = _json.loads(raw)
+        return {str(k): str(v) for k, v in m.items() if k and v in COCKPIT_TEAM_MEMBERS}
+    except Exception:
+        app.logger.warning("COCKPIT_TEAM_TOKENS invalid JSON — team login disabled")
+        return {}
+
+
+def _team_member():
+    """Identify the logged-in team member: a validated session, else a ?k=/header
+    token. Returns the member name or None."""
+    who = session.get("team_member")
+    if who in COCKPIT_TEAM_MEMBERS:
+        return who
+    tok = request.args.get("k") or request.headers.get("X-Team-Token") or ""
+    return _team_tokens().get(tok)
+
+
+def _dash_uuid(h: str) -> str:
+    """32-hex → dashed UUID (Notion page id). '' if not 32 hex chars."""
+    h = (h or "").replace("-", "")
+    if len(h) != 32:
+        return ""
+    return f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+
+def _claim_keyboard(page_id: str) -> dict:
+    """Inline keyboard of the 4 team names; callback_data 'c:<32hex>:<idx>' (≤64 B)."""
+    pid = page_id.replace("-", "")
+    return {"inline_keyboard": [[
+        {"text": n, "callback_data": f"c:{pid}:{i}"}
+        for i, n in enumerate(COCKPIT_TEAM_MEMBERS)
+    ]]}
+
+
+def _team_bot_api(method: str, payload: dict):
+    """Call the dedicated team bot's API. Returns the response, or None if unset/failed."""
+    if not COCKPIT_TEAM_BOT_TOKEN:
+        return None
+    try:
+        import requests as _rq
+        return _rq.post(
+            f"https://api.telegram.org/bot{COCKPIT_TEAM_BOT_TOKEN}/{method}",
+            json=payload, timeout=10)
+    except Exception as e:
+        app.logger.error("team bot %s failed: %s", method, e)
+        return None
+
+
+def _send_team_claim_message(text: str, page_id: str) -> bool:
+    """Post the booking alert WITH inline claim buttons via the team bot."""
+    r = _team_bot_api("sendMessage", {
+        "chat_id": COCKPIT_TEAM_CHAT_ID, "text": text, "parse_mode": "HTML",
+        "disable_web_page_preview": True, "reply_markup": _claim_keyboard(page_id)})
+    return bool(r is not None and r.status_code < 300)
+
+
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _CAL_DISABLED_LOGGED = False
 _GCAL_SVC = None
@@ -3117,6 +3194,152 @@ def book_page():
     return send_from_directory("static", "book.html")
 
 
+# --- Team PWA (Phase 2): magic-link login + booking claim queue ---------------
+
+@app.route("/team", methods=["GET"])
+def team_page():
+    # Magic link: ?k=<token> establishes the session identity, then redirect to a
+    # clean /team URL (keeps the secret token out of history / the installed scope).
+    tok = request.args.get("k")
+    if tok:
+        name = _team_tokens().get(tok)
+        if name:
+            session["team_member"] = name
+            session.permanent = True
+        return redirect("/team")
+    return send_from_directory("static", "team.html")
+
+
+@app.route("/team-sw.js", methods=["GET"])
+def team_sw():
+    # Served from root so the service-worker scope can cover /team and /api/team.
+    resp = send_from_directory("static", "team-sw.js")
+    resp.headers["Content-Type"] = "application/javascript"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/team.webmanifest", methods=["GET"])
+def team_manifest():
+    return send_from_directory("static", "team.webmanifest")
+
+
+@app.route("/api/team/whoami", methods=["GET"])
+def team_whoami():
+    who = _team_member()
+    if not who:
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"name": who, "members": list(COCKPIT_TEAM_MEMBERS)})
+
+
+@app.route("/api/team/appointments", methods=["GET"])
+def team_appointments():
+    if not _team_member():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        import notion_session as _ns
+        if not (_ns.available() and COCKPIT_APPOINTMENTS_DB_ID):
+            return jsonify({"appointments": [], "me": _team_member(),
+                            "warning": "Notion/Termine DB not configured"})
+        rows = _ns.list_appointments(COCKPIT_APPOINTMENTS_DB_ID)
+        return jsonify({"appointments": rows, "me": _team_member()})
+    except Exception as e:
+        app.logger.error("team appointments failed: %s", e)
+        return jsonify({"error": "fetch failed"}), 500
+
+
+@app.route("/api/team/appointments/<page_id>/claim", methods=["POST"])
+def team_claim(page_id):
+    who = _team_member()
+    if not who:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    # Claim as yourself by default; allow claiming on behalf of another member.
+    person = data.get("person") if data.get("person") in COCKPIT_TEAM_MEMBERS else who
+    try:
+        import notion_session as _ns
+        _ns.claim_appointment(COCKPIT_APPOINTMENTS_DB_ID, page_id, person)
+        appt = _ns.get_appointment(COCKPIT_APPOINTMENTS_DB_ID, page_id) or {}
+    except Exception as e:
+        app.logger.error("team claim failed: %s", e)
+        return jsonify({"error": "claim failed"}), 500
+    _send_team_telegram(f"✅ <b>{person}</b> übernimmt — {appt.get('name', 'Termin')}")
+    return jsonify({"ok": True, "appointment": appt})
+
+
+@app.route("/api/team/appointments/<page_id>/unclaim", methods=["POST"])
+def team_unclaim(page_id):
+    if not _team_member():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        import notion_session as _ns
+        _ns.unclaim_appointment(COCKPIT_APPOINTMENTS_DB_ID, page_id)
+        appt = _ns.get_appointment(COCKPIT_APPOINTMENTS_DB_ID, page_id) or {}
+    except Exception as e:
+        app.logger.error("team unclaim failed: %s", e)
+        return jsonify({"error": "unclaim failed"}), 500
+    return jsonify({"ok": True, "appointment": appt})
+
+
+@app.route("/api/team/telegram/webhook", methods=["POST"])
+def team_telegram_webhook():
+    # Dedicated team bot's callback webhook (secret in the query string).
+    if not COCKPIT_TELEGRAM_WEBHOOK_SECRET or \
+            request.args.get("secret") != COCKPIT_TELEGRAM_WEBHOOK_SECRET:
+        return jsonify({"ok": False}), 403
+    update = request.get_json(silent=True) or {}
+    cq = update.get("callback_query")
+    if not cq:
+        return jsonify({"ok": True})  # ignore non-callback updates
+    data = cq.get("data") or ""
+    msg = cq.get("message") or {}
+    chat_id = (msg.get("chat") or {}).get("id")
+    msg_id = msg.get("message_id")
+    person = page_id = None
+    try:
+        if data.startswith("c:"):
+            _, pid, idx = data.split(":", 2)
+            person = COCKPIT_TEAM_MEMBERS[int(idx)]
+            page_id = _dash_uuid(pid)
+    except Exception:
+        pass
+    if not (person and page_id):
+        _team_bot_api("answerCallbackQuery",
+                      {"callback_query_id": cq.get("id"), "text": "Ungültig"})
+        return jsonify({"ok": True})
+    ok = False
+    try:
+        import notion_session as _ns
+        ok = _ns.claim_appointment(COCKPIT_APPOINTMENTS_DB_ID, page_id, person)
+    except Exception as e:
+        app.logger.error("telegram claim failed: %s", e)
+    _team_bot_api("answerCallbackQuery", {
+        "callback_query_id": cq.get("id"),
+        "text": f"✅ {person} übernimmt" if ok else "Fehler beim Übernehmen"})
+    if ok and chat_id and msg_id:
+        new_text = (msg.get("text") or "Buchung") + f"\n\n✅ {person} übernimmt."
+        _team_bot_api("editMessageText", {
+            "chat_id": chat_id, "message_id": msg_id, "text": new_text,
+            "reply_markup": {"inline_keyboard": []}})
+    return jsonify({"ok": True})
+
+
+@app.route("/api/team/telegram/setup-webhook", methods=["POST"])
+def team_setup_webhook():
+    if not _cockpit_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not (COCKPIT_TEAM_BOT_TOKEN and COCKPIT_TELEGRAM_WEBHOOK_SECRET):
+        return jsonify({"error": "COCKPIT_TEAM_BOT_TOKEN or COCKPIT_TELEGRAM_WEBHOOK_SECRET unset"}), 400
+    data = request.get_json(silent=True) or {}
+    base = (data.get("base_url") or "https://cockpit.automatisierbar.ch").rstrip("/")
+    url = f"{base}/api/team/telegram/webhook?secret={COCKPIT_TELEGRAM_WEBHOOK_SECRET}"
+    r = _team_bot_api("setWebhook", {"url": url, "allowed_updates": ["callback_query"]})
+    if r is None:
+        return jsonify({"ok": False, "error": "team bot call failed"}), 500
+    return jsonify(r.json()), r.status_code
+
+
 @app.route("/api/book/slots", methods=["GET"])
 def book_slots():
     """Bookable slots. ?date=YYYY-MM-DD for one day, else the next horizon grouped
@@ -3230,10 +3453,11 @@ def book_confirm():
         app.logger.error("booking lead upsert failed: %s", e)
 
     # Write the Appointment row.
+    appt_id = ""
     try:
         import notion_session as _ns
         if _ns.available() and COCKPIT_APPOINTMENTS_DB_ID:
-            _ns.create_appointment(COCKPIT_APPOINTMENTS_DB_ID, {
+            appt = _ns.create_appointment(COCKPIT_APPOINTMENTS_DB_ID, {
                 "Name": f"Prozessermittlung — {firma} ({when_label})",
                 "Lead": [lead_id] if lead_id else None,
                 "Start": start_dt.isoformat(),
@@ -3246,6 +3470,7 @@ def book_confirm():
                 "Adresse": adresse,
                 "Notiz": notiz,
             })
+            appt_id = (appt or {}).get("id", "")
     except Exception as e:
         app.logger.error("appointment write failed: %s", e)
 
@@ -3261,11 +3486,14 @@ def book_confirm():
     except Exception as e:
         app.logger.error("confirmation email failed: %s", e)
 
-    # Notify the team — unassigned.
-    _send_team_telegram(
-        "📅 <b>Neue Buchung</b> (Prozessermittlung vor Ort) — <b>UNASSIGNED</b>\n"
-        f"🏢 {firma}\n👤 {name} · {phone}\n📍 {adresse}\n"
-        f"🕐 {when_label} ({SLOT_MINUTES} Min)\n❓ Wer übernimmt?")
+    # Notify the team. With a dedicated team bot configured, the alert carries inline
+    # claim buttons (taps handled by /api/team/telegram/webhook); otherwise the plain
+    # operator-bot ping (the team PWA claim covers it either way).
+    team_msg = ("📅 <b>Neue Buchung</b> (Prozessermittlung vor Ort) — <b>UNASSIGNED</b>\n"
+                f"🏢 {firma}\n👤 {name} · {phone}\n📍 {adresse}\n"
+                f"🕐 {when_label} ({SLOT_MINUTES} Min)\n❓ Wer übernimmt?")
+    if not (COCKPIT_TEAM_BOT_TOKEN and appt_id and _send_team_claim_message(team_msg, appt_id)):
+        _send_team_telegram(team_msg)
 
     return jsonify({"ok": True, "when": when_label, "slot_minutes": SLOT_MINUTES,
                     "calendar": bool(event_id)})

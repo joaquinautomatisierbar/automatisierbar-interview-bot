@@ -1338,6 +1338,108 @@ def create_appointment(appointments_db_id: str, fields: dict) -> dict:
     return {"id": page["id"], "url": page.get("url", "")}
 
 
+# --- Team claim flow (Phase 2): list the booking queue + claim/unclaim ----------
+
+TEAM_MEMBERS = ("Tej", "Joaquin", "Nico", "Patrik")
+UNASSIGNED = "(unassigned)"
+_INACTIVE_STATUSES = ("Abgesagt", "Erledigt", "No-Show")
+
+
+def _date_start(prop: dict) -> str:
+    """Read the ISO start of a Notion date property, or ''."""
+    if not isinstance(prop, dict):
+        return ""
+    return (prop.get("date") or {}).get("start") or ""
+
+
+def _relation_ids(prop: dict) -> list:
+    """Read the list of related page-ids from a Notion relation property."""
+    if not isinstance(prop, dict):
+        return []
+    return [r.get("id") for r in (prop.get("relation") or []) if r.get("id")]
+
+
+def list_appointments(appointments_db_id: str, *, upcoming_only: bool = True,
+                      limit: int = 100) -> list:
+    """Return appointments from the Termine DB as plain dicts, sorted by Start asc.
+    With upcoming_only (default), drops cancelled/done/no-show rows and anything that
+    started before today. Read-only — safe to call without side effects."""
+    if not available() or not appointments_db_id:
+        return []
+    today = datetime.now(timezone.utc).date().isoformat()
+    out = []
+    for pg in _query_db_all(appointments_db_id):
+        props = pg.get("properties", {})
+        start = _date_start(props.get("Start", {}))
+        status = _prop_value(props.get("Status", {}))
+        if upcoming_only:
+            if status in _INACTIVE_STATUSES:
+                continue
+            if start and start[:10] < today:
+                continue
+        out.append({
+            "id": pg.get("id"),
+            "name": _prop_value(props.get("Name", {})),
+            "start": start,
+            "end": _date_start(props.get("End", {})),
+            "status": status,
+            "claimed_by": _prop_value(props.get("Claimed By", {})),
+            "kontakt": _prop_value(props.get("Kontakt", {})),
+            "adresse": _prop_value(props.get("Adresse", {})),
+            "notiz": _prop_value(props.get("Notiz", {})),
+            "quelle": _prop_value(props.get("Quelle", {})),
+            "lead_ids": _relation_ids(props.get("Lead", {})),
+        })
+    out.sort(key=lambda a: a["start"] or "9999")
+    return out[:limit]
+
+
+def get_appointment(appointments_db_id: str, page_id: str) -> Optional[dict]:
+    """Fetch one appointment as a plain dict (same shape as list_appointments rows)."""
+    if not available() or not page_id:
+        return None
+    try:
+        r = requests.get(f"https://api.notion.com/v1/pages/{page_id}",
+                         headers=_notion_headers(), timeout=15)
+        r.raise_for_status()
+        props = r.json().get("properties", {})
+    except Exception as e:
+        print(f"[notion] get_appointment failed: {e}")
+        return None
+    return {
+        "id": page_id,
+        "name": _prop_value(props.get("Name", {})),
+        "start": _date_start(props.get("Start", {})),
+        "end": _date_start(props.get("End", {})),
+        "status": _prop_value(props.get("Status", {})),
+        "claimed_by": _prop_value(props.get("Claimed By", {})),
+        "kontakt": _prop_value(props.get("Kontakt", {})),
+        "adresse": _prop_value(props.get("Adresse", {})),
+        "notiz": _prop_value(props.get("Notiz", {})),
+        "quelle": _prop_value(props.get("Quelle", {})),
+        "lead_ids": _relation_ids(props.get("Lead", {})),
+    }
+
+
+def claim_appointment(appointments_db_id: str, page_id: str, person: str) -> bool:
+    """Set `Claimed By` to `person` (must be a known team member). Returns True on
+    success. Use unclaim_appointment to release."""
+    if person not in TEAM_MEMBERS:
+        raise ValueError(f"unknown team member: {person!r}")
+    if not available() or not page_id:
+        return False
+    _update_page(page_id, build_props(appointments_db_id, {"Claimed By": person}))
+    return True
+
+
+def unclaim_appointment(appointments_db_id: str, page_id: str) -> bool:
+    """Release a claim — set `Claimed By` back to (unassigned)."""
+    if not available() or not page_id:
+        return False
+    _update_page(page_id, build_props(appointments_db_id, {"Claimed By": UNASSIGNED}))
+    return True
+
+
 def write_roi_to_page(lead_page_id: str, roi: dict, assumptions: list) -> None:
     if not available() or not lead_page_id:
         return
