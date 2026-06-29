@@ -160,48 +160,88 @@ def build_ics(*, start_dt, end_dt, summary, description, location,
 
 
 def _confirmation_html(*, name, when_label, address, slot_minutes, organizer_email, add_to_cal="") -> str:
-    """Clean, email-client-safe (light, inline-styled) confirmation."""
+    """Branded confirmation in the booking-site's single dark theme (static/book.html):
+    bg #0A0F0D, one accent green #15C97A, Inter + JetBrains Mono, a green-glow check that
+    echoes the page's on-screen success state. Table-based + inline-styled for email clients.
+    """
+    logo_url = os.environ.get(
+        "COCKPIT_LOGO_URL",
+        "https://cockpit.automatisierbar.ch/static/automatisierbar-logo-email.png")
+    _sans = ("'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,Helvetica,sans-serif")
+    _mono = ("'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,'Courier New',monospace")
     if add_to_cal:
-        cal_html = (f'<a href="{add_to_cal}" style="display:inline-block;background:#15C97A;color:#04130c;'
-                    'font-weight:bold;text-decoration:none;padding:11px 20px;border-radius:8px;font-size:14px">'
-                    '\U0001F4C5 Zum Kalender hinzufügen</a>'
-                    '<div style="margin-top:12px">Wir kommen zum vereinbarten Zeitpunkt zu Ihnen.</div>')
+        cal_html = (
+            f'<a href="{add_to_cal}" style="display:inline-block;background:#15C97A;'
+            'background:linear-gradient(135deg,#5EE0A6,#15C97A);color:#04130c;'
+            f"font-family:{_sans};font-weight:700;text-decoration:none;padding:13px 26px;"
+            'border-radius:9px;font-size:14.5px">Zum Kalender hinzufügen</a>'
+            '<div style="margin-top:14px;font-size:13.5px;color:#8A9892">'
+            'Wir kommen zum vereinbarten Zeitpunkt zu Ihnen.</div>')
     else:
-        cal_html = ('Die <strong>Kalendereinladung</strong> ist dieser E-Mail angehängt, einfach öffnen, '
-                    'um den Termin in Ihren Kalender zu übernehmen. Wir kommen zum vereinbarten Zeitpunkt zu Ihnen.')
+        cal_html = ('Die <strong style="color:#ECF3EF">Kalendereinladung</strong> ist dieser '
+                    'E-Mail angehängt, einfach öffnen, um den Termin in Ihren Kalender zu '
+                    'übernehmen. Wir kommen zum vereinbarten Zeitpunkt zu Ihnen.')
     return f"""\
-<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f6f5;font-family:Arial,Helvetica,sans-serif;color:#16201c">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f5;padding:24px 0">
-<tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e6eae8">
-  <tr><td style="background:#0A0F0D;padding:22px 26px">
-    <span style="display:inline-block;width:26px;height:26px;background:#15C97A;border-radius:7px;vertical-align:middle"></span>
-    <span style="color:#ECF3EF;font-size:17px;font-weight:bold;vertical-align:middle;margin-left:10px">Automatisierbar</span>
-  </td></tr>
-  <tr><td style="padding:28px 26px 8px">
-    <h1 style="margin:0 0 6px;font-size:21px;color:#0A8F54">Ihr Termin ist bestätigt</h1>
-    <p style="margin:0;font-size:15px;color:#46524c">Guten Tag {name}, danke für Ihre Buchung. Wir freuen uns auf das Gespräch.</p>
-  </td></tr>
-  <tr><td style="padding:18px 26px 4px">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8f6;border:1px solid #e6eae8;border-radius:10px">
-      <tr><td style="padding:14px 16px;font-size:14px;color:#46524c">
-        <strong style="color:#16201c">📅 {when_label} Uhr</strong><br>
-        <span style="color:#6b7872">Prozessermittlung · {slot_minutes} Minuten · vor Ort bei Ihnen</span><br>
-        <span style="color:#6b7872">📍 {address}</span>
-      </td></tr>
-    </table>
-  </td></tr>
-  <tr><td style="padding:16px 26px 10px;font-size:14px;color:#46524c">
-    {cal_html}
-  </td></tr>
-  <tr><td style="padding:8px 26px 28px;font-size:13px;color:#8a948f">
-    Müssen Sie den Termin verschieben? Antworten Sie einfach auf diese E-Mail
-    ({organizer_email}).
-  </td></tr>
-  <tr><td style="background:#0A0F0D;padding:14px 26px;font-size:12px;color:#5A655F">
-    Automatisierbar · Prozesse automatisieren, die Ihre Zeit fressen.
-  </td></tr>
-</table>
+<!DOCTYPE html><html lang="de"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body style="margin:0;padding:0;background:#0A0F0D;background-image:radial-gradient(800px 420px at 50% -8%,rgba(21,201,122,.12),transparent 70%);font-family:{_sans};color:#ECF3EF">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#0A0F0D" style="background:#0A0F0D;padding:30px 0">
+<tr><td align="center" style="padding:0 16px">
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px">
+    <tr><td style="padding:2px 4px 18px">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td style="vertical-align:middle;padding-right:11px">
+          <img src="{logo_url}" width="38" height="38" alt="Automatisierbar" style="display:block;border:0;border-radius:10px">
+        </td>
+        <td style="vertical-align:middle">
+          <div style="font-size:15.5px;font-weight:700;color:#ECF3EF;letter-spacing:-.2px;line-height:1.25">Automatisierbar</div>
+          <div style="font-size:11.5px;font-weight:500;color:#5A655F;letter-spacing:.3px">Automatisierung, die Zeit spart</div>
+        </td>
+      </tr></table>
+    </td></tr>
+  </table>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#111815" style="max-width:520px;background:#111815;border:1px solid rgba(255,255,255,.08);border-radius:14px">
+    <tr><td align="center" style="padding:34px 30px 0">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td width="62" height="62" align="center" valign="middle" bgcolor="#123425" style="width:62px;height:62px;background:rgba(21,201,122,.16);border-radius:50%;font-size:30px;line-height:62px;color:#5EE0A6;font-weight:700">&#10003;</td>
+      </tr></table>
+    </td></tr>
+    <tr><td align="center" style="padding:20px 30px 0">
+      <h1 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.4px;color:#ECF3EF">Ihr Termin ist bestätigt</h1>
+    </td></tr>
+    <tr><td align="center" style="padding:10px 30px 0">
+      <p style="margin:0;font-size:14.5px;line-height:1.55;color:#8A9892">Guten Tag {name}, danke für Ihre Buchung. Wir freuen uns auf das Gespräch.</p>
+    </td></tr>
+    <tr><td style="padding:22px 30px 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#18211D" style="background:#18211D;border:1px solid rgba(255,255,255,.08);border-radius:12px">
+        <tr><td style="padding:16px 18px">
+          <div style="font-family:{_mono};font-size:15px;font-weight:700;color:#5EE0A6;letter-spacing:.2px">{when_label} Uhr</div>
+          <div style="margin-top:10px;font-size:13.5px;line-height:1.7;color:#8A9892">
+            <span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#15C97A;vertical-align:middle;margin-right:10px"></span>Prozessermittlung · {slot_minutes} Minuten · vor Ort bei Ihnen<br>
+            <span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#15C97A;vertical-align:middle;margin-right:10px"></span>{address}
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+    <tr><td align="center" style="padding:22px 30px 0;font-size:14px;line-height:1.55;color:#8A9892">
+      {cal_html}
+    </td></tr>
+    <tr><td align="center" style="padding:18px 30px 0;font-size:12.5px;line-height:1.6;color:#5A655F">
+      Müssen Sie den Termin verschieben? Antworten Sie einfach auf diese E-Mail
+      (<a href="mailto:{organizer_email}" style="color:#5EE0A6;text-decoration:none">{organizer_email}</a>).
+    </td></tr>
+    <tr><td align="center" style="padding:24px 30px 26px">
+      <div style="border-top:1px solid rgba(255,255,255,.07);padding-top:18px;font-size:11.5px;color:#5A655F;letter-spacing:.2px">Automatisierbar · Prozesse automatisieren, die Ihre Zeit fressen.</div>
+    </td></tr>
+  </table>
+
 </td></tr></table></body></html>"""
 
 
