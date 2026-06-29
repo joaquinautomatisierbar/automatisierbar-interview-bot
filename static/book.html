@@ -149,7 +149,7 @@
 <div class="wrap">
   <header>
     <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-    <div class="brand"><b>Automatisierbar</b><span class="sub">cockpit.automatisierbar.ch</span></div>
+    <div class="brand"><b>Automatisierbar</b><span class="sub">Automatisierung, die Zeit spart</span></div>
   </header>
 
   <div class="hero">
@@ -166,7 +166,7 @@
     <p>In 30–40 Minuten schauen wir uns gemeinsam einen konkreten Arbeitsablauf in Ihrem Betrieb an, einen, der regelmässig Zeit kostet und immer wieder gleich abläuft.</p>
     <p>Ich stelle Ihnen gezielte Fragen: Was passiert heute manuell? Wer macht es? Wie oft? Was wäre gewonnen, wenn das automatisch liefe?</p>
     <p>Am Ende des Gesprächs wissen wir beide, ob und wo eine Automatisierung bei Ihnen Sinn macht und Sie erhalten eine ehrliche Einschätzung, ganz ohne Verpflichtung.</p>
-    <p class="punch">Kein Verkaufsgespräch. Kein Fachchinesisch. Nur eine konkrete Analyse Ihres Ablaufs.</p>
+    <p class="punch">Kein Verkaufsgespräch. Nur eine konkrete Analyse Ihres Ablaufs.</p>
   </section>
 
   <!-- STEP 1: calendar -->
@@ -194,7 +194,9 @@
       <input id="f-firma" autocomplete="organization" placeholder="Muster AG" required>
       <label>Firmenadresse <span class="req">*</span> <span style="color:var(--dim);font-weight:500">— wir kommen vorbei</span></label>
       <textarea id="f-adresse" autocomplete="street-address" placeholder="Musterstrasse 12, 5400 Baden" required></textarea>
-      <button class="btn" id="btn-submit" type="submit">Termin verbindlich buchen</button>
+      <label>Notiz für uns <span style="color:var(--dim);font-weight:500">— optional</span></label>
+      <textarea id="f-notiz" placeholder="Zusatzinfos, die uns helfen (z.B. worum es geht, Ansprechpartner, Parkmöglichkeiten)…"></textarea>
+      <button class="btn" id="btn-submit" type="submit">Termin buchen</button>
       <div class="formerr" id="formerr"></div>
     </form>
   </section>
@@ -354,7 +356,7 @@
     ev.preventDefault();
     var err = $('formerr'); err.textContent='';
     if(!sel.start){ err.textContent='Bitte zuerst einen Termin wählen.'; return; }
-    var b = { name:v('f-name'), email:v('f-email'), phone:v('f-phone'), firma:v('f-firma'), adresse:v('f-adresse'), start:sel.start };
+    var b = { name:v('f-name'), email:v('f-email'), phone:v('f-phone'), firma:v('f-firma'), adresse:v('f-adresse'), notiz:v('f-notiz'), start:sel.start };
     if(!b.name||!b.email||!b.phone||!b.firma||!b.adresse){ err.textContent='Bitte alle Felder ausfüllen.'; return; }
     if(!EMAIL.test(b.email)){ err.textContent='Bitte eine gültige E-Mail-Adresse angeben.'; return; }
     var btn=$('btn-submit'); btn.disabled=true; btn.textContent='Wird gebucht…';
@@ -364,15 +366,15 @@
         if(res.s===200 && res.j.ok){ showDone(res.j); }
         else if(res.s===409){
           err.textContent='Dieser Termin wurde gerade vergeben. Bitte wählen Sie einen anderen.';
-          btn.disabled=false; btn.textContent='Termin verbindlich buchen';
+          btn.disabled=false; btn.textContent='Termin buchen';
           $('step-form').classList.add('hidden'); DATA.byDate={}; sel={start:null,dateISO:null}; load();
           $('step-cal').scrollIntoView({behavior:'smooth',block:'start'});
         } else {
           err.textContent=(res.j&&res.j.error)?res.j.error:'Buchung fehlgeschlagen. Bitte erneut versuchen.';
-          btn.disabled=false; btn.textContent='Termin verbindlich buchen';
+          btn.disabled=false; btn.textContent='Termin buchen';
         }
       })
-      .catch(function(){ err.textContent='Netzwerkfehler. Bitte erneut versuchen.'; btn.disabled=false; btn.textContent='Termin verbindlich buchen'; });
+      .catch(function(){ err.textContent='Netzwerkfehler. Bitte erneut versuchen.'; btn.disabled=false; btn.textContent='Termin buchen'; });
   });
 
   function showDone(j){

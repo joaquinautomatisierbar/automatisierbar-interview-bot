@@ -3149,6 +3149,7 @@ def book_confirm():
     phone = (data.get("phone") or "").strip()
     firma = (data.get("firma") or "").strip()
     adresse = (data.get("adresse") or "").strip()
+    notiz = (data.get("notiz") or "").strip()[:2000]
     start_raw = (data.get("start") or "").strip()
 
     missing = [k for k, v in {"name": name, "email": email, "phone": phone,
@@ -3178,7 +3179,9 @@ def book_confirm():
     summary = f"Prozessermittlung — {firma}"
     description = (f"Prozessermittlung (vor Ort) mit {name}\n"
                    f"Firma: {firma}\nTelefon: {phone}\nE-Mail: {email}\n"
-                   f"Adresse: {adresse}\n\nGebucht über cockpit.automatisierbar.ch")
+                   f"Adresse: {adresse}"
+                   + (f"\nNotiz: {notiz}" if notiz else "")
+                   + "\n\nGebucht über cockpit.automatisierbar.ch")
     event_id = _gcal_create_event(start_dt, end_dt, summary, description, adresse, email)
 
     # Match or create the lead (best-effort — never blocks the booking).
@@ -3212,6 +3215,7 @@ def book_confirm():
                 [f"Prozessermittlung vor Ort bei {firma}",
                  f"Adresse: {adresse}",
                  f"Kontakt: {name} · {phone} · {email}",
+                 (f"Notiz: {notiz}" if notiz else ""),
                  "Quelle: cockpit.automatisierbar.ch"])
     except Exception as e:
         app.logger.error("booking lead upsert failed: %s", e)
@@ -3231,6 +3235,7 @@ def book_confirm():
                 "Quelle": "Cockpit Booking",
                 "Kontakt": f"{name} · {phone} · {email}",
                 "Adresse": adresse,
+                "Notiz": notiz,
             })
     except Exception as e:
         app.logger.error("appointment write failed: %s", e)
