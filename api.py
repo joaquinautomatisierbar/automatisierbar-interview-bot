@@ -3257,7 +3257,7 @@ def book_confirm():
                 to_email=email, to_name=name, when_label=when_label, address=adresse,
                 slot_minutes=SLOT_MINUTES, start_dt=start_dt, end_dt=end_dt,
                 summary=summary, description=description):
-            app.logger.warning("confirmation email skipped (SMTP not configured)")
+            app.logger.warning("confirmation email not sent (no mail credential or send failed)")
     except Exception as e:
         app.logger.error("confirmation email failed: %s", e)
 
