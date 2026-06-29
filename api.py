@@ -2867,16 +2867,23 @@ from datetime import (datetime as _dt2, timedelta as _td2, date as _date2,
 BOOKING_TZ = "Europe/Zurich"
 SLOT_MINUTES = int(os.environ.get("COCKPIT_SLOT_MINUTES", "60"))
 # Weekly bookable windows in local time, keyed by weekday() (Mon=0 … Sun=6).
-# Edit here to change availability (later: move to Notion-backed config).
+# Mirrors the team's Google "general availability": Mon–Fri business hours; the linked
+# calendar's free/busy carves out the real openings. Edit here to change availability.
 BOOKING_WINDOWS = {
-    0: [("09:00", "12:00"), ("14:00", "17:00")],  # Mon
-    1: [("09:00", "12:00"), ("14:00", "17:00")],  # Tue
-    2: [("09:00", "12:00"), ("14:00", "17:00")],  # Wed
-    3: [("09:00", "12:00"), ("14:00", "17:00")],  # Thu
-    4: [("09:00", "12:00"), ("14:00", "16:00")],  # Fri
+    0: [("08:00", "18:00")],  # Mon
+    1: [("08:00", "18:00")],  # Tue
+    2: [("08:00", "18:00")],  # Wed
+    3: [("08:00", "18:00")],  # Thu
+    4: [("08:00", "18:00")],  # Fri
 }
-BOOKING_LEAD_DAYS = int(os.environ.get("COCKPIT_LEAD_DAYS", "1"))      # earliest = now +N days
-BOOKING_HORIZON_DAYS = int(os.environ.get("COCKPIT_HORIZON_DAYS", "21"))
+BOOKING_LEAD_DAYS = int(os.environ.get("COCKPIT_LEAD_DAYS", "1"))      # earliest = now +N days (24h)
+BOOKING_HORIZON_DAYS = int(os.environ.get("COCKPIT_HORIZON_DAYS", "30"))
+# Buffer (min) added around every busy block so back-to-back/near bookings are blocked
+# (≈ travel time for on-site visits). Mirrors Google's 45-min buffer.
+COCKPIT_BUFFER_MINUTES = int(os.environ.get("COCKPIT_BUFFER_MINUTES", "45"))
+# Hide a day once this many calendar events already sit in its window (≈ Google's
+# "max bookings per day"; counted from busy blocks as a proxy). 0 disables the cap.
+COCKPIT_MAX_PER_DAY = int(os.environ.get("COCKPIT_MAX_PER_DAY", "6"))
 
 COCKPIT_APPOINTMENTS_DB_ID = os.environ.get("COCKPIT_APPOINTMENTS_DB_ID", "")
 COCKPIT_CALENDAR_ID = os.environ.get("COCKPIT_CALENDAR_ID", "")
@@ -3012,24 +3019,41 @@ def _calendar_busy(start_dt, end_dt) -> list:
 
 
 def _bookable_slots(date_from: _date2, date_to: _date2) -> list:
-    """All free (start,end) slots between two local dates inclusive. Honours lead
-    time, 'now', and busy intervals from the shared calendar (if configured)."""
+    """All free (start,end) slots between two local dates inclusive. Honours lead time,
+    'now', the per-day booking cap, and busy intervals (expanded by the buffer) from the
+    linked calendar (if configured)."""
     tz = _zurich()
     earliest = _dt2.now(tz) + _td2(days=BOOKING_LEAD_DAYS)
-    candidates = []
+    cand_by_day: dict = {}
     d = date_from
     while d <= date_to:
         for (s, e) in _window_slots_for_date(d):
             if s >= earliest:
-                candidates.append((s, e))
+                cand_by_day.setdefault(d, []).append((s, e))
         d += _td2(days=1)
-    if not candidates:
+    if not cand_by_day:
         return []
-    busy = _calendar_busy(candidates[0][0], candidates[-1][1])
-    if not busy:
-        return candidates
-    return [(s, e) for (s, e) in candidates
-            if not any(_overlaps(s, e, bs, be) for (bs, be) in busy)]
+
+    span_start = min(s for slots in cand_by_day.values() for (s, _e) in slots)
+    span_end = max(e for slots in cand_by_day.values() for (_s, e) in slots)
+    raw_busy = _calendar_busy(span_start, span_end)
+    buf = _td2(minutes=COCKPIT_BUFFER_MINUTES)
+    busy_exp = [(bs - buf, be + buf) for (bs, be) in raw_busy]
+
+    out = []
+    for day, slots in cand_by_day.items():
+        # Per-day cap: count raw busy blocks intersecting this calendar day.
+        if COCKPIT_MAX_PER_DAY:
+            day_start = _dt2.combine(day, _time2(0, 0), tzinfo=tz)
+            day_end = _dt2.combine(day, _time2(23, 59, 59), tzinfo=tz)
+            booked = sum(1 for (bs, be) in raw_busy if _overlaps(bs, be, day_start, day_end))
+            if booked >= COCKPIT_MAX_PER_DAY:
+                continue
+        for (s, e) in slots:
+            if not any(_overlaps(s, e, bs, be) for (bs, be) in busy_exp):
+                out.append((s, e))
+    out.sort()
+    return out
 
 
 def _gcal_create_event(start_dt, end_dt, summary, description, location, attendee_email) -> str:
@@ -3047,6 +3071,7 @@ def _gcal_create_event(start_dt, end_dt, summary, description, location, attende
             "location": location,
             "start": {"dateTime": start_dt.isoformat(), "timeZone": BOOKING_TZ},
             "end": {"dateTime": end_dt.isoformat(), "timeZone": BOOKING_TZ},
+            "guestsCanInviteOthers": True,  # mirrors Google "guests can invite others"
         }
         if attendee_email:
             ev["attendees"] = [{"email": attendee_email}]
@@ -3218,6 +3243,57 @@ def book_confirm():
 
     return jsonify({"ok": True, "when": when_label, "slot_minutes": SLOT_MINUTES,
                     "calendar": bool(event_id)})
+
+
+CONTACT_EMAIL = os.environ.get("COCKPIT_CONTACT_EMAIL", "joaquin@automatisierbar.ch")
+
+
+@app.route("/api/book/request", methods=["POST"])
+def book_request():
+    """Custom-request fallback: when no listed slot fits, capture a free-text request +
+    contact details → notify the team on Telegram + log/upsert a Notion lead. Public."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    phone = (data.get("phone") or "").strip()
+    firma = (data.get("firma") or "").strip()
+    message = (data.get("message") or "").strip()
+
+    missing = [k for k, v in {"name": name, "email": email,
+                              "message": message}.items() if not v]
+    if missing:
+        return jsonify({"error": "Bitte Name, E-Mail und Ihre Nachricht ausfüllen.",
+                        "fields": missing}), 400
+    if not _EMAIL_RE.match(email):
+        return jsonify({"error": "Bitte eine gültige E-Mail-Adresse angeben."}), 400
+
+    try:
+        import notion_session as _ns
+        if _ns.available():
+            existing = _ns.find_lead_by_email_or_phone(email=email, phone=phone)
+            fields = {"Firma": firma, "Geschäftsführer / CEO": name,
+                      "email": email, "phone": phone}
+            if existing:
+                lead_id = _ns.expand_lead(existing, fields)
+            else:
+                fields["Name"] = (firma or name)
+                fields["Context"] = ("INBOUND TERMINANFRAGE (kein passender Slot)\n"
+                                     f"Kontakt: {name}\nWunsch: {message}")
+                fields["Outreach Channel"] = "E-Mail"
+                fields["Pipeline Stage"] = "Problem Interview"
+                fields["War-Room Status"] = "◑ Reagiert – Termin fixieren"
+                lead_id = _ns.create_inbound_lead(fields)
+            _ns.append_booking_note(
+                lead_id, "Custom Terminanfrage (kein passender Slot)",
+                [f"Von: {name} · {firma}", f"Kontakt: {phone} · {email}",
+                 f"Wunsch: {message}", "Quelle: cockpit.automatisierbar.ch/book"])
+    except Exception as e:
+        app.logger.error("book_request lead upsert failed: %s", e)
+
+    _send_team_telegram(
+        "📨 <b>Custom Terminanfrage</b> (kein passender Slot)\n"
+        f"🏢 {firma or '—'}\n👤 {name} · {phone or '—'}\n✉️ {email}\n📝 {message}")
+    return jsonify({"ok": True})
 
 
 # Default parent for the appointments DB: the Operations Cockpit page (the prod

@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="robots" content="noindex">
 <title>Termin buchen · Automatisierbar</title>
+<link rel="icon" href="/static/automatisierbar-logo.svg">
+<link rel="apple-touch-icon" href="/static/automatisierbar-logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -16,7 +18,7 @@
     --bg:#0A0F0D; --surface-1:#111815; --surface-2:#18211D; --surface-3:#1F2A25;
     --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.14);
     --text:#ECF3EF; --muted:#8A9892; --dim:#5A655F;
-    --green:#15C87A; --green-dark:#0A8F54; --green-soft:#5EE0A6; --green-glow:rgba(21,200,122,.16);
+    --green:#15C97A; --green-dark:#0A8F54; --green-soft:#5EE0A6; --green-glow:rgba(21,201,122,.16);
     --red:#EF4444;
     --radius:14px; --radius-sm:9px; --radius-pill:999px;
     --ease:.18s cubic-bezier(.2,.6,.2,1);
@@ -28,39 +30,59 @@
   body{
     font-family:var(--sans);background:var(--bg);color:var(--text);
     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
-    line-height:1.5;padding:max(16px,env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
-    background-image:radial-gradient(900px 500px at 50% -10%,rgba(21,200,122,.10),transparent 70%);
+    padding:max(16px,env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+    background-image:radial-gradient(900px 500px at 50% -10%,rgba(21,201,122,.10),transparent 70%);
+    line-height:1.5;
   }
   .wrap{max-width:560px;margin:0 auto}
 
-  /* header / brand */
-  header{display:flex;align-items:center;gap:11px;padding:8px 2px 22px}
-  .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--green),var(--green-dark));
-    display:grid;place-items:center;color:#04130c;font-weight:800;font-size:20px;font-family:var(--mono);
-    box-shadow:0 0 0 1px rgba(255,255,255,.06),0 6px 18px var(--green-glow)}
+  header{display:flex;align-items:center;gap:11px;padding:8px 2px 20px}
+  .logo{width:38px;height:38px;border-radius:10px;overflow:hidden;flex:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06),0 6px 18px var(--green-glow);display:block}
+  .logo svg{width:100%;height:100%;display:block}
   .brand b{font-weight:700;letter-spacing:-.2px;font-size:15.5px}
   .brand .sub{display:block;color:var(--dim);font-size:11.5px;font-weight:500;letter-spacing:.3px}
 
-  /* hero */
   .hero h1{font-size:25px;font-weight:700;letter-spacing:-.4px;line-height:1.2}
-  .hero p{color:var(--muted);font-size:14.5px;margin-top:9px}
-  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
   .chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface-1);border:1px solid var(--border);
     border-radius:var(--radius-pill);padding:7px 13px;font-size:12.5px;color:var(--muted);font-weight:500}
   .chip svg{width:14px;height:14px;color:var(--green-soft);flex:none}
 
-  /* card / sections */
   .card{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);
     padding:18px 16px;margin-top:18px}
+  .desc h3{font-size:15px;font-weight:700;margin-bottom:10px}
+  .desc p{color:var(--muted);font-size:13.7px;margin-bottom:10px}
+  .desc p:last-child{margin-bottom:0}
+  .desc .punch{color:var(--text);font-weight:600}
+
   .step-label{font-family:var(--mono);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;
-    color:var(--green);font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:14px}
+    color:var(--green);font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:16px}
   .step-label .n{width:18px;height:18px;border-radius:50%;background:var(--green-glow);color:var(--green-soft);
     display:grid;place-items:center;font-size:11px}
 
-  /* days + slots */
-  .day{margin-bottom:6px;border-top:1px solid var(--border);padding-top:14px;margin-top:14px}
-  .day:first-of-type{border-top:none;padding-top:0;margin-top:0}
-  .day .d-head{font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:10px;text-transform:capitalize}
+  /* calendar */
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .cal-month{font-size:15px;font-weight:600;text-transform:capitalize}
+  .cal-nav{display:flex;gap:8px}
+  .cal-nav button{width:36px;height:36px;border-radius:9px;background:var(--surface-2);border:1px solid var(--border-2);
+    color:var(--text);font-size:17px;cursor:pointer;transition:var(--ease);line-height:1}
+  .cal-nav button:hover:not(:disabled){border-color:var(--green);color:var(--green-soft)}
+  .cal-nav button:disabled{opacity:.3;cursor:not-allowed}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-dow{text-align:center;font-size:10.5px;font-weight:600;color:var(--dim);padding-bottom:4px;letter-spacing:.5px}
+  .cal-day{aspect-ratio:1;display:grid;place-items:center;border-radius:9px;font-size:14px;font-weight:600;
+    font-variant-numeric:tabular-nums;border:1px solid transparent}
+  .cal-day.empty{background:none}
+  .cal-day.off{color:var(--dim)}
+  button.cal-day{cursor:pointer;font-family:inherit}
+  .cal-day.avail{background:var(--surface-2);border-color:var(--border-2);color:var(--text)}
+  .cal-day.avail:hover{border-color:var(--green);color:var(--green-soft)}
+  .cal-day.today{box-shadow:inset 0 0 0 1.5px var(--green-dark)}
+  .cal-day.sel{background:var(--green);border-color:var(--green);color:#04130c}
+
+  .slotpanel{margin-top:18px;border-top:1px solid var(--border);padding-top:16px}
+  .sp-head{font-size:13.5px;font-weight:600;margin-bottom:12px;text-transform:capitalize}
   .slots{display:flex;flex-wrap:wrap;gap:8px}
   .slot{font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--text);
     background:var(--surface-2);border:1px solid var(--border-2);border-radius:var(--radius-sm);
@@ -68,8 +90,8 @@
   .slot:hover{border-color:var(--green);color:var(--green-soft)}
   .slot:active{transform:scale(.97)}
   .slot.sel{background:var(--green);border-color:var(--green);color:#04130c}
-
-  .state{color:var(--muted);font-size:14px;text-align:center;padding:26px 8px}
+  .hint{color:var(--muted);font-size:13.5px}
+  .state{color:var(--muted);font-size:14px;text-align:center;padding:22px 8px}
   .state.err{color:#fca5a5}
   .spinner{width:22px;height:22px;border:2.5px solid var(--border-2);border-top-color:var(--green);
     border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
@@ -77,7 +99,6 @@
 
   /* form */
   label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:14px 0 6px}
-  label:first-child{margin-top:0}
   .req{color:var(--green-soft)}
   input,textarea{width:100%;font-family:var(--sans);font-size:15px;color:var(--text);
     background:var(--surface-2);border:1px solid var(--border-2);border-radius:var(--radius-sm);
@@ -85,22 +106,20 @@
   input:focus,textarea:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px var(--green-glow)}
   textarea{resize:vertical;min-height:62px;line-height:1.45}
   input::placeholder,textarea::placeholder{color:var(--dim)}
-
   .selbar{display:flex;align-items:center;gap:11px;background:var(--surface-2);border:1px solid var(--border-2);
-    border-radius:var(--radius-sm);padding:12px 13px;margin-bottom:4px}
+    border-radius:var(--radius-sm);padding:12px 13px}
   .selbar svg{width:18px;height:18px;color:var(--green-soft);flex:none}
   .selbar .t{font-size:14px;font-weight:600}
   .selbar .change{margin-left:auto;font-size:12.5px;color:var(--green-soft);font-weight:600;cursor:pointer;
     background:none;border:none;font-family:inherit}
-
   .btn{width:100%;margin-top:20px;font-family:var(--sans);font-size:15.5px;font-weight:700;
     color:#04130c;background:linear-gradient(135deg,var(--green-soft),var(--green));border:none;
-    border-radius:var(--radius-sm);padding:15px;cursor:pointer;transition:var(--ease);
-    box-shadow:0 8px 22px var(--green-glow)}
+    border-radius:var(--radius-sm);padding:15px;cursor:pointer;transition:var(--ease);box-shadow:0 8px 22px var(--green-glow)}
   .btn:hover{filter:brightness(1.04)}
   .btn:active{transform:translateY(1px)}
   .btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
-  .formerr{color:#fca5a5;font-size:13px;margin-top:12px;min-height:1px;text-align:center}
+  .btn.ghost{background:var(--surface-2);color:var(--text);border:1px solid var(--border-2);box-shadow:none}
+  .formerr{color:#fca5a5;font-size:13px;margin-top:12px;text-align:center}
 
   /* success */
   .success{text-align:center;padding:14px 6px 6px}
@@ -110,6 +129,18 @@
   .success .when{font-family:var(--mono);font-size:16px;color:var(--green-soft);font-weight:700;margin:14px 0}
   .success p{color:var(--muted);font-size:14px;margin-top:6px}
 
+  /* custom request */
+  .reqbox{margin-top:18px;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:0 16px}
+  .reqbox summary{list-style:none;cursor:pointer;padding:16px 0;font-size:14.5px;font-weight:600;
+    display:flex;align-items:center;gap:9px}
+  .reqbox summary::-webkit-details-marker{display:none}
+  .reqbox summary .ic{color:var(--green-soft)}
+  .reqbox summary .ar{margin-left:auto;color:var(--dim);transition:var(--ease)}
+  .reqbox[open] summary .ar{transform:rotate(180deg)}
+  .reqbody{padding-bottom:18px}
+  .reqbody .small{font-size:12.5px;margin-top:14px}
+  .reqbody a{color:var(--green-soft);font-weight:600}
+
   footer{text-align:center;color:var(--dim);font-size:11.5px;margin-top:26px}
   .hidden{display:none !important}
 </style>
@@ -117,24 +148,31 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">A</div>
+    <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     <div class="brand"><b>Automatisierbar</b><span class="sub">cockpit.automatisierbar.ch</span></div>
   </header>
 
   <div class="hero">
     <h1>Prozessermittlung buchen</h1>
-    <p>Wir kommen zu Ihnen und schauen uns gemeinsam an, welche Abläufe sich automatisieren lassen. Wählen Sie einen Termin, der Ihnen passt.</p>
     <div class="meta">
-      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>60 Minuten</span>
       <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Vor Ort bei Ihnen</span>
       <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Unverbindlich</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>Kein Verkaufsgespräch</span>
     </div>
   </div>
 
-  <!-- STEP 1: pick a slot -->
-  <section class="card" id="step-slots">
-    <div class="step-label"><span class="n">1</span> Termin wählen</div>
-    <div id="slots-mount"><div class="state"><div class="spinner"></div>Verfügbare Termine werden geladen…</div></div>
+  <section class="card desc">
+    <h3>Was passiert in diesem Gespräch?</h3>
+    <p>In 30–40 Minuten schauen wir uns gemeinsam einen konkreten Arbeitsablauf in Ihrem Betrieb an, einen, der regelmässig Zeit kostet und immer wieder gleich abläuft.</p>
+    <p>Ich stelle Ihnen gezielte Fragen: Was passiert heute manuell? Wer macht es? Wie oft? Was wäre gewonnen, wenn das automatisch liefe?</p>
+    <p>Am Ende des Gesprächs wissen wir beide, ob und wo eine Automatisierung bei Ihnen Sinn macht und Sie erhalten eine ehrliche Einschätzung, ganz ohne Verpflichtung.</p>
+    <p class="punch">Kein Verkaufsgespräch. Kein Fachchinesisch. Nur eine konkrete Analyse Ihres Ablaufs.</p>
+  </section>
+
+  <!-- STEP 1: calendar -->
+  <section class="card" id="step-cal">
+    <div class="step-label"><span class="n">1</span> Tag &amp; Zeit wählen</div>
+    <div id="cal-mount"><div class="state"><div class="spinner"></div>Verfügbare Termine werden geladen…</div></div>
   </section>
 
   <!-- STEP 2: details -->
@@ -147,30 +185,56 @@
     </div>
     <form id="form" novalidate>
       <label>Vor- &amp; Nachname <span class="req">*</span></label>
-      <input id="f-name" name="name" autocomplete="name" placeholder="Max Muster" required>
+      <input id="f-name" autocomplete="name" placeholder="Max Muster" required>
       <label>E-Mail-Adresse <span class="req">*</span></label>
-      <input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="max@firma.ch" required>
+      <input id="f-email" type="email" autocomplete="email" inputmode="email" placeholder="max@firma.ch" required>
       <label>Telefonnummer <span class="req">*</span></label>
-      <input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="079 123 45 67" required>
+      <input id="f-phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="079 123 45 67" required>
       <label>Firmenname <span class="req">*</span></label>
-      <input id="f-firma" name="firma" autocomplete="organization" placeholder="Muster AG" required>
+      <input id="f-firma" autocomplete="organization" placeholder="Muster AG" required>
       <label>Firmenadresse <span class="req">*</span> <span style="color:var(--dim);font-weight:500">— wir kommen vorbei</span></label>
-      <textarea id="f-adresse" name="adresse" autocomplete="street-address" placeholder="Musterstrasse 12, 5400 Baden" required></textarea>
+      <textarea id="f-adresse" autocomplete="street-address" placeholder="Musterstrasse 12, 5400 Baden" required></textarea>
       <button class="btn" id="btn-submit" type="submit">Termin verbindlich buchen</button>
       <div class="formerr" id="formerr"></div>
     </form>
   </section>
 
-  <!-- SUCCESS -->
+  <!-- SUCCESS (booking) -->
   <section class="card hidden" id="step-done">
     <div class="success">
       <div class="ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg></div>
       <h2>Termin gebucht!</h2>
       <div class="when" id="done-when">—</div>
-      <p id="done-msg">Wir haben Ihre Anfrage erhalten und melden uns in Kürze zur Bestätigung.</p>
-      <p>Sie erhalten eine Kalendereinladung per E-Mail.</p>
+      <p id="done-msg">Sie erhalten eine Kalendereinladung per E-Mail. Wir kommen zum vereinbarten Termin zu Ihnen.</p>
     </div>
   </section>
+
+  <!-- CUSTOM REQUEST -->
+  <details class="reqbox" id="reqbox">
+    <summary>
+      <span class="ic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="m4 6 8 6 8-6"/></svg></span>
+      Kein passender Termin dabei?
+      <span class="ar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="reqbody" id="reqbody">
+      <p class="hint">Schreiben Sie uns Ihren Wunschtermin oder Ihr Anliegen, wir melden uns persönlich bei Ihnen.</p>
+      <form id="reqform" novalidate>
+        <label>Vor- &amp; Nachname <span class="req">*</span></label>
+        <input id="r-name" autocomplete="name" placeholder="Max Muster" required>
+        <label>E-Mail-Adresse <span class="req">*</span></label>
+        <input id="r-email" type="email" inputmode="email" placeholder="max@firma.ch" required>
+        <label>Telefonnummer</label>
+        <input id="r-phone" type="tel" inputmode="tel" placeholder="079 123 45 67">
+        <label>Firmenname</label>
+        <input id="r-firma" placeholder="Muster AG">
+        <label>Ihr Wunschtermin / Anliegen <span class="req">*</span></label>
+        <textarea id="r-message" placeholder="z.B. nächste Woche am Nachmittag, oder Ihre Frage…" required></textarea>
+        <button class="btn" id="r-submit" type="submit">Anfrage senden</button>
+        <div class="formerr" id="reqerr"></div>
+      </form>
+      <p class="hint small">Oder direkt: <a href="mailto:joaquin@automatisierbar.ch">joaquin@automatisierbar.ch</a></p>
+    </div>
+  </details>
 
   <footer>Automatisierbar · Prozesse automatisieren, die Ihre Zeit fressen.</footer>
 </div>
@@ -178,124 +242,169 @@
 <script>
 (function(){
   "use strict";
-  var state = { selStart:null, selLabel:null, selDate:null, slotMinutes:60 };
   var $ = function(id){ return document.getElementById(id); };
+  var DATA = { byDate:{}, slotMin:60 };
+  var months = [], mi = 0;
+  var sel = { start:null, dateISO:null };
 
-  function deDay(iso){
-    try{
-      var d = new Date(iso + "T00:00:00");
-      return new Intl.DateTimeFormat('de-CH',{weekday:'long',day:'numeric',month:'long'}).format(d);
-    }catch(e){ return iso; }
-  }
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function isoLocal(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
   function deWhen(iso){
-    try{
-      var d = new Date(iso);
-      return new Intl.DateTimeFormat('de-CH',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}).format(d) + " Uhr";
-    }catch(e){ return iso; }
+    try{ return new Intl.DateTimeFormat('de-CH',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}).format(new Date(iso))+' Uhr'; }
+    catch(e){ return iso; }
+  }
+  function deDayLong(iso){
+    try{ return new Intl.DateTimeFormat('de-CH',{weekday:'long',day:'numeric',month:'long'}).format(new Date(iso+'T00:00:00')); }
+    catch(e){ return iso; }
   }
 
-  function loadSlots(){
-    var mount = $('slots-mount');
-    mount.innerHTML = '<div class="state"><div class="spinner"></div>Verfügbare Termine werden geladen…</div>';
+  function load(){
     fetch('/api/book/slots',{headers:{'Accept':'application/json'}})
       .then(function(r){ return r.json(); })
-      .then(function(data){
-        state.slotMinutes = data.slot_minutes || 60;
-        renderSlots(data.days || []);
+      .then(function(d){
+        DATA.slotMin = d.slot_minutes || 60;
+        (d.days||[]).forEach(function(day){ if(day.slots && day.slots.length) DATA.byDate[day.date]=day.slots; });
+        buildMonths(); renderCal();
       })
       .catch(function(){
-        mount.innerHTML = '<div class="state err">Termine konnten nicht geladen werden. Bitte später erneut versuchen oder per Mail melden.</div>';
+        $('cal-mount').innerHTML = '<div class="state err">Termine konnten nicht geladen werden. Bitte unten eine Anfrage senden oder später erneut versuchen.</div>';
       });
   }
 
-  function renderSlots(days){
-    var mount = $('slots-mount');
-    if(!days.length){
-      mount.innerHTML = '<div class="state">Aktuell sind keine freien Termine verfügbar. Bitte versuchen Sie es in ein paar Tagen erneut.</div>';
-      return;
+  function buildMonths(){
+    var today = new Date();
+    var dates = Object.keys(DATA.byDate).sort();
+    var last = dates.length ? new Date(dates[dates.length-1]+'T00:00:00') : today;
+    months = [];
+    var y=today.getFullYear(), m=today.getMonth(), ly=last.getFullYear(), lm=last.getMonth();
+    while(y<ly || (y===ly && m<=lm)){ months.push({y:y,m:m}); m++; if(m>11){m=0;y++;} }
+    if(!months.length) months.push({y:today.getFullYear(), m:today.getMonth()});
+    mi = 0;
+  }
+
+  var DOW = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+  function renderCal(){
+    var M = months[mi];
+    var first = new Date(M.y, M.m, 1);
+    var html = '<div class="cal-head">'
+      + '<div class="cal-month">'+ new Intl.DateTimeFormat('de-CH',{month:'long',year:'numeric'}).format(first) +'</div>'
+      + '<div class="cal-nav"><button type="button" id="cal-prev" aria-label="Zurück">‹</button>'
+      + '<button type="button" id="cal-next" aria-label="Weiter">›</button></div></div>';
+    html += '<div class="cal-grid">';
+    DOW.forEach(function(d){ html += '<div class="cal-dow">'+d+'</div>'; });
+    var offset = (first.getDay()+6)%7;
+    var dim = new Date(M.y, M.m+1, 0).getDate();
+    var todayISO = isoLocal(new Date());
+    for(var i=0;i<offset;i++) html += '<div class="cal-day empty"></div>';
+    for(var d=1; d<=dim; d++){
+      var iso = M.y+'-'+pad(M.m+1)+'-'+pad(d);
+      var avail = DATA.byDate[iso] && DATA.byDate[iso].length;
+      var cls = 'cal-day' + (avail?' avail':' off') + (iso===todayISO?' today':'') + (iso===sel.dateISO?' sel':'');
+      html += avail
+        ? '<button type="button" class="'+cls+'" data-iso="'+iso+'">'+d+'</button>'
+        : '<div class="'+cls+'">'+d+'</div>';
     }
-    var html = '';
-    days.forEach(function(day){
-      if(!day.slots || !day.slots.length) return;
-      html += '<div class="day"><div class="d-head">'+ deDay(day.date) +'</div><div class="slots">';
-      day.slots.forEach(function(s){
-        html += '<button class="slot" type="button" data-start="'+ s.start +'" data-date="'+ day.date +'">'+ s.label +'</button>';
-      });
-      html += '</div></div>';
+    html += '</div>';
+    html += '<div class="slotpanel" id="slotpanel"></div>';
+    $('cal-mount').innerHTML = html;
+
+    $('cal-prev').disabled = (mi<=0);
+    $('cal-next').disabled = (mi>=months.length-1);
+    $('cal-prev').addEventListener('click', function(){ if(mi>0){mi--; renderCal();} });
+    $('cal-next').addEventListener('click', function(){ if(mi<months.length-1){mi++; renderCal();} });
+    Array.prototype.forEach.call($('cal-mount').querySelectorAll('button.cal-day'), function(b){
+      b.addEventListener('click', function(){ selectDay(b.getAttribute('data-iso')); });
     });
-    mount.innerHTML = html;
-    Array.prototype.forEach.call(mount.querySelectorAll('.slot'), function(btn){
-      btn.addEventListener('click', function(){
-        Array.prototype.forEach.call(mount.querySelectorAll('.slot'), function(b){ b.classList.remove('sel'); });
-        btn.classList.add('sel');
-        state.selStart = btn.getAttribute('data-start');
-        state.selLabel = btn.textContent;
-        state.selDate = btn.getAttribute('data-date');
-        openForm();
-      });
+    renderSlots();
+  }
+
+  function selectDay(iso){ sel.dateISO = iso; sel.start = null; renderCal();
+    setTimeout(function(){ $('slotpanel').scrollIntoView({behavior:'smooth',block:'nearest'}); }, 40); }
+
+  function renderSlots(){
+    var p = $('slotpanel'); if(!p) return;
+    if(!sel.dateISO){ p.innerHTML = '<div class="hint">Wählen Sie einen verfügbaren Tag (grün) im Kalender.</div>'; return; }
+    var slots = DATA.byDate[sel.dateISO] || [];
+    var html = '<div class="sp-head">'+ deDayLong(sel.dateISO) +'</div><div class="slots">';
+    slots.forEach(function(s){ html += '<button type="button" class="slot" data-start="'+s.start+'">'+s.label+'</button>'; });
+    html += '</div>';
+    p.innerHTML = html;
+    Array.prototype.forEach.call(p.querySelectorAll('.slot'), function(btn){
+      btn.addEventListener('click', function(){ sel.start = btn.getAttribute('data-start'); openForm(); });
     });
   }
 
   function openForm(){
-    $('sel-when').textContent = deWhen(state.selStart);
+    $('sel-when').textContent = deWhen(sel.start);
     $('step-form').classList.remove('hidden');
     $('step-done').classList.add('hidden');
-    setTimeout(function(){ $('step-form').scrollIntoView({behavior:'smooth',block:'start'}); }, 60);
+    setTimeout(function(){ $('step-form').scrollIntoView({behavior:'smooth',block:'start'}); }, 50);
   }
 
   $('btn-change').addEventListener('click', function(){
     $('step-form').classList.add('hidden');
-    $('step-slots').scrollIntoView({behavior:'smooth',block:'start'});
+    $('step-cal').scrollIntoView({behavior:'smooth',block:'start'});
   });
 
-  function val(id){ return ($(id).value || '').trim(); }
+  function v(id){ return ($(id).value||'').trim(); }
+  var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
   $('form').addEventListener('submit', function(ev){
     ev.preventDefault();
-    var err = $('formerr'); err.textContent = '';
-    if(!state.selStart){ err.textContent = 'Bitte zuerst einen Termin wählen.'; return; }
-    var name=val('f-name'), email=val('f-email'), phone=val('f-phone'), firma=val('f-firma'), adresse=val('f-adresse');
-    if(!name||!email||!phone||!firma||!adresse){ err.textContent = 'Bitte alle Felder ausfüllen.'; return; }
-    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ err.textContent = 'Bitte eine gültige E-Mail-Adresse angeben.'; return; }
-
-    var btn = $('btn-submit');
-    btn.disabled = true; btn.textContent = 'Wird gebucht…';
-    fetch('/api/book/confirm',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name:name, email:email, phone:phone, firma:firma, adresse:adresse, start:state.selStart })
-    }).then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); })
+    var err = $('formerr'); err.textContent='';
+    if(!sel.start){ err.textContent='Bitte zuerst einen Termin wählen.'; return; }
+    var b = { name:v('f-name'), email:v('f-email'), phone:v('f-phone'), firma:v('f-firma'), adresse:v('f-adresse'), start:sel.start };
+    if(!b.name||!b.email||!b.phone||!b.firma||!b.adresse){ err.textContent='Bitte alle Felder ausfüllen.'; return; }
+    if(!EMAIL.test(b.email)){ err.textContent='Bitte eine gültige E-Mail-Adresse angeben.'; return; }
+    var btn=$('btn-submit'); btn.disabled=true; btn.textContent='Wird gebucht…';
+    fetch('/api/book/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
+      .then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); })
       .then(function(res){
-        if(res.status === 200 && res.body.ok){
-          showDone(res.body);
-        } else if(res.status === 409){
-          err.textContent = 'Dieser Termin wurde gerade vergeben. Bitte wählen Sie einen anderen.';
+        if(res.s===200 && res.j.ok){ showDone(res.j); }
+        else if(res.s===409){
+          err.textContent='Dieser Termin wurde gerade vergeben. Bitte wählen Sie einen anderen.';
           btn.disabled=false; btn.textContent='Termin verbindlich buchen';
-          $('step-form').classList.add('hidden');
-          loadSlots();
-          $('step-slots').scrollIntoView({behavior:'smooth',block:'start'});
+          $('step-form').classList.add('hidden'); DATA.byDate={}; sel={start:null,dateISO:null}; load();
+          $('step-cal').scrollIntoView({behavior:'smooth',block:'start'});
         } else {
-          err.textContent = (res.body && res.body.error) ? res.body.error : 'Buchung fehlgeschlagen. Bitte erneut versuchen.';
+          err.textContent=(res.j&&res.j.error)?res.j.error:'Buchung fehlgeschlagen. Bitte erneut versuchen.';
           btn.disabled=false; btn.textContent='Termin verbindlich buchen';
         }
       })
-      .catch(function(){
-        err.textContent = 'Netzwerkfehler. Bitte erneut versuchen.';
-        btn.disabled=false; btn.textContent='Termin verbindlich buchen';
-      });
+      .catch(function(){ err.textContent='Netzwerkfehler. Bitte erneut versuchen.'; btn.disabled=false; btn.textContent='Termin verbindlich buchen'; });
   });
 
-  function showDone(body){
-    $('done-when').textContent = body.when ? (deWhen(state.selStart)) : deWhen(state.selStart);
-    if(body.calendar === false){
-      $('done-msg').textContent = 'Wir haben Ihre Anfrage erhalten und melden uns in Kürze zur Bestätigung.';
-    }
-    $('step-slots').classList.add('hidden');
-    $('step-form').classList.add('hidden');
+  function showDone(j){
+    $('done-when').textContent = deWhen(sel.start);
+    if(j.calendar===false){ $('done-msg').textContent='Wir haben Ihre Anfrage erhalten und melden uns in Kürze zur Bestätigung.'; }
+    $('step-cal').classList.add('hidden'); $('step-form').classList.add('hidden'); $('reqbox').classList.add('hidden');
     $('step-done').classList.remove('hidden');
     window.scrollTo({top:0,behavior:'smooth'});
   }
 
-  loadSlots();
+  // custom request
+  $('reqform').addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var err=$('reqerr'); err.textContent='';
+    var b = { name:v('r-name'), email:v('r-email'), phone:v('r-phone'), firma:v('r-firma'), message:v('r-message') };
+    if(!b.name||!b.email||!b.message){ err.textContent='Bitte Name, E-Mail und Ihre Nachricht ausfüllen.'; return; }
+    if(!EMAIL.test(b.email)){ err.textContent='Bitte eine gültige E-Mail-Adresse angeben.'; return; }
+    var btn=$('r-submit'); btn.disabled=true; btn.textContent='Wird gesendet…';
+    fetch('/api/book/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)})
+      .then(function(r){ return r.json().then(function(j){ return {s:r.status,j:j}; }); })
+      .then(function(res){
+        if(res.s===200 && res.j.ok){
+          $('reqbody').innerHTML = '<div class="success" style="padding:8px 0"><div class="ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg></div><h2 style="font-size:18px">Anfrage gesendet!</h2><p>Wir melden uns persönlich bei Ihnen.</p></div>';
+        } else {
+          err.textContent=(res.j&&res.j.error)?res.j.error:'Senden fehlgeschlagen. Bitte erneut versuchen.';
+          btn.disabled=false; btn.textContent='Anfrage senden';
+        }
+      })
+      .catch(function(){ err.textContent='Netzwerkfehler. Bitte erneut versuchen.'; btn.disabled=false; btn.textContent='Anfrage senden'; });
+  });
+
+  load();
 })();
 </script>
 </body>
