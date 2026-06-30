@@ -165,16 +165,15 @@ def build_re_subject(subject: str) -> str:
     return f"Re: {s}" if s else "Re:"
 
 
-def build_references(p: dict) -> str:
-    """RFC 5322 References for the reply: original References chain + original Message-ID."""
-    parts = []
-    refs = (p.get("references") or "").strip()
-    if refs:
-        parts.append(refs)
+def build_references(p: dict, max_ids: int = 12) -> str:
+    """RFC 5322 References for the reply: original References chain + original Message-ID.
+    Keeps only well-formed <id> tokens and caps to the most recent `max_ids` so the (unfolded)
+    header line stays under RFC 5322's 998-char limit."""
+    ids = re.findall(r"<[^>]+>", p.get("references") or "")
     mid = (p.get("message_id") or "").strip()
-    if mid and mid not in refs:
-        parts.append(mid)
-    return " ".join(parts).strip()
+    if mid and mid not in ids:
+        ids.append(mid)
+    return " ".join(ids[-max_ids:])
 
 
 def pick_to_address(p: dict) -> str:

@@ -145,8 +145,14 @@ def build_message(draft, from_addr, signature=None, msgid=None, cc=None,
 
 
 def message_bytes(msg):
-    """Serialize with CRLF line endings (RFC 5322 / IMAP-APPEND-conformant)."""
-    return msg.as_bytes(policy=email.policy.SMTP)
+    """Serialize with CRLF line endings (RFC 5322 / IMAP-APPEND-conformant).
+
+    max_line_length=0 disables header line-folding: the default SMTP policy would fold a long,
+    space-less Message-ID/In-Reply-To/References by RFC 2047-encoding it (=?utf-8?q?=3C...?=),
+    which breaks thread-matching in mail clients. Non-ASCII (umlaut subjects) is still encoded —
+    that is charset encoding, independent of folding. References length is capped upstream so an
+    unfolded line stays under RFC 5322's 998-char hard limit."""
+    return msg.as_bytes(policy=email.policy.SMTP.clone(max_line_length=0))
 
 
 _LIST_RE = re.compile(r'^\((?P<flags>[^)]*)\)\s+(?P<sep>"[^"]*"|NIL)\s+(?P<name>.+?)\s*$')
@@ -597,6 +603,15 @@ def cmd_selftest():
              "in_reply_to": "<perdraft@example.ch>"}
     m_irt = build_message(d_irt, "joaquin@automatisierbar.ch")
     check("per-draft In-Reply-To", m_irt["In-Reply-To"] == "<perdraft@example.ch>")
+
+    # Regression: a long space-less msg-id must serialize RAW, never RFC 2047-encoded
+    # (=?utf-8?q?=3C...?=) — encoded msg-ids break thread-matching in mail clients.
+    long_id = "<DU0PR08MB7616CDD308506E2B47D9DAD29BF72@DU0PR08MB7616.eurprd08.prod.outlook.com>"
+    m_long = build_message(d1, "joaquin@automatisierbar.ch", msgid="<r6@automatisierbar.ch>",
+                           in_reply_to=long_id, references=long_id)
+    raw_long = message_bytes(m_long)
+    check("langes In-Reply-To bleibt roh (nicht kodiert)",
+          long_id.encode() in raw_long and b"In-Reply-To: =?" not in raw_long)
 
     # _body_to_html: linkify + <br />
     h = _body_to_html("Zeile1\nhttps://cockpit.automatisierbar.ch/book")
