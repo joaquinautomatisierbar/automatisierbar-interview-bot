@@ -6,6 +6,9 @@
   "from": "joaquin@automatisierbar.ch",
   "sender": "Joaquin Gamonal",
   "phone": "+41 76 477 11 07",
-  "booking": "https://calendar.app.google/mWy2heiDmRFcgFKA7",
-  "_note": "Mail-side defaults for the walkinmail skill. drafts_subfolder empty => drafts land in the MAIN Drafts folder (so the webmail shows them as normal editable/sendable drafts). Set a name (e.g. 'Walk-in') to nest under Drafts instead. Env vars override: INFOMANIAK_IMAP_HOST, INFOMANIAK_IMAP_PORT, INFOMANIAK_WALKIN_SUBFOLDER, INFOMANIAK_DRAFTS_PARENT. Auth lives in .env (INFOMANIAK_IMAP_USER, INFOMANIAK_IMAP_PASSWORD)."
+  "cc": "tej@automatisierbar.ch",
+  "booking": "https://cockpit.automatisierbar.ch/book",
+  "mail_hosting_id": 985192,
+  "mailbox_name": "joaquin",
+  "_note": "Mail-side defaults for the walkinmail skill. drafts_subfolder empty => drafts land in the MAIN Drafts folder (so the webmail shows them as normal editable/sendable drafts). Set a name (e.g. 'Walk-in') to nest under Drafts instead. Env vars override: INFOMANIAK_IMAP_HOST, INFOMANIAK_IMAP_PORT, INFOMANIAK_WALKIN_SUBFOLDER, INFOMANIAK_DRAFTS_PARENT. Auth lives in .env (INFOMANIAK_IMAP_USER, INFOMANIAK_IMAP_PASSWORD). mail_hosting_id + mailbox_name point infomaniak_signature.py at the Infomaniak Mail API signature endpoint (auth: INFOMANIAK_MAIL_TOKEN)."
 }

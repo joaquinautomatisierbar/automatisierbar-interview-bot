@@ -1110,3 +1110,203 @@ def classify_call_outcome(transcript: str, *, ended_reason: str = "",
         }
     except Exception:
         return safe
+
+
+# ---------------------------------------------------------------------------
+# Inbox auto-reply drafter — classify an incoming mail, then draft a reply.
+# Used by tools/inbox_reply_drafter.py (VPS cron). Both calls fail SAFE:
+# classify -> business_relevant:false (no draft) and draft -> {} (no draft),
+# so an API hiccup never produces a spurious or broken draft.
+# ---------------------------------------------------------------------------
+
+_VALID_INBOX_CATEGORIES = ("appointment_booking", "appointment_reschedule",
+                           "client_question", "new_prospect", "other")
+
+_SYSTEM_INBOX_CLASSIFY = """\
+Du triagierst eingehende E-Mails an das persönliche Postfach von Joaquin Gamonal,
+Mitgründer von automatisierbar.ch (Schweizer KI-/Automatisierungsberatung für KMU).
+
+AUFGABE: Entscheide, ob diese E-Mail eine geschäftsrelevante Nachricht ist, auf die Joaquin
+persönlich antworten würde, und kategorisiere sie.
+
+business_relevant = true NUR wenn ein Mensch eine persönliche Antwort erwartet:
+- Terminanfragen, Terminbestätigungen, Verschiebungen, Rückfragen vor einem Gespräch
+- Nachrichten bestehender Kunden/Leads (Projekt, Status, Frage)
+- neue Interessenten mit einer echten Anfrage
+- Geschäftspartner, Kooperationen, konkrete Anliegen
+
+business_relevant = false bei:
+- Newslettern, Werbung, Massenmails, Marketing
+- automatischen Benachrichtigungen (no-reply, System, Rechnungen/Quittungen ohne Frage)
+- Spam, Phishing, reinen Lesebestätigungen, Kalender-Auto-Antworten
+
+category:
+- appointment_booking: möchte einen (ersten) Termin vereinbaren
+- appointment_reschedule: bestehenden Termin verschieben, absagen oder bestätigen
+- client_question: bestehender Kunde/Lead mit Frage zu Projekt/Status
+- new_prospect: neuer Interessent, noch kein Termin
+- other: geschäftsrelevant, aber keine der obigen Kategorien
+
+reply_language: Sprache, in der geantwortet werden soll = Sprache der eingehenden Mail
+(de = Deutsch, en = Englisch, fr = Französisch). Default de.
+
+confidence: 0.0-1.0, wie sicher du bei business_relevant + category bist.
+
+Antworte NUR als gültiges JSON (kein Markdown, kein Text davor/danach):
+{"business_relevant": true, "category": "appointment_booking", "reply_language": "de",
+ "confidence": 0.85, "reason": "kurz, Deutsch"}\
+"""
+
+
+def classify_inbox_email(subject: str, body: str, *, from_name: str = "",
+                         from_email: str = "", model: str = MODEL_CLASSIFY) -> dict:
+    """Triage one incoming email. Returns
+    {business_relevant: bool, category: str, reply_language: 'de'|'en'|'fr',
+     confidence: float, reason: str}.
+
+    Fails SAFE — on missing key / parse / API error returns business_relevant:false so
+    the drafter skips it (a failure never drafts on noise)."""
+    safe = {"business_relevant": False, "category": "other",
+            "reply_language": "de", "confidence": 0.0, "reason": ""}
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return safe
+    try:
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        user = (f"Absender: {from_name} <{from_email}>\n"
+                f"Betreff: {subject}\n\nNachrichtentext:\n{(body or '')[:6000]}")
+        msg = client.messages.create(
+            model=model,
+            max_tokens=300,
+            system=[{"type": "text", "text": _SYSTEM_INBOX_CLASSIFY,
+                     "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user}],
+        )
+        d = _parse_json(msg.content[0].text)
+        cat = str(d.get("category", "other")).lower().strip()
+        if cat not in _VALID_INBOX_CATEGORIES:
+            cat = "other"
+        lang = str(d.get("reply_language", "de")).lower().strip()[:2]
+        if lang not in ("de", "en", "fr"):
+            lang = "de"
+        try:
+            conf = max(0.0, min(1.0, float(d.get("confidence", 0.0))))
+        except (TypeError, ValueError):
+            conf = 0.0
+        return {
+            "business_relevant": d.get("business_relevant") is True,
+            "category": cat,
+            "reply_language": lang,
+            "confidence": conf,
+            "reason": str(d.get("reason", ""))[:300],
+        }
+    except Exception as e:
+        print(f"[inbox-classify] error={e!r}", flush=True)
+        return safe
+
+
+_SYSTEM_INBOX_DRAFT = """\
+Du schreibst im Namen von Joaquin Gamonal (Mitgründer automatisierbar.ch) einen ANTWORT-ENTWURF
+auf eine eingehende E-Mail. Der Entwurf wird NICHT automatisch gesendet: Joaquin liest ihn,
+passt ihn bei Bedarf an und sendet selbst. Schreibe so, dass er ihn im Idealfall unverändert
+abschicken kann.
+
+SPRACHE: Antworte in der Sprache, die unten unter "Sprache der Antwort" steht.
+- de: Hochdeutsch, durchgehend Sie-Form.
+- en: formelles Englisch.
+- fr: français formel (vouvoiement).
+
+TON: warm, ruhig, professionell, hilfsbereit. Nie gehetzt, nie aufdringlich, nicht
+verkäuferisch. Wie ein verlässlicher Mensch, der gerne weiterhilft.
+
+STILREGELN (hart):
+- KEINE Gedankenstriche (— oder –). Nutze Komma, Doppelpunkt oder Punkt. Bindestriche in
+  zusammengesetzten Wörtern sind erlaubt (z.B. 30-Minuten-Termin).
+- Keine Buzzwords (synergistisch, ganzheitlich, Mehrwert, End-to-End) und keine Floskeln
+  (Toller Beitrag, Spannend, Absolut, 100%).
+- Kurze, klare Sätze. Konkret, nicht schwammig.
+- Nenne keine Preise.
+- Beziehe dich konkret auf das, was die Person geschrieben hat. Erfinde keine Fakten und
+  keine Details, die du nicht hast. Wenn etwas unklar ist, biete kurz ein Gespräch an.
+- Sprich die Person mit Namen an, wenn der Name bekannt ist.
+
+TERMINE: Wenn unten Termin-Vorschläge stehen, biete 2-3 konkrete Zeitfenster an und nenne den
+Buchungslink. Übernimm Datum und Uhrzeit EXAKT wie gegeben; übersetze nur Wochentag/Monat in
+die Zielsprache, ändere niemals die Zahlen. Stehen keine Vorschläge, aber es geht um einen
+Termin, verweise freundlich auf den Buchungslink.
+
+ABSCHLUSS: Beende den Text mit der passenden Grussformel und NICHTS danach (keine Namens-,
+Firmen- oder Telefonzeile, die Signatur wird automatisch angehängt):
+- de: "Freundliche Grüsse aus Baden,"
+- en: "Best regards,"
+- fr: "Meilleures salutations,"
+
+Antworte NUR als gültiges JSON (kein Markdown, kein Text davor/danach):
+{"subject": "Re: <Originalbetreff>", "body": "<reiner Text, \\n für Zeilenumbrüche>"}
+Der Betreff spiegelt den Original-Betreff mit vorangestelltem 'Re: ' (kein doppeltes 'Re:').\
+"""
+
+
+def draft_inbox_reply(*, incoming: dict, lead: dict = None, appointment: dict = None,
+                      slots: list = None, language: str = "de", category: str = "other",
+                      booking_url: str = "https://cockpit.automatisierbar.ch/book",
+                      model: str = MODEL_FAST) -> dict:
+    """Draft a reply to one incoming email. Returns {"subject": str, "body": str}, or {}
+    on failure (caller then skips the append — never deposits an empty/broken draft).
+
+    `incoming`: {from_name, from_email, subject, body_text}. `lead`: extracted CRM dict or
+    None. `appointment`: a Termine-DB row dict or None. `slots`: [{iso, label}, ...] free
+    slots to propose (appointment categories only)."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return {}
+    try:
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        blocks = [
+            "EINGEHENDE E-MAIL:",
+            f"Von: {incoming.get('from_name', '')} <{incoming.get('from_email', '')}>",
+            f"Betreff: {incoming.get('subject', '')}",
+            f"Sprache der Antwort: {language}",
+            f"Kategorie: {category}",
+            "",
+            "Nachrichtentext:",
+            (incoming.get("body_text", "") or "")[:6000],
+        ]
+        if lead:
+            ld = ["", "BEKANNTER KONTAKT (aus CRM, nur zur Orientierung):"]
+            for label, key in (("Name", "name"), ("Firma", "firma"), ("Branche", "branche"),
+                               ("Pipeline-Stufe", "pipeline_stage"), ("Top-Problem", "top_problem"),
+                               ("Kontext", "context")):
+                val = (lead.get(key) or "").strip()
+                if val:
+                    ld.append(f"- {label}: {val}")
+            if len(ld) > 2:
+                blocks += ld
+        if appointment:
+            blocks += ["", "BESTEHENDER TERMIN (aus Kalender):",
+                       f"- {appointment.get('name', '')} am {appointment.get('start', '')} "
+                       f"(Status: {appointment.get('status', '')}, "
+                       f"zuständig: {appointment.get('claimed_by') or 'offen'})"]
+        if slots:
+            sl = ["", f"FREIE TERMIN-VORSCHLÄGE (biete 2-3 an; Buchungslink: {booking_url}):"]
+            for s in slots[:5]:
+                sl.append(f"- {s.get('label', '')}")
+            blocks += sl
+        elif category in ("appointment_booking", "appointment_reschedule"):
+            blocks += ["", f"Keine konkreten freien Slots verfügbar. Verweise freundlich auf "
+                           f"den Buchungslink: {booking_url}"]
+        user_text = "\n".join(blocks)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=1500,
+            system=[{"type": "text", "text": _SYSTEM_INBOX_DRAFT,
+                     "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user_text}],
+        )
+        d = _parse_json(msg.content[0].text)
+        subject = str(d.get("subject", "") or "").strip()
+        body = str(d.get("body", "") or "").strip()
+        if not body:
+            return {}
+        return {"subject": subject, "body": body}
+    except Exception as e:
+        print(f"[inbox-draft] error={e!r}", flush=True)
+        return {}
