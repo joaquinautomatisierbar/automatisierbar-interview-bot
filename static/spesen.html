@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B2A4A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="KnowSpesen">
+<meta name="robots" content="noindex">
+<title>KnowSpesen</title>
+<link rel="manifest" href="/spesen.webmanifest">
+<link rel="apple-touch-icon" href="/static/spesen-icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F4F6FA; --card:#FFFFFF; --surface:#F7F9FC;
+    --border:#E3E8EF; --border-2:#D2DAE6;
+    --navy:#1B2A4A; --navy-deep:#11203B; --navy-soft:#2C4068;
+    --ink:#1F2933; --muted:#6B7785; --dim:#94A0AE;
+    --blue:#2E6BE6; --green:#0F7B4F; --green-soft:#E7F4EE;
+    --red:#DC2626; --amber:#B45309; --amber-soft:#FBF3E6;
+    --radius:16px; --radius-sm:11px; --radius-pill:999px;
+    --ease:.18s cubic-bezier(.2,.6,.2,1);
+    --shadow:0 1px 2px rgba(16,32,64,.04),0 8px 24px rgba(16,32,64,.06);
+    --shadow-lg:0 12px 40px rgba(16,32,64,.18);
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    font-family:var(--sans);background:var(--bg);color:var(--ink);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    padding:max(12px,env(safe-area-inset-top)) 13px calc(96px + env(safe-area-inset-bottom));
+    line-height:1.5;
+  }
+  .wrap{max-width:560px;margin:0 auto}
+  a{color:var(--blue)}
+
+  /* header */
+  header{display:flex;align-items:center;gap:11px;padding:8px 4px 16px}
+  .logo{width:38px;height:38px;border-radius:11px;flex:none;background:var(--navy);
+    display:grid;place-items:center;box-shadow:0 6px 16px rgba(27,42,74,.22)}
+  .logo svg{width:21px;height:21px;color:#fff}
+  .brand b{font-weight:800;letter-spacing:-.3px;font-size:17px;display:block;color:var(--navy)}
+  .brand .sub{color:var(--dim);font-size:11.5px;font-weight:600;letter-spacing:.2px}
+  .who{margin-left:auto;font-size:12.5px;color:var(--navy);font-weight:700;
+    background:#fff;border:1px solid var(--border-2);padding:7px 13px;border-radius:var(--radius-pill);box-shadow:var(--shadow)}
+
+  /* month bar */
+  .monthbar{display:flex;align-items:center;gap:8px;margin:0 2px 14px}
+  .monthbar .mlabel{font-weight:800;font-size:18px;color:var(--navy);flex:1;text-align:center;letter-spacing:-.2px}
+  .mnav{width:38px;height:38px;border-radius:11px;border:1px solid var(--border-2);background:#fff;
+    color:var(--navy);font-size:18px;cursor:pointer;display:grid;place-items:center;box-shadow:var(--shadow)}
+  .mnav:active{transform:translateY(1px)}
+
+  /* KPI cards */
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 15px;box-shadow:var(--shadow)}
+  .kpi.total{grid-column:1 / -1;background:var(--navy);border-color:var(--navy)}
+  .kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .kpi.total .l{color:#AEBBD4}
+  .kpi .v{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-top:3px;color:var(--ink)}
+  .kpi.total .v{color:#fff;font-size:30px}
+  .kpi .v small{font-size:14px;font-weight:700;color:var(--dim)}
+  .kpi.total .v small{color:#AEBBD4}
+  .kpi.sub .v{font-size:19px}
+  .kpi .v.green{color:var(--green)} .kpi .v.amber{color:var(--amber)}
+
+  /* generic card */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+  .card h2{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+  .hidden{display:none !important}
+
+  /* beleg list */
+  .belege{display:flex;flex-direction:column;gap:9px}
+  .beleg{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);
+    border-radius:var(--radius-sm);padding:11px 13px;box-shadow:var(--shadow);cursor:pointer;transition:var(--ease)}
+  .beleg:active{transform:scale(.995)}
+  .beleg.kaffee{background:var(--amber-soft);border-color:#F0DCBE}
+  .beleg .ic{width:38px;height:38px;border-radius:10px;background:var(--surface);flex:none;display:grid;place-items:center;color:var(--navy-soft)}
+  .beleg .ic svg{width:19px;height:19px}
+  .beleg .mid{flex:1;min-width:0}
+  .beleg .t{font-weight:700;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .beleg .s{font-size:12px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .beleg .amt{text-align:right;flex:none}
+  .beleg .amt .chf{font-weight:800;font-size:15px;color:var(--navy)}
+  .beleg .amt .orig{font-size:11px;color:var(--dim)}
+  .tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:var(--radius-pill);margin-left:6px;vertical-align:middle}
+  .tag.w{background:var(--green-soft);color:var(--green)}
+  .tag.k{background:#F3E4C8;color:var(--amber)}
+
+  /* forms */
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:14px 2px 6px}
+  label:first-child{margin-top:0}
+  label .req{color:var(--blue)}
+  input,select,textarea{
+    width:100%;font-family:var(--sans);font-size:16px;color:var(--ink);background:#fff;
+    border:1px solid var(--border-2);border-radius:var(--radius-sm);padding:12px 13px;transition:var(--ease);-webkit-appearance:none;appearance:none}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,42,74,.12)}
+  textarea{min-height:74px;resize:vertical}
+  select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7785' stroke-width='1.7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:34px}
+  .hint{font-size:11.5px;color:var(--dim);margin:5px 2px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row-amt{display:grid;grid-template-columns:1fr 96px;gap:10px}
+  .check{display:flex;align-items:center;gap:10px;margin-top:14px;padding:12px 13px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm)}
+  .check input[type=checkbox]{-webkit-appearance:auto;appearance:auto;width:21px;height:21px;flex:none;accent-color:var(--navy);margin:0}
+  .check label{margin:0;font-size:14px;color:var(--ink);font-weight:600}
+
+  /* buttons */
+  .btn{width:100%;font-family:var(--sans);font-weight:700;font-size:15.5px;border:none;border-radius:var(--radius-sm);
+    padding:15px 16px;cursor:pointer;transition:var(--ease);-webkit-tap-highlight-color:transparent;margin-top:16px}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{color:#fff;background:var(--navy)}
+  .btn.primary:active{background:var(--navy-deep)}
+  .btn.ghost{background:#fff;color:var(--navy);border:1px solid var(--border-2)}
+  .btn.green{background:var(--green);color:#fff}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+  .btn-sm{font-size:13px;padding:9px 13px;margin:0;width:auto;border-radius:var(--radius-pill)}
+
+  /* capture chooser */
+  .capture-pick{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:6px}
+  .pick{background:var(--card);border:1.5px dashed var(--border-2);border-radius:var(--radius);padding:22px 12px;text-align:center;cursor:pointer;transition:var(--ease)}
+  .pick:active{border-color:var(--navy);background:var(--surface)}
+  .pick svg{width:30px;height:30px;color:var(--navy);margin-bottom:8px}
+  .pick .t{font-weight:700;font-size:14px}
+  .pick .s{font-size:11.5px;color:var(--dim);margin-top:2px}
+  .thumb{width:100%;max-height:200px;object-fit:contain;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface);margin-bottom:4px}
+  .ocrbar{display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;color:var(--navy);
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-pill);padding:8px 13px;margin-top:10px}
+  .ocrbar.ok{color:var(--green);background:var(--green-soft);border-color:#CDE9DB}
+  .spinner{width:15px;height:15px;border:2px solid var(--border-2);border-top-color:var(--navy);border-radius:50%;animation:spin .7s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* FAB + bottom bar */
+  .bottombar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);
+    border-top:1px solid var(--border);padding:10px 13px calc(10px + env(safe-area-inset-bottom));z-index:40}
+  .bottombar .inner{max-width:560px;margin:0 auto;display:flex;gap:10px}
+  .bottombar .btn{margin:0}
+
+  /* sheet (edit / result) */
+  .sheet-bg{position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;opacity:0;pointer-events:none;transition:.2s}
+  .sheet-bg.show{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--card);border-radius:20px 20px 0 0;
+    padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto;
+    transform:translateY(100%);transition:.26s cubic-bezier(.2,.7,.2,1);max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+  .sheet.show{transform:translateY(0)}
+  .sheet .grab{width:40px;height:4px;border-radius:99px;background:var(--border-2);margin:0 auto 14px}
+  .sheet h3{font-size:18px;font-weight:800;color:var(--navy);margin-bottom:4px}
+
+  /* result */
+  .result-total{text-align:center;padding:8px 0 14px}
+  .result-total .big{font-size:34px;font-weight:800;color:var(--navy);letter-spacing:-1px}
+  .result-total .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .mailbox{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;font-size:12.5px;white-space:pre-wrap;color:var(--ink);max-height:180px;overflow:auto;font-family:ui-monospace,Menlo,monospace}
+
+  /* gate / empty */
+  .state{text-align:center;color:var(--muted);padding:54px 22px}
+  .state .ic{width:58px;height:58px;border-radius:16px;background:#fff;border:1px solid var(--border);display:grid;place-items:center;margin:0 auto 16px;box-shadow:var(--shadow)}
+  .state .ic svg{width:28px;height:28px;color:var(--navy)}
+  .state h2{font-size:18px;color:var(--ink);font-weight:800;margin-bottom:7px}
+  .state p{font-size:14px;line-height:1.6}
+  .state code{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--navy);background:var(--surface);padding:2px 7px;border-radius:6px}
+
+  /* toast */
+  .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%);
+    max-width:90%;text-align:center;background:var(--navy-deep);color:#fff;font-size:13.5px;font-weight:600;
+    padding:12px 18px;border-radius:var(--radius-pill);box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:.22s;z-index:80}
+  .toast.show{opacity:1}
+  .toast.err{background:var(--red)} .toast.warn{background:var(--amber)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17l-2.5-1.5L13 22l-2.5-1.5L8 22l-2-1.3V2z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></span>
+    <div class="brand"><b>KnowSpesen</b><span class="sub">KnowGravity Inc.</span></div>
+    <span class="who hidden" id="who">…</span>
+    <button class="hidden" id="fb-btn" aria-label="Feedback senden" title="Nachricht an den Entwickler" style="margin-left:8px;width:38px;height:38px;border-radius:11px;border:1px solid var(--border-2);background:#fff;color:var(--navy);font-size:17px;cursor:pointer;box-shadow:var(--shadow);flex:none">✉</button>
+  </header>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div id="view-dash" class="hidden">
+    <div class="monthbar">
+      <button class="mnav" id="m-prev" aria-label="Vorheriger Monat">‹</button>
+      <div class="mlabel" id="m-label">…</div>
+      <button class="mnav" id="m-next" aria-label="Nächster Monat">›</button>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi total"><div class="l">Total Monat</div><div class="v"><small>CHF</small> <span id="k-total">0.00</span></div></div>
+      <div class="kpi sub"><div class="l">Belege</div><div class="v" id="k-count">0</div></div>
+      <div class="kpi sub"><div class="l">Weiterverr.</div><div class="v green" id="k-weiter">0.00</div></div>
+    </div>
+    <div class="card hidden" id="kaffee-note" style="padding:11px 14px;border-color:#F0DCBE;background:var(--amber-soft)">
+      <div style="font-size:12.5px;color:var(--amber);font-weight:600">☕ Kaffeekasse (unter CHF 50, nicht im ZIP): CHF <span id="k-kaffee">0.00</span></div>
+    </div>
+
+    <div class="belege" id="beleg-list"></div>
+    <div class="state hidden" id="dash-empty" style="padding:38px 20px">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17l-2.5-1.5L13 22l-2.5-1.5L8 22l-2-1.3V2z"/><path d="M9 11h6M9 15h3"/></svg></div>
+      <h2>Noch keine Belege</h2><p>Tippe unten auf «Beleg erfassen», um zu starten.</p>
+    </div>
+
+    <div class="card hidden" id="closed-banner" style="border-color:#CDE9DB;background:var(--green-soft)">
+      <div style="font-weight:700;color:var(--green);font-size:14px">✓ Monat abgeschlossen</div>
+      <div class="hint" style="color:var(--green)">Die Belege sind gesperrt. Du kannst das ZIP erneut herunterladen oder den Monat wieder öffnen, um zu bearbeiten.</div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button class="btn green" id="redownload" style="margin-top:0;flex:1">ZIP herunterladen</button>
+        <button class="btn ghost" id="reopen-month" style="margin-top:0;flex:1">Monat wieder öffnen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CAPTURE ============ -->
+  <div id="view-capture" class="hidden">
+    <button id="cap-back" class="btn ghost" style="margin-top:0;margin-bottom:12px;width:auto;padding:9px 15px;font-size:14px">‹ Zurück</button>
+    <div class="card">
+      <div class="capture-pick" id="pick-row">
+        <div class="pick" id="pick-photo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <div class="t">Beleg hochladen</div><div class="s">Foto, Galerie oder PDF</div>
+        </div>
+        <div class="pick" id="pick-none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          <div class="t">Ohne Beleg</div><div class="s">Pauschale / manuell</div>
+        </div>
+      </div>
+      <input type="file" id="file-input" accept="image/*,application/pdf" class="hidden">
+      <img id="thumb" class="thumb hidden" alt="Beleg">
+      <div id="pdf-chip" class="hidden" style="display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;font-size:13px;font-weight:600;color:var(--navy)">📄 <span id="pdf-name">PDF</span></div>
+      <div id="ocrbar" class="ocrbar hidden"><span class="spinner" id="ocr-spin"></span><span id="ocr-text">Beleg wird gelesen …</span></div>
+    </div>
+
+    <form id="beleg-form" class="card hidden" autocomplete="off">
+      <div class="check" style="margin-top:0">
+        <input type="checkbox" id="f-pauschale"><label for="f-pauschale">Pauschale (ohne Beleg)</label>
+      </div>
+
+      <div id="pauschale-block" class="hidden">
+        <label>Pauschal-Typ <span class="req">*</span></label>
+        <select id="f-pauschale-code"></select>
+        <div class="hint" id="pauschale-preview"></div>
+        <div id="menge-wrap" class="hidden"><label>Menge (km / Nächte)</label><input id="f-menge" type="number" inputmode="decimal" value="1" min="1"></div>
+      </div>
+
+      <div id="amount-block">
+        <label>Betrag <span class="req">*</span></label>
+        <div class="row-amt">
+          <input id="f-betrag" type="number" inputmode="decimal" step="0.05" placeholder="0.00">
+          <select id="f-waehrung"></select>
+        </div>
+        <div class="hint hidden" id="fx-hint"></div>
+        <div id="manual-chf-wrap" class="hidden"><label>Betrag in CHF (manuell) <span class="req">*</span></label><input id="f-betrag-chf" type="number" inputmode="decimal" step="0.05" placeholder="0.00"></div>
+      </div>
+
+      <label>Datum <span class="req">*</span></label>
+      <input id="f-datum" type="date">
+
+      <div class="grid2">
+        <div><label>Kategorie <span class="req">*</span></label><select id="f-kategorie"></select></div>
+        <div><label>Zahlungsart</label><select id="f-zahlungsart"></select></div>
+      </div>
+
+      <label>Händler / Beschreibung</label>
+      <input id="f-haendler" list="subcats" placeholder="z.B. Restaurant Hiltl">
+      <datalist id="subcats"></datalist>
+
+      <label>Projekt / Kunde</label>
+      <input id="f-projekt" placeholder="optional">
+
+      <div class="check">
+        <input type="checkbox" id="f-weiter"><label for="f-weiter">Weiterverrechenbar an Kunden</label>
+      </div>
+
+      <label>Notiz</label>
+      <textarea id="f-notiz" placeholder="optional"></textarea>
+
+      <button type="submit" class="btn primary" id="beleg-save">Beleg speichern</button>
+      <button type="button" class="btn ghost" id="beleg-cancel">Abbrechen</button>
+    </form>
+  </div>
+
+  <!-- auth gate -->
+  <div id="gate" class="state hidden">
+    <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+    <h2>Persönlicher Zugang nötig</h2>
+    <p>Öffne KnowSpesen über deinen persönlichen Link<br>(<code>knowspesen.automatisierbar.ch/spesen?k=…</code>).</p>
+  </div>
+</div>
+
+<!-- bottom bar -->
+<div class="bottombar hidden" id="bottombar">
+  <div class="inner" id="bottombar-dash">
+    <button class="btn ghost" id="btn-close-month" style="flex:1">Monat abschliessen</button>
+    <button class="btn primary" id="btn-new" style="flex:1.3">＋ Beleg erfassen</button>
+  </div>
+</div>
+
+<!-- edit sheet -->
+<div class="sheet-bg" id="edit-bg"></div>
+<div class="sheet" id="edit-sheet">
+  <div class="grab"></div>
+  <h3>Beleg bearbeiten</h3>
+  <img id="edit-thumb" class="thumb hidden" alt="Beleg" style="margin-top:10px">
+  <label>Händler / Beschreibung</label><input id="e-haendler">
+  <div class="grid2">
+    <div><label>Datum</label><input id="e-datum" type="date"></div>
+    <div><label>Betrag CHF</label><input id="e-betrag" type="number" step="0.05"></div>
+  </div>
+  <div class="grid2">
+    <div><label>Kategorie</label><select id="e-kategorie"></select></div>
+    <div><label>Zahlungsart</label><select id="e-zahlungsart"></select></div>
+  </div>
+  <label>Projekt / Kunde</label><input id="e-projekt">
+  <div class="check"><input type="checkbox" id="e-weiter"><label for="e-weiter">Weiterverrechenbar</label></div>
+  <button class="btn primary" id="edit-save">Speichern</button>
+  <button class="btn ghost" id="edit-delete" style="color:var(--red)">Beleg löschen</button>
+</div>
+
+<!-- result sheet -->
+<div class="sheet-bg" id="res-bg"></div>
+<div class="sheet" id="res-sheet">
+  <div class="grab"></div>
+  <h3>Monat abgeschlossen ✓</h3>
+  <div class="result-total"><div class="big">CHF <span id="res-total">0.00</span></div><div class="sub" id="res-sub"></div></div>
+  <button class="btn primary" id="res-share">An Buchhaltung senden (mit ZIP)</button>
+  <button class="btn green" id="res-download">ZIP herunterladen</button>
+  <h2 style="margin:18px 2px 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">E-Mail an die Buchhaltung</h2>
+  <div class="mailbox" id="res-mail"></div>
+  <button class="btn ghost" id="res-copy">E-Mail-Text kopieren</button>
+  <a id="res-mailto" class="btn ghost hidden" style="display:block;text-align:center;text-decoration:none">In Mail-App öffnen (Anhang manuell)</a>
+  <button class="btn ghost" id="res-done">Fertig</button>
+</div>
+
+<!-- feedback sheet -->
+<div class="sheet-bg" id="fb-bg"></div>
+<div class="sheet" id="fb-sheet">
+  <div class="grab"></div>
+  <h3>Nachricht an den Entwickler</h3>
+  <p class="hint" style="margin:0 2px 8px">Fehler, Wunsch oder Frage? Schreib es uns, wir kümmern uns darum.</p>
+  <textarea id="fb-text" placeholder="Deine Nachricht …" style="min-height:130px"></textarea>
+  <button class="btn primary" id="fb-send">Senden</button>
+  <button class="btn ghost" id="fb-cancel">Abbrechen</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $=(id)=>document.getElementById(id);
+const show=(el)=>el&&el.classList.remove('hidden');
+const hide=(el)=>el&&el.classList.add('hidden');
+let toastT;
+function toast(msg,kind){const t=$('toast');t.textContent=msg;t.className='toast show'+(kind?(' '+kind):'');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3200);}
+function pad(n){return n<10?'0'+n:''+n;}
+function chf(n){const v=Number(n||0);return v.toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+const MONTHS=['','Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+async function api(path,opts){
+  const r=await fetch(path,Object.assign({credentials:'same-origin'},opts||{}));
+  if(r.status===401){throw{auth:true};}
+  let body=null;try{body=await r.json();}catch(e){}
+  if(!r.ok)throw{status:r.status,body};
+  return body;
+}
+
+let CFG=null, CUR={year:0,month:0}, selectedFile=null, lastClose=null, editingId=null, editingBeleg=null, shareData=null;
+
+/* ---------- month helpers ---------- */
+function ym(){return CUR.year+'-'+pad(CUR.month);}
+function setMonthLabel(){$('m-label').textContent=MONTHS[CUR.month]+' '+CUR.year;}
+function shiftMonth(d){let m=CUR.month+d,y=CUR.year;if(m<1){m=12;y--;}if(m>12){m=1;y++;}CUR.month=m;CUR.year=y;setMonthLabel();loadDash();}
+
+/* ---------- view switching ---------- */
+function showDash(){hide($('view-capture'));show($('view-dash'));show($('bottombar'));setMonthLabel();loadDash();}
+function showCapture(){resetForm();hide($('view-dash'));show($('view-capture'));hide($('bottombar'));}
+
+/* ---------- config + dropdowns ---------- */
+function fillSelect(sel,items,placeholder){sel.innerHTML='';if(placeholder){const o=document.createElement('option');o.value='';o.textContent=placeholder;sel.appendChild(o);}items.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});}
+async function loadConfig(){
+  CFG=await api('/api/spesen/config');
+  fillSelect($('f-kategorie'),CFG.categories,'— Kategorie —');
+  fillSelect($('f-zahlungsart'),CFG.payment_methods,'—');
+  fillSelect($('f-waehrung'),CFG.currencies);
+  fillSelect($('e-kategorie'),CFG.categories);
+  fillSelect($('e-zahlungsart'),CFG.payment_methods);
+  const ps=$('f-pauschale-code');ps.innerHTML='';
+  CFG.pauschalen.forEach(p=>{const o=document.createElement('option');o.value=p.code;o.dataset.rate=p.rate_chf;o.dataset.ph=p.is_placeholder;o.dataset.unit=p.unit;o.textContent=p.label+(p.is_placeholder?' (Tarif folgt)':(' · CHF '+chf(p.rate_chf)));ps.appendChild(o);});
+}
+
+/* ---------- dashboard ---------- */
+const KAT_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17l-2.5-1.5L13 22l-2.5-1.5L8 22l-2-1.3V2z"/><path d="M9 8h6M9 12h4"/></svg>';
+async function loadDash(){
+  try{
+    const d=await api('/api/spesen/belege?month='+ym());
+    $('k-total').textContent=chf(d.total_chf);
+    $('k-count').textContent=d.anzahl;
+    $('k-weiter').textContent=chf(d.weiter_chf);
+    if(d.kaffeekasse_chf>0){$('k-kaffee').textContent=chf(d.kaffeekasse_chf);show($('kaffee-note'));}else hide($('kaffee-note'));
+    // closed banner + lock UI
+    lastClose=d.closed?d.close:null;
+    $('closed-banner').classList.toggle('hidden',!d.closed);
+    $('btn-close-month').textContent=d.closed?'Erneut abschliessen':'Monat abschliessen';
+    // list
+    const list=$('beleg-list');list.innerHTML='';
+    if(!d.belege.length){show($('dash-empty'));}else hide($('dash-empty'));
+    d.belege.forEach(b=>{
+      const el=document.createElement('div');
+      el.className='beleg'+(b.ist_kaffeekasse?' kaffee':'');
+      const orig=(b.waehrung&&b.waehrung!=='CHF'&&b.betrag_original!=null)?(chf(b.betrag_original)+' '+b.waehrung):'';
+      let tags='';if(b.weiterverrechenbar)tags+='<span class="tag w">weiterverr.</span>';if(b.ist_kaffeekasse)tags+='<span class="tag k">Kaffeekasse</span>';
+      const title=(b.haendler||b.unterkategorie||b.kategorie||'Beleg');
+      const sub=(b.beleg_datum||'')+' · '+(b.kategorie||'')+(b.zahlungsart?(' · '+b.zahlungsart):'');
+      el.innerHTML='<div class="ic">'+KAT_ICON+'</div><div class="mid"><div class="t">'+esc(title)+tags+'</div><div class="s">'+esc(sub)+'</div></div><div class="amt"><div class="chf">'+chf(b.betrag_chf)+'</div>'+(orig?'<div class="orig">'+esc(orig)+'</div>':'')+'</div>';
+      if(!d.closed)el.addEventListener('click',()=>openEdit(b));
+      list.appendChild(el);
+    });
+  }catch(e){if(e&&e.auth)return gate();toast('Laden fehlgeschlagen',true);}
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- capture: image ---------- */
+function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function resetForm(){
+  selectedFile=null;$('beleg-form').reset();hide($('beleg-form'));show($('pick-row'));
+  hide($('thumb'));hide($('pdf-chip'));hide($('ocrbar'));hide($('manual-chf-wrap'));hide($('fx-hint'));
+  $('f-datum').value=todayISO();$('f-pauschale').checked=false;togglePauschale();
+}
+async function downscale(file,max){
+  try{
+    const bmp=await createImageBitmap(file);
+    let{width:w,height:h}=bmp;const sc=Math.min(1,max/Math.max(w,h));
+    w=Math.round(w*sc);h=Math.round(h*sc);
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    cv.getContext('2d').drawImage(bmp,0,0,w,h);
+    return await new Promise(res=>cv.toBlob(b=>res(b||file),'image/jpeg',0.85));
+  }catch(e){return file;}
+}
+$('pick-photo').addEventListener('click',()=>$('file-input').click());
+$('pick-none').addEventListener('click',()=>{selectedFile=null;hide($('pick-row'));hide($('thumb'));show($('beleg-form'));});
+$('file-input').addEventListener('change',async(ev)=>{
+  const f=ev.target.files[0];if(!f)return;
+  const isPdf=(f.type==='application/pdf')||/\.pdf$/i.test(f.name||'');
+  if(isPdf){
+    selectedFile=f;  // store as-is; Claude-Vision liest nur Bilder -> kein OCR
+    $('pdf-name').textContent=f.name||'Beleg.pdf';
+    show($('pdf-chip'));hide($('thumb'));hide($('ocrbar'));
+    hide($('pick-row'));show($('beleg-form'));
+    return;
+  }
+  const blob=await downscale(f,1600);
+  selectedFile=new File([blob],'beleg.jpg',{type:'image/jpeg'});
+  $('thumb').src=URL.createObjectURL(selectedFile);show($('thumb'));hide($('pdf-chip'));
+  hide($('pick-row'));show($('beleg-form'));
+  // OCR
+  show($('ocrbar'));$('ocrbar').className='ocrbar';show($('ocr-spin'));$('ocr-text').textContent='Beleg wird gelesen …';
+  try{
+    const fd=new FormData();fd.append('beleg',selectedFile,'beleg.jpg');
+    const r=await api('/api/spesen/ocr',{method:'POST',body:fd});
+    if(r&&r.ok){
+      if(r.haendler)$('f-haendler').value=r.haendler;
+      if(r.datum)$('f-datum').value=r.datum;
+      if(r.betrag!=null)$('f-betrag').value=r.betrag;
+      if(r.waehrung)$('f-waehrung').value=r.waehrung;
+      hide($('ocr-spin'));$('ocrbar').className='ocrbar ok';$('ocr-text').textContent='Ausgefüllt aus Beleg, bitte prüfen';
+      fxPreview();
+    }else{hide($('ocr-spin'));$('ocr-text').textContent='Konnte nicht gelesen werden, bitte manuell';}
+  }catch(e){if(e&&e.auth)return gate();hide($('ocr-spin'));$('ocr-text').textContent='OCR nicht verfügbar, bitte manuell';}
+});
+
+/* ---------- pauschale toggle ---------- */
+function togglePauschale(){
+  const on=$('f-pauschale').checked;
+  $('pauschale-block').classList.toggle('hidden',!on);
+  $('amount-block').classList.toggle('hidden',on);
+  if(on)pauschalePreview();
+}
+$('f-pauschale').addEventListener('change',togglePauschale);
+function pauschalePreview(){
+  const opt=$('f-pauschale-code').selectedOptions[0];if(!opt)return;
+  const ph=opt.dataset.ph==='1'||opt.dataset.ph==='true';
+  const unit=opt.dataset.unit;
+  $('menge-wrap').classList.toggle('hidden',!(unit==='pro_km'||unit==='pro_nacht'));
+  if(ph){$('pauschale-preview').innerHTML='<span style="color:var(--amber)">⚠ Tarif folgt (Regelwerk ausstehend), noch nicht speicherbar.</span>';$('beleg-save').disabled=true;}
+  else{
+    let amt=Number(opt.dataset.rate||0);const m=Number($('f-menge').value||1);
+    if(unit==='pro_km'||unit==='pro_nacht')amt=amt*m;
+    $('pauschale-preview').innerHTML='Betrag: <b>CHF '+chf(amt)+'</b>'+(amt<50?' · unter CHF 50 → Kaffeekasse':'');$('beleg-save').disabled=false;
+  }
+}
+$('f-pauschale-code').addEventListener('change',pauschalePreview);
+$('f-menge').addEventListener('input',pauschalePreview);
+
+/* ---------- FX preview ---------- */
+let fxT;
+function fxPreview(){
+  clearTimeout(fxT);fxT=setTimeout(async()=>{
+    const cur=$('f-waehrung').value,betrag=$('f-betrag').value,datum=$('f-datum').value;
+    if(!cur||cur==='CHF'||!betrag){hide($('fx-hint'));hide($('manual-chf-wrap'));return;}
+    try{
+      const r=await api('/api/spesen/convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({betrag:Number(betrag),waehrung:cur,datum})});
+      if(r.ok){$('fx-hint').innerHTML='≈ <b>CHF '+chf(r.betrag_chf)+'</b> (Kurs '+r.wechselkurs+')';show($('fx-hint'));hide($('manual-chf-wrap'));}
+      else{$('fx-hint').innerHTML='<span style="color:var(--amber)">Kein Tageskurs, bitte CHF manuell eingeben.</span>';show($('fx-hint'));show($('manual-chf-wrap'));}
+    }catch(e){if(e&&e.auth)return gate();}
+  },450);
+}
+$('f-waehrung').addEventListener('change',fxPreview);
+$('f-betrag').addEventListener('input',fxPreview);
+$('f-datum').addEventListener('change',fxPreview);
+
+/* ---------- save beleg ---------- */
+$('beleg-cancel').addEventListener('click',showDash);
+$('beleg-form').addEventListener('submit',async(ev)=>{
+  ev.preventDefault();
+  const isPauschale=$('f-pauschale').checked;
+  const fd=new FormData();
+  fd.append('datum',$('f-datum').value);
+  fd.append('kategorie',$('f-kategorie').value);
+  fd.append('zahlungsart',$('f-zahlungsart').value);
+  fd.append('projekt',$('f-projekt').value);
+  fd.append('haendler',$('f-haendler').value);
+  fd.append('notiz',$('f-notiz').value);
+  fd.append('weiterverrechenbar',$('f-weiter').checked?'true':'false');
+  if(isPauschale){
+    fd.append('art','pauschale');
+    fd.append('pauschale_code',$('f-pauschale-code').value);
+    fd.append('menge',$('f-menge').value||'1');
+  }else{
+    fd.append('art','beleg');
+    fd.append('betrag_original',$('f-betrag').value);
+    fd.append('waehrung',$('f-waehrung').value);
+    if(!$('manual-chf-wrap').classList.contains('hidden')&&$('f-betrag-chf').value)fd.append('betrag_chf',$('f-betrag-chf').value);
+    if(selectedFile)fd.append('beleg',selectedFile,selectedFile.name||'beleg.jpg');
+  }
+  const btn=$('beleg-save');btn.disabled=true;btn.textContent='Speichere …';
+  try{
+    const r=await api('/api/spesen/beleg',{method:'POST',body:fd});
+    if(r.warnung)toast(r.warnung,'warn');else toast('Beleg gespeichert ✓');
+    showDash();
+  }catch(e){
+    if(e&&e.auth)return gate();
+    const b=e&&e.body;
+    if(b&&b.need_manual_chf){show($('manual-chf-wrap'));toast('Bitte CHF-Betrag manuell eingeben','warn');}
+    else if(b&&b.fields)toast('Fehlt: '+b.fields.join(', '),'err');
+    else toast((b&&b.error)||'Fehler beim Speichern','err');
+  }finally{btn.disabled=false;btn.textContent='Beleg speichern';}
+});
+
+/* ---------- edit sheet ---------- */
+function openSheet(bg,sheet){show(bg);bg.classList.add('show');sheet.classList.add('show');}
+function closeSheet(bg,sheet){bg.classList.remove('show');sheet.classList.remove('show');setTimeout(()=>hide(bg),220);}
+function openEdit(b){
+  editingId=b.id;editingBeleg=b;
+  $('e-haendler').value=b.haendler||'';$('e-datum').value=b.beleg_datum||'';
+  $('e-betrag').value=b.betrag_chf;$('e-kategorie').value=b.kategorie||'';
+  $('e-zahlungsart').value=b.zahlungsart||'';$('e-projekt').value=b.projekt||'';
+  $('e-weiter').checked=!!b.weiterverrechenbar;
+  if(b.bild_pfad){$('edit-thumb').src='';hide($('edit-thumb'));}else hide($('edit-thumb'));
+  openSheet($('edit-bg'),$('edit-sheet'));
+}
+$('edit-bg').addEventListener('click',()=>closeSheet($('edit-bg'),$('edit-sheet')));
+$('edit-save').addEventListener('click',async()=>{
+  try{
+    await api('/api/spesen/beleg/'+editingId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      haendler:$('e-haendler').value,beleg_datum:$('e-datum').value,betrag_chf:$('e-betrag').value,
+      kategorie:$('e-kategorie').value,zahlungsart:$('e-zahlungsart').value,projekt:$('e-projekt').value,
+      weiterverrechenbar:$('e-weiter').checked})});
+    closeSheet($('edit-bg'),$('edit-sheet'));toast('Gespeichert ✓');loadDash();
+  }catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Fehler','err');}
+});
+$('edit-delete').addEventListener('click',async()=>{
+  if(!confirm('Diesen Beleg löschen?'))return;
+  try{await api('/api/spesen/beleg/'+editingId,{method:'DELETE'});closeSheet($('edit-bg'),$('edit-sheet'));toast('Gelöscht');loadDash();}
+  catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Fehler','err');}
+});
+
+/* ---------- month close ---------- */
+$('btn-new').addEventListener('click',showCapture);
+$('btn-close-month').addEventListener('click',async()=>{
+  if(!confirm('Monat '+MONTHS[CUR.month]+' '+CUR.year+' abschliessen? Es wird ein ZIP für die Buchhaltung erstellt.'))return;
+  const btn=$('btn-close-month');btn.disabled=true;btn.textContent='Erstelle …';
+  try{
+    const r=await api('/api/spesen/month-close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:ym()})});
+    lastClose={zip:r.download};
+    shareData={subject:r.email.subject,body:r.email.body,download:r.download,file:null};
+    $('res-total').textContent=chf(r.total_chf);
+    $('res-sub').textContent=r.anzahl+' Belege'+(r.summe_weiter_chf>0?(' · davon weiterverrechenbar CHF '+chf(r.summe_weiter_chf)):'');
+    $('res-mail').textContent='Betreff: '+r.email.subject+'\n\n'+r.email.body;
+    $('res-mailto').href=r.email.mailto;
+    $('res-download').onclick=()=>{window.location.href=r.download;};
+    // Web Share with the ZIP file (iOS/Android). Fetch the zip, decide if shareable.
+    try{
+      const resp=await fetch(r.download,{credentials:'same-origin'});
+      const blob=await resp.blob();
+      const file=new File([blob],r.download.split('/').pop().split('?')[0]||'Spesen.zip',{type:'application/zip'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        shareData.file=file;show($('res-share'));hide($('res-mailto'));
+      }else{ hide($('res-share'));show($('res-mailto')); }
+    }catch(e){ hide($('res-share'));show($('res-mailto')); }
+    openSheet($('res-bg'),$('res-sheet'));
+    loadDash();
+  }catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Abschluss fehlgeschlagen','err');}
+  finally{btn.disabled=false;btn.textContent='Monat abschliessen';}
+});
+$('res-bg').addEventListener('click',()=>closeSheet($('res-bg'),$('res-sheet')));
+$('res-done').addEventListener('click',()=>closeSheet($('res-bg'),$('res-sheet')));
+$('res-copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('res-mail').textContent);toast('E-Mail-Text kopiert ✓');}catch(e){toast('Kopieren nicht möglich','err');}});
+$('res-share').addEventListener('click',async()=>{
+  if(!shareData||!shareData.file){toast('ZIP herunterladen und manuell anhängen','warn');return;}
+  try{ await navigator.share({files:[shareData.file],title:shareData.subject,text:shareData.body}); }
+  catch(e){ if(e&&e.name!=='AbortError') toast('Teilen abgebrochen','warn'); }
+});
+$('redownload').addEventListener('click',()=>{window.location.href='/api/spesen/download?month='+ym();});
+$('reopen-month').addEventListener('click',async()=>{
+  if(!confirm('Monat wieder öffnen? Die Belege werden entsperrt und können wieder bearbeitet werden.'))return;
+  try{ await api('/api/spesen/month-reopen',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:ym()})});
+    toast('Monat wieder geöffnet ✓');loadDash();
+  }catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Fehler','err');}
+});
+
+/* ---------- capture back + feedback ---------- */
+$('cap-back').addEventListener('click',showDash);
+$('fb-btn').addEventListener('click',()=>{$('fb-text').value='';openSheet($('fb-bg'),$('fb-sheet'));});
+$('fb-bg').addEventListener('click',()=>closeSheet($('fb-bg'),$('fb-sheet')));
+$('fb-cancel').addEventListener('click',()=>closeSheet($('fb-bg'),$('fb-sheet')));
+$('fb-send').addEventListener('click',async()=>{
+  const text=$('fb-text').value.trim();
+  if(!text){toast('Bitte eine Nachricht eingeben',true);return;}
+  const btn=$('fb-send');btn.disabled=true;btn.textContent='Senden …';
+  try{ await api('/api/spesen/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    closeSheet($('fb-bg'),$('fb-sheet'));toast('Danke, gesendet ✓');
+  }catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Senden fehlgeschlagen','err');}
+  finally{btn.disabled=false;btn.textContent='Senden';}
+});
+
+/* ---------- month nav ---------- */
+$('m-prev').addEventListener('click',()=>shiftMonth(-1));
+$('m-next').addEventListener('click',()=>shiftMonth(1));
+
+/* ---------- boot ---------- */
+function gate(){hide($('view-dash'));hide($('view-capture'));hide($('bottombar'));hide($('fb-btn'));hide($('who'));show($('gate'));}
+async function boot(){
+  const now=new Date();CUR.year=now.getFullYear();CUR.month=now.getMonth()+1;
+  $('f-datum').value=todayISO();
+  try{
+    const me=await api('/api/spesen/whoami');
+    $('who').textContent=me.name;show($('who'));show($('fb-btn'));
+    await loadConfig();
+    hide($('gate'));showDash();
+  }catch(e){gate();}
+}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('/spesen-sw.js',{scope:'/spesen'}).catch(()=>{});}
+boot();
+</script>
+</body>
+</html>

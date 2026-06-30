@@ -1,0 +1,31 @@
+# KnowSpesen — client expense PWA (Flask/gunicorn) on the VPS.
+# Separate sibling service from cockpit: own process, own /etc/knowspesen/env, own
+# SQLite, own Caddy host. A client-app crash/OOM never takes down the cockpit ops.
+#
+# Install:
+#   sudo mkdir -p /srv/knowspesen/data /srv/knowspesen/receipts
+#   # point /srv/knowspesen/app at the same repo clone as cockpit (symlink is fine):
+#   sudo ln -s /srv/cockpit/app /srv/knowspesen/app   # OR a separate git clone
+#   sudo cp deploy/knowspesen.service /etc/systemd/system/knowspesen.service
+#   sudo cp deploy/knowspesen.env.example /etc/knowspesen/env  # then edit + chmod 600
+#   sudo chown -R paperclip:paperclip /srv/knowspesen
+#   sudo systemctl daemon-reload && sudo systemctl enable --now knowspesen
+# Deploy:  git pull && sudo systemctl restart knowspesen
+# Logs:    journalctl -u knowspesen -f
+
+[Unit]
+Description=KnowSpesen (KnowGravity expense PWA)
+After=network.target
+
+[Service]
+Type=simple
+User=paperclip
+WorkingDirectory=/srv/knowspesen/app
+EnvironmentFile=/etc/knowspesen/env
+# Reuse the cockpit venv (same deps) or create a dedicated one.
+ExecStart=/srv/cockpit/venv/bin/gunicorn api:app --bind 127.0.0.1:8083 --workers 2 --timeout 120
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

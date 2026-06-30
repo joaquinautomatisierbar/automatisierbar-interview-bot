@@ -1,0 +1,13 @@
+# Caddy site block for KnowSpesen — append to /etc/caddy/Caddyfile (same box as
+# cockpit/walkin/fitness). Caddy auto-provisions the Let's Encrypt cert once the
+# DNS A-record (knowspesen -> 187.124.188.2) resolves.
+# After editing:  sudo systemctl reload caddy
+
+knowspesen.automatisierbar.ch {
+	encode zstd gzip
+	# 12 MB receipt uploads (matches SPESEN_MAX_IMAGE_MB headroom).
+	request_body {
+		max_size 15MB
+	}
+	reverse_proxy 127.0.0.1:8083
+}
