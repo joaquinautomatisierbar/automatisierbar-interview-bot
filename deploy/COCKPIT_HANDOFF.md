@@ -50,6 +50,9 @@ branch `feat/cockpit-booking`.
 
 ---
 
+## Root routing (cockpit vs interview bot)
+The same `api.py` is the public **interview bot** on Render *and* the cockpit app on the VPS. To keep the interview bot off the booking domain's front door, the env var `COCKPIT_HOME=1` (set only in `/etc/cockpit/env`) makes the bare root `/` serve the landing page `static/cockpit-home.html`; the interview bot moves to the **unlisted** `/interview` (no login, just not linked). On Render `COCKPIT_HOME` is unset, so `/` still serves the bot. Gate: `api._cockpit_home()`.
+
 ## Infrastructure — where everything lives
 - **Live URL:** https://cockpit.automatisierbar.ch/book · health: `/health`
 - **VPS:** Hostinger `187.124.188.2` (Ubuntu 24.04), runs Caddy (also serves fitness.automatisierbar.ch).

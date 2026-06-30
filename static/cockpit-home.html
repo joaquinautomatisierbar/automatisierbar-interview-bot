@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0F0D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="robots" content="noindex">
+<title>Automatisierbar · Automatisierung, die Zeit spart</title>
+<link rel="icon" href="/static/automatisierbar-logo.svg">
+<link rel="apple-touch-icon" href="/static/automatisierbar-logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0F0D; --surface-1:#111815; --surface-2:#18211D; --surface-3:#1F2A25;
+    --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.14);
+    --text:#ECF3EF; --muted:#8A9892; --dim:#5A655F;
+    --green:#15C97A; --green-dark:#0A8F54; --green-soft:#5EE0A6; --green-glow:rgba(21,201,122,.16);
+    --radius:14px; --radius-sm:9px; --radius-pill:999px;
+    --ease:.18s cubic-bezier(.2,.6,.2,1);
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    font-family:var(--sans);background:var(--bg);color:var(--text);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    padding:max(16px,env(safe-area-inset-top)) 16px calc(40px + env(safe-area-inset-bottom));
+    background-image:radial-gradient(900px 500px at 50% -10%,rgba(21,201,122,.10),transparent 70%);
+    line-height:1.5;
+  }
+  .wrap{max-width:560px;margin:0 auto}
+
+  header{display:flex;align-items:center;gap:11px;padding:8px 2px 28px}
+  .logo{width:38px;height:38px;border-radius:10px;overflow:hidden;flex:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06),0 6px 18px var(--green-glow);display:block}
+  .logo svg{width:100%;height:100%;display:block}
+  .brand b{font-weight:700;letter-spacing:-.2px;font-size:15.5px}
+  .brand .sub{display:block;color:var(--dim);font-size:11.5px;font-weight:500;letter-spacing:.3px}
+
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:1.4px;text-transform:uppercase;
+    color:var(--green);font-weight:700;margin-bottom:12px}
+  .hero h1{font-size:27px;font-weight:700;letter-spacing:-.4px;line-height:1.18}
+  .hero p.lead{color:var(--muted);font-size:15px;margin-top:14px}
+
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface-1);border:1px solid var(--border);
+    border-radius:var(--radius-pill);padding:7px 13px;font-size:12.5px;color:var(--muted);font-weight:500}
+  .chip svg{width:14px;height:14px;color:var(--green-soft);flex:none}
+
+  .card{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);
+    padding:20px 18px;margin-top:22px}
+  .card h3{font-size:16px;font-weight:700;margin-bottom:10px}
+  .card p{color:var(--muted);font-size:14px;margin-bottom:10px}
+  .card p:last-of-type{margin-bottom:0}
+  .card .punch{color:var(--text);font-weight:600}
+
+  .btn{display:block;width:100%;margin-top:20px;font-family:var(--sans);font-size:15.5px;font-weight:700;
+    text-align:center;text-decoration:none;
+    color:#04130c;background:linear-gradient(135deg,var(--green-soft),var(--green));border:none;
+    border-radius:var(--radius-sm);padding:15px;cursor:pointer;transition:var(--ease);box-shadow:0 8px 22px var(--green-glow)}
+  .btn:hover{filter:brightness(1.04)}
+  .btn:active{transform:translateY(1px)}
+
+  footer{margin-top:30px;text-align:center;color:var(--dim);font-size:12px}
+  footer a{color:var(--muted);text-decoration:none;font-weight:600}
+  footer a:hover{color:var(--green-soft)}
+</style>
+</head>
+<body data-page="cockpit-home">
+<div class="wrap">
+  <header>
+    <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <div class="brand"><b>Automatisierbar</b><span class="sub">Automatisierung, die Zeit spart</span></div>
+  </header>
+
+  <div class="hero">
+    <div class="kicker">Für KMU in der Schweiz</div>
+    <h1>Holen Sie sich die Zeit zurück, die heute in Routinearbeit steckt.</h1>
+    <p class="lead">Wir automatisieren genau die Abläufe in Ihrem Betrieb, die sich ständig wiederholen. Sie behalten den Kopf frei für die Arbeit, die wirklich zählt.</p>
+    <div class="meta">
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Vor Ort bei Ihnen</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Unverbindlich</span>
+      <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>Kein Verkaufsgespräch</span>
+    </div>
+  </div>
+
+  <section class="card">
+    <h3>Kostenloses Erstgespräch</h3>
+    <p>In 30 bis 40 Minuten analysieren wir gemeinsam einen konkreten Arbeitsablauf bei Ihnen, einen, der regelmässig Zeit frisst und immer gleich abläuft.</p>
+    <p>Am Ende wissen Sie genau, wo sich Automatisierung für Sie rechnet und wie viel Zeit dabei pro Woche frei wird.</p>
+    <p class="punch">Eine konkrete Analyse Ihres Ablaufs, keine Verkaufsshow.</p>
+    <a class="btn" href="/book">Termin buchen →</a>
+  </section>
+
+  <footer>
+    <a href="https://automatisierbar.ch" rel="noopener">automatisierbar.ch</a>
+  </footer>
+</div>
+</body>
+</html>

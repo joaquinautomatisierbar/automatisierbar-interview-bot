@@ -74,6 +74,14 @@ def _cockpit_auth_ok() -> bool:
     return bool(session.get("cockpit_auth")) or _auth_ok()
 
 
+def _cockpit_home() -> bool:
+    """True only on the cockpit VPS deployment (COCKPIT_HOME=1 in /etc/cockpit/env).
+    There the bare root serves the public landing page and the interview bot lives at
+    /interview. On Render this is unset, so the root keeps serving the interview bot.
+    Read per-request so it stays unit-testable (monkeypatch the env var)."""
+    return bool(os.environ.get("COCKPIT_HOME"))
+
+
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
@@ -118,6 +126,18 @@ def generate_pdf_route():
 
 @app.route("/")
 def index():
+    # On the cockpit VPS deployment the bare domain is the public booking front door,
+    # so it serves a small landing page; the interview bot moves to /interview (below).
+    # On Render (COCKPIT_HOME unset) the root keeps serving the interview bot.
+    if _cockpit_home():
+        return send_from_directory("static", "cockpit-home.html")
+    return send_from_directory("static", "index.html")
+
+
+@app.route("/interview")
+def interview_page():
+    # Stable, unlisted URL for the interview bot. On the cockpit domain this is the
+    # only way in (not linked from the landing); on Render it's a harmless alias of /.
     return send_from_directory("static", "index.html")
 
 
