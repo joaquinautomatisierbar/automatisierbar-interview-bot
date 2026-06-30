@@ -7,3 +7,11 @@ cockpit.automatisierbar.ch {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:8082
 }
+
+# Walk-in mode PWA — same Flask app, separate host so it installs as its own
+# home-screen app with a clean service-worker scope. Needs DNS A-record
+# walkin -> 187.124.188.2. After editing:  sudo systemctl reload caddy
+walkin.automatisierbar.ch {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8082
+}

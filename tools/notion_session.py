@@ -1338,6 +1338,87 @@ def create_appointment(appointments_db_id: str, fields: dict) -> dict:
     return {"id": page["id"], "url": page.get("url", "")}
 
 
+# --- Walk-in mode: 💡-callout capture + voice-memo knowledge base ---------------
+
+# The gray 💡-callout on the Operations Cockpit page. Walk-in lines live as child
+# paragraph blocks of this callout; /walkinmail reads them, drafts a mail, and marks
+# each line " ✅ {date}". A freshly appended line MUST be unmarked so the skill picks
+# it up. Overridable for sandbox testing.
+WALKIN_CALLOUT_BLOCK_ID = os.environ.get(
+    "WALKIN_CALLOUT_BLOCK_ID", "389bebb0c2f9804eb2bef28e599c0a68")
+
+
+def append_walkin_callout_line(line: str, block_id: str = "") -> bool:
+    """Append one unmarked walk-in line as a paragraph child of the 💡-callout, so the
+    existing /walkinmail + /walkinleadsconvert skills keep working unchanged. Returns
+    True on success, False if Notion isn't configured or the append fails (best-effort:
+    a callout failure must never block the Leads-DB write)."""
+    if not available():
+        return False
+    try:
+        _append_blocks(block_id or WALKIN_CALLOUT_BLOCK_ID, [{
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": _rt(line)},
+        }])
+        return True
+    except Exception as e:
+        print(f"[notion] append_walkin_callout_line failed: {e}")
+        return False
+
+
+def create_walkin_kb_db(parent_page_id: str) -> str:
+    """One-time bootstrap: create the 'Walk-in Knowledge Base' DB under parent_page_id,
+    OWNED BY THE PROD INTEGRATION (so the transcription cron can write to it without a
+    manual share). One row per transcribed voice memo — the corpus the appointment-setter
+    playbook is later synthesised from. Returns the new DB id (persist as WALKIN_KB_DB_ID).
+    `Status` is a `select` (the Notion API can't create `status`-type properties)."""
+    if not available():
+        raise RuntimeError("NOTION_API_KEY not set")
+    body = {
+        "parent": {"type": "page_id", "page_id": parent_page_id},
+        "title": [{"type": "text", "text": {"content": "Walk-in Knowledge Base"}}],
+        "properties": {
+            "Name": {"title": {}},
+            "Transcript": {"rich_text": {}},
+            "Recorded By": {"select": {"options": [
+                {"name": "Tej", "color": "purple"},
+                {"name": "Joaquin", "color": "green"},
+                {"name": "Nico", "color": "blue"},
+                {"name": "Patrik", "color": "yellow"},
+            ]}},
+            "Recorded At": {"date": {}},
+            "Duration (s)": {"number": {}},
+            "Audio Filename": {"rich_text": {}},
+            "Status": {"select": {"options": [
+                {"name": "pending", "color": "yellow"},
+                {"name": "transcribed", "color": "green"},
+                {"name": "error", "color": "red"},
+            ]}},
+            "Topic": {"select": {"options": [
+                {"name": "Opener", "color": "blue"},
+                {"name": "Einwand", "color": "orange"},
+                {"name": "Abschluss", "color": "green"},
+                {"name": "Allgemein", "color": "default"},
+            ]}},
+        },
+    }
+    r = requests.post(
+        "https://api.notion.com/v1/databases",
+        headers=_notion_headers(),
+        json=body,
+        timeout=30,
+    )
+    r.raise_for_status()
+    return r.json()["id"]
+
+
+def create_walkin_kb_row(kb_db_id: str, fields: dict) -> str:
+    """Create one transcribed-memo row in the Walk-in Knowledge Base DB. `fields` is a
+    {prop_name: value} dict (schema-aware formatting). Returns the new page id."""
+    props = build_props(kb_db_id, fields)
+    return _create_page(kb_db_id, props)["id"]
+
+
 # --- Team claim flow (Phase 2): list the booking queue + claim/unclaim ----------
 
 TEAM_MEMBERS = ("Tej", "Joaquin", "Nico", "Patrik")

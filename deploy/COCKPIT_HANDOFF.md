@@ -94,6 +94,34 @@ ssh cockpit-vps 'nano /etc/cockpit/env && systemctl restart cockpit'
 curl -s https://cockpit.automatisierbar.ch/api/book/slots | head
 ```
 
+## Walk-in mode (Phase 1) — field PWA on the same app
+
+New installable PWA at **walkin.automatisierbar.ch** (same Flask app, separate Caddy host + PWA scope). Two functions: **Neuer Lead** (capture → Leads DB row *and* a 💡-callout line, so `/walkinmail` + `/walkinleadsconvert` keep working) and **Sprachmemo** (record → VPS disk → daily Gemini transcription → "Walk-in Knowledge Base" Notion DB). Auth = the existing team magic-link (`COCKPIT_TEAM_TOKENS`, same 4 members) — no new tokens.
+
+Routes: `GET /walkin` · `GET /walkin-sw.js` · `GET /walkin.webmanifest` · `GET /api/walkin/whoami` · `POST /api/walkin/lead` · `POST /api/walkin/memo` · `GET /api/walkin/memos` · `POST /api/walkin/setup-kb-db`.
+
+**One-time setup on the VPS:**
+```bash
+# 1) DNS A-record: walkin -> 187.124.188.2  (then Caddy auto-issues TLS)
+# 2) Caddy host block (deploy/Caddyfile.cockpit already has it):
+ssh cockpit-vps 'nano /etc/caddy/Caddyfile && systemctl reload caddy'
+# 3) Env (in /etc/cockpit/env): GEMINI_API_KEY=...  WALKIN_MEMO_DIR=/srv/cockpit/voice_memos
+#    WALKIN_TRANSCRIBE_MAX_PER_DAY=10  WALKIN_MAX_AUDIO_MB=20   (see cockpit.env.example)
+# 4) Memo dir:
+ssh cockpit-vps 'sudo -u paperclip mkdir -p /srv/cockpit/voice_memos'
+# 5) Deploy code (git pull + restart), then create the KB DB ONCE:
+curl -s -X POST https://cockpit.automatisierbar.ch/api/walkin/setup-kb-db -H "X-API-Key: $PDF_API_KEY"
+#    -> copy database_id into WALKIN_KB_DB_ID in /etc/cockpit/env, then restart cockpit.
+# 6) Daily transcription cron (as paperclip):
+#      CRON_TZ=Europe/Zurich
+#      0 7 * * * /srv/cockpit/app/tools/scheduled/walkin-transcribe.sh
+# 7) Each team member opens https://walkin.automatisierbar.ch/walkin?k=<their token> once → Add to Home Screen.
+```
+
+**Prereq:** `GEMINI_API_KEY` (free Google AI Studio key). Until set, the cron no-ops with a logged warning; capture + upload still work. Transcription log: `/srv/cockpit/app/.tmp/walkin-transcribe.log`.
+
+**First real lead write halts to Telegram** (live Leads DB + live callout are production) — see `workflows/walkin_mode.md`.
+
 ## Gotchas we already solved (don't re-debug)
 - **SSH:** root key auth needed; key went into `/root/.ssh/authorized_keys2` (the main `authorized_keys` had a glued-key newline issue). `PermitRootLogin` set via `/etc/ssh/sshd_config.d/99-cockpit.conf`.
 - **`NOTION_API_KEY` is NOT in local `.env`** — it lives on Render; we pulled it via the Render API and put it in `/etc/cockpit/env`.
