@@ -143,6 +143,10 @@ def generate_pdf_route():
 
 @app.route("/")
 def index():
+    # The walk-in PWA has its own host (walkin.automatisierbar.ch); send its bare
+    # domain straight to the app instead of the cockpit landing page.
+    if request.host.split(":")[0].startswith("walkin"):
+        return redirect("/walkin")
     # On the cockpit VPS deployment the bare domain is the public booking front door,
     # so it serves a small landing page; the interview bot moves to /interview (below).
     # On Render (COCKPIT_HOME unset) the root keeps serving the interview bot.
