@@ -46,9 +46,26 @@ MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB hard cap per uploaded file
 MAX_EXTRAS_CHARS = 8000   # sidebar notes pad cap
 MAX_PROCESS_STEPS = 30    # sane upper bound for the A→Z walkthrough
 
-# Flask-level request body cap. Slightly above per-file cap to leave room for
-# multipart overhead. Anything larger fails fast at the WSGI layer.
-app.config["MAX_CONTENT_LENGTH"] = MAX_ATTACHMENT_BYTES + 64 * 1024
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+# Walk-in voice memos can be larger than survey attachments. Cap at the Gemini
+# inline limit (~20 MB); the upload route enforces this per-file too.
+WALKIN_MAX_AUDIO_MB = _env_int("WALKIN_MAX_AUDIO_MB", 20)
+WALKIN_MAX_AUDIO_BYTES = WALKIN_MAX_AUDIO_MB * 1024 * 1024
+WALKIN_KB_DB_ID = os.environ.get("WALKIN_KB_DB_ID", "")
+
+# Flask-level request body cap. Above the larger of the per-file caps to leave
+# room for multipart overhead. Anything larger fails fast at the WSGI layer.
+app.config["MAX_CONTENT_LENGTH"] = max(
+    MAX_ATTACHMENT_BYTES + 64 * 1024,
+    WALKIN_MAX_AUDIO_BYTES + 256 * 1024,
+)
 
 SESSION_ID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
@@ -3594,6 +3611,165 @@ def cockpit_setup_appointments_db():
                         "next_step": f"Set COCKPIT_APPOINTMENTS_DB_ID={db_id}"})
     except Exception as e:
         app.logger.error("setup-appointments-db error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Walk-in mode (Phase 1): field PWA — capture leads + record voice memos.
+# Served at walkin.automatisierbar.ch (same app, own Caddy host + PWA scope).
+# Reuses the team magic-link auth (same COCKPIT_TEAM_TOKENS, same 4 members).
+# ---------------------------------------------------------------------------
+
+@app.route("/walkin", methods=["GET"])
+def walkin_page():
+    # Magic link: ?k=<token> sets the session identity then redirects to a clean
+    # /walkin (keeps the token out of history + the installed PWA scope).
+    tok = request.args.get("k")
+    if tok:
+        name = _team_tokens().get(tok)
+        if name:
+            session["team_member"] = name
+            session.permanent = True
+        return redirect("/walkin")
+    return send_from_directory("static", "walkin.html")
+
+
+@app.route("/walkin-sw.js", methods=["GET"])
+def walkin_sw():
+    resp = send_from_directory("static", "walkin-sw.js")
+    resp.headers["Content-Type"] = "application/javascript"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/walkin.webmanifest", methods=["GET"])
+def walkin_manifest():
+    return send_from_directory("static", "walkin.webmanifest")
+
+
+@app.route("/api/walkin/whoami", methods=["GET"])
+def walkin_whoami():
+    who = _team_member()
+    if not who:
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"name": who, "members": list(COCKPIT_TEAM_MEMBERS)})
+
+
+@app.route("/api/walkin/lead", methods=["POST"])
+def walkin_create_lead():
+    """Capture a walk-in: create/expand a Leads-DB row (tagged WALK IN BUT NO
+    BAMFAM) AND append an unmarked line to the 💡-callout so /walkinmail and
+    /walkinleadsconvert keep working. Each write is best-effort + isolated."""
+    who = _team_member()
+    if not who:
+        return jsonify({"error": "Unauthorized"}), 401
+    p = request.get_json(silent=True) or {}
+
+    import walkin_capture as _wc
+    bad = _wc.validate_lead_payload(p)
+    if bad:
+        return jsonify({"error": "Pflichtfelder fehlen oder ungültig", "fields": bad}), 400
+    walkin_date = (p.get("walkin_date") or "").strip() or _now_local().date().isoformat()
+
+    import notion_session as _ns
+    if not _ns.available():
+        return jsonify({"error": "notion not configured"}), 503
+
+    result = {"ok": True, "lead_id": None, "expanded": False, "callout": False, "warnings": []}
+
+    # (a) Leads DB — dedup by email/phone, then expand (empty-only) or create.
+    try:
+        fields = _wc.build_lead_fields(p, walkin_date)
+        existing = _ns.find_lead_by_email_or_phone(
+            email=fields.get("email", ""), phone=fields.get("phone", ""))
+        if existing:
+            result["lead_id"] = _ns.expand_lead(existing, fields)
+            result["expanded"] = True
+        else:
+            result["lead_id"] = _ns.create_inbound_lead(fields)
+        # Paste the verbatim notes onto the lead page body (1:1 traceability).
+        _ns.append_booking_note(
+            result["lead_id"], f"Walk-In Notiz ({walkin_date})",
+            [(p.get("notes") or "").strip(), f"Erfasst von {who} · Walk-in mode"])
+    except Exception as e:
+        app.logger.error("walkin lead write failed: %s", e)
+        result["warnings"].append("lead_write_failed")
+
+    # (b) 💡-callout line — drives the existing mail/convert skills.
+    try:
+        result["callout"] = _ns.append_walkin_callout_line(_wc.build_callout_line(p))
+        if not result["callout"]:
+            result["warnings"].append("callout_append_failed")
+    except Exception as e:
+        app.logger.error("walkin callout append failed: %s", e)
+        result["warnings"].append("callout_append_failed")
+
+    if result["lead_id"] is None and not result["callout"]:
+        return jsonify({"error": "Speichern fehlgeschlagen", **result}), 500
+    return jsonify(result)
+
+
+@app.route("/api/walkin/memo", methods=["POST"])
+def walkin_upload_memo():
+    """Accept a recorded voice memo (multipart), store it on the VPS with a pending
+    sidecar. The daily cron transcribes it later — the app never plays it back."""
+    who = _team_member()
+    if not who:
+        return jsonify({"error": "Unauthorized"}), 401
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "file field missing (multipart/form-data)"}), 400
+    content = f.read()
+    if not content:
+        return jsonify({"error": "leere Datei"}), 400
+    if len(content) > WALKIN_MAX_AUDIO_BYTES:
+        return jsonify({"error": f"Audio zu gross (max {WALKIN_MAX_AUDIO_MB} MB)"}), 413
+
+    import walkin_capture as _wc
+    try:
+        sidecar = _wc.save_voice_memo(
+            recorder=who, content=content, mime=(f.mimetype or ""),
+            orig_filename=(f.filename or ""), duration_sec=request.form.get("duration_sec"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 415
+    except Exception as e:
+        app.logger.error("walkin memo save failed: %s", e)
+        return jsonify({"error": "Speichern fehlgeschlagen"}), 500
+    return jsonify({"ok": True, "memo": sidecar["audio"], "status": "pending"})
+
+
+@app.route("/api/walkin/memos", methods=["GET"])
+def walkin_list_memos():
+    """Read-only status list so the PWA can confirm memos landed + show counts."""
+    if not _team_member():
+        return jsonify({"error": "Unauthorized"}), 401
+    import walkin_capture as _wc
+    try:
+        return jsonify({"memos": _wc.list_memos_compact(), **_wc.memo_stats()})
+    except Exception as e:
+        app.logger.error("walkin list memos failed: %s", e)
+        return jsonify({"error": "list failed"}), 500
+
+
+@app.route("/api/walkin/setup-kb-db", methods=["POST"])
+def walkin_setup_kb_db():
+    """One-time (operator only): create the Walk-in Knowledge Base DB (owned by the
+    prod integration). Returns the id to set as WALKIN_KB_DB_ID."""
+    if not _cockpit_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    parent = (data.get("parent_page_id") or COCKPIT_PARENT_PAGE_ID).replace("-", "")
+    if len(parent) != 32:
+        return jsonify({"error": "parent_page_id must be a 32-char Notion page ID"}), 400
+    formatted = f"{parent[0:8]}-{parent[8:12]}-{parent[12:16]}-{parent[16:20]}-{parent[20:32]}"
+    try:
+        import notion_session as _ns
+        db_id = _ns.create_walkin_kb_db(formatted)
+        return jsonify({"ok": True, "database_id": db_id,
+                        "next_step": f"Set WALKIN_KB_DB_ID={db_id}"})
+    except Exception as e:
+        app.logger.error("setup-walkin-kb-db error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
