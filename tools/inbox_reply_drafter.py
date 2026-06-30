@@ -44,8 +44,9 @@ import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+import html as _htmlmod
 from email.header import decode_header, make_header
-from email.utils import parseaddr
+from email.utils import parseaddr, parsedate_to_datetime
 
 import requests
 
@@ -190,6 +191,45 @@ def strip_prose_dashes(text: str) -> str:
     t = t.replace("—", ", ")   # any leftover em dash
     t = t.replace("–", "-")    # any leftover en dash -> hyphen
     return t
+
+
+def _quote_attribution(p: dict, language: str) -> str:
+    """The 'Am <date> schrieb <sender>:' line that introduces the quoted original."""
+    raw = (p.get("date") or "").strip()
+    when = raw
+    try:
+        dt = parsedate_to_datetime(raw)
+        if dt is not None:
+            when = dt.strftime("%d.%m.%Y, %H:%M")
+    except Exception:
+        pass
+    who = (p.get("from_name") or "").strip()
+    addr = (p.get("from_email") or "").strip()
+    sender = f"{who} <{addr}>" if (who and who != addr) else (addr or who)
+    return {
+        "de": f"Am {when} schrieb {sender}:",
+        "en": f"On {when}, {sender} wrote:",
+        "fr": f"Le {when}, {sender} a écrit :",
+    }.get(language, f"Am {when} schrieb {sender}:")
+
+
+def build_quote(p: dict, language: str = "de", max_chars: int = 3000):
+    """Build the quoted-original block (plain '> ' prefixed + HTML blockquote) so the reply
+    reads as a proper reply with history. Returns ("", "") if there's no original body."""
+    orig = (p.get("body_text") or "").strip()
+    if not orig:
+        return "", ""
+    truncated = len(orig) > max_chars
+    if truncated:
+        orig = orig[:max_chars].rstrip()
+    lines = orig.splitlines()
+    attrib = _quote_attribution(p, language)
+    text = attrib + "\n" + "\n".join("> " + ln for ln in lines) + ("\n> [...]" if truncated else "")
+    body_html = "<br />\n".join(_htmlmod.escape(ln) for ln in lines) + ("<br />\n&gt; [...]" if truncated else "")
+    html = (f'<br />\n<div style="color:rgb(12,20,16)">{_htmlmod.escape(attrib)}</div>\n'
+            f'<blockquote style="margin:0;padding-left:1ex;border-left:2px solid #ccc;color:#555">'
+            f'{body_html}</blockquote>\n')
+    return text, html
 
 
 def _format_slot_label(iso: str) -> str:
@@ -465,6 +505,7 @@ def run(*, dry_run=False, max_per_run=DEFAULT_MAX_PER_RUN, max_scan=DEFAULT_MAX_
             subject = (reply.get("subject") or "").strip()
             if not _RE_PREFIX.match(subject):
                 subject = build_re_subject(p["subject"])
+            quote_text, quote_html = build_quote(p, cls["reply_language"])
             draft = {
                 "company": (lead.get("firma") if lead else "") or "",
                 "to": pick_to_address(p),
@@ -473,7 +514,8 @@ def run(*, dry_run=False, max_per_run=DEFAULT_MAX_PER_RUN, max_scan=DEFAULT_MAX_
             }
             msg = build_message(draft, from_addr, signature=sig,
                                 in_reply_to=mid or None,
-                                references=build_references(p) or None)
+                                references=build_references(p) or None,
+                                quote_text=quote_text or None, quote_html=quote_html or None)
             tag = (f"[cat={cls['category']} lang={cls['reply_language']} "
                    f"conf={cls['confidence']:.2f} lead={'y' if lead else 'n'} slots={len(slots)}]")
             if dry_run:

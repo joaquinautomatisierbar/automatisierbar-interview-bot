@@ -97,7 +97,7 @@ def _body_to_html(body):
 
 
 def build_message(draft, from_addr, signature=None, msgid=None, cc=None,
-                  in_reply_to=None, references=None):
+                  in_reply_to=None, references=None, quote_text=None, quote_html=None):
     """Build a UTF-8 EmailMessage. Empty/absent `to` => no To header (An: leer).
 
     `cc` (or a per-draft `cc`) adds a Cc header — walk-in drafts always Cc the team (tej@).
@@ -108,7 +108,11 @@ def build_message(draft, from_addr, signature=None, msgid=None, cc=None,
 
     `in_reply_to` / `references` (or per-draft keys of the same name) set the RFC 5322 threading
     headers so a reply draft slots into the original conversation in the mail client. Both default
-    to None (no headers) — walk-in drafts are new threads and never pass them."""
+    to None (no headers) — walk-in drafts are new threads and never pass them.
+
+    `quote_text` / `quote_html` (or per-draft keys) append the quoted original BELOW the
+    signature (standard reply layout: reply text -> signature -> quoted history), so the draft
+    reads as a proper reply, not a fresh message. None => no quote (walk-in drafts)."""
     msg = EmailMessage()
     msg["From"] = from_addr
     to = (draft.get("to") or "").strip()
@@ -133,14 +137,19 @@ def build_message(draft, from_addr, signature=None, msgid=None, cc=None,
     if company:
         msg["X-Walkin-Company"] = company
     body = draft.get("body", "")
+    qt = (draft.get("quote_text") if draft.get("quote_text") is not None else quote_text) or ""
+    qh = (draft.get("quote_html") if draft.get("quote_html") is not None else quote_html) or ""
     sig_html = (signature or {}).get("html") if signature else None
     sig_text = (signature or {}).get("text") if signature else None
     if sig_html or sig_text:
-        msg.set_content(body + "\n\n" + (sig_text or ""), subtype="plain", charset="utf-8")
-        msg.add_alternative(_body_to_html(body) + (sig_html or ""),
+        plain = body + "\n\n" + (sig_text or "")
+        if qt:
+            plain += "\n\n" + qt
+        msg.set_content(plain, subtype="plain", charset="utf-8")
+        msg.add_alternative(_body_to_html(body) + (sig_html or "") + qh,
                             subtype="html", charset="utf-8")
     else:
-        msg.set_content(body, subtype="plain", charset="utf-8")
+        msg.set_content(body + (("\n\n" + qt) if qt else ""), subtype="plain", charset="utf-8")
     return msg
 
 
@@ -612,6 +621,23 @@ def cmd_selftest():
     raw_long = message_bytes(m_long)
     check("langes In-Reply-To bleibt roh (nicht kodiert)",
           long_id.encode() in raw_long and b"In-Reply-To: =?" not in raw_long)
+
+    # Quoted original appended AFTER the signature (proper reply layout: body < sig < quote)
+    m_q = build_message({"to": "a@b.ch", "subject": "Re: X", "body": "Meine Antwort."},
+                        "joaquin@automatisierbar.ch", signature=SIG, msgid="<r7@automatisierbar.ch>",
+                        quote_text="Am 30.06.2026 schrieb Y:\n> Original",
+                        quote_html="<blockquote>Original</blockquote>")
+    plain_q = next(p for p in m_q.iter_parts() if p.get_content_type() == "text/plain").get_content()
+    html_q = next(p for p in m_q.iter_parts() if p.get_content_type() == "text/html").get_content()
+    check("Quote: Reihenfolge body < signatur < quote (plain)",
+          plain_q.index("Meine Antwort.") < plain_q.index("Joaquin Gamonal") < plain_q.index("> Original"))
+    check("Quote: html enthält blockquote nach Signatur",
+          "<blockquote>Original</blockquote>" in html_q
+          and html_q.index("Joaquin Gamonal") < html_q.index("<blockquote>"))
+    m_noq = build_message({"to": "a@b.ch", "subject": "s", "body": "x"}, "joaquin@automatisierbar.ch",
+                          signature=SIG)
+    plain_noq = next(p for p in m_noq.iter_parts() if p.get_content_type() == "text/plain").get_content()
+    check("Quote: ohne quote kein Zitat", "&gt;" not in plain_noq and "> " not in plain_noq)
 
     # _body_to_html: linkify + <br />
     h = _body_to_html("Zeile1\nhttps://cockpit.automatisierbar.ch/book")

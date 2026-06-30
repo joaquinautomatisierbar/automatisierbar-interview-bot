@@ -122,6 +122,20 @@ check("dash: keeps compound hyphen", "30-Minuten-Termin" in ird.strip_prose_dash
 check("dash: range en-dash -> hyphen", ird.strip_prose_dashes("30–60") == "30-60")
 
 
+# ---- build_quote (proper reply with quoted history) ------------------------
+
+qp = {"body_text": "Hallo Joaquin\nWie besprochen.", "from_name": "Anna Müller",
+      "from_email": "anna@kunde.ch", "date": "Mon, 30 Jun 2026 14:00:00 +0200"}
+qt, qh = ird.build_quote(qp, "de")
+check("quote: de attribution", qt.startswith("Am 30.06.2026, 14:00 schrieb Anna Müller <anna@kunde.ch>:"))
+check("quote: lines prefixed >", "> Hallo Joaquin" in qt and "> Wie besprochen." in qt)
+check("quote: html blockquote", "<blockquote" in qh and "Hallo Joaquin" in qh)
+check("quote: en attribution", ird.build_quote(qp, "en")[0].startswith("On 30.06.2026, 14:00, Anna Müller <anna@kunde.ch> wrote:"))
+check("quote: empty original -> empty", ird.build_quote({"body_text": ""}, "de") == ("", ""))
+qt_long, _ = ird.build_quote({"body_text": "x" * 5000, "from_email": "a@b.ch", "date": ""}, "en")
+check("quote: long original truncated", "[...]" in qt_long and len(qt_long) < 4000)
+
+
 # ---- slot formatting --------------------------------------------------------
 
 label = ird._format_slot_label("2026-07-01T14:00:00+02:00")
