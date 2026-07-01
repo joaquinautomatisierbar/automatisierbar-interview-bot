@@ -81,6 +81,22 @@ def _clip(c: canvas.Canvas, text: str, width: float, font: str, size: float) -> 
     return text + ell
 
 
+def _wrap(c: canvas.Canvas, text: str, width: float, font: str, size: float) -> list:
+    """Greedy word-wrap into lines that each fit `width`."""
+    words = (text or "").split()
+    lines, cur = [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if c.stringWidth(trial, font, size) <= width or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines or [""]
+
+
 def _header_band(c: canvas.Canvas, d: dict):
     c.setFillColor(NAVY)
     c.rect(0, PAGE_H - 96, PAGE_W, 96, fill=1, stroke=0)
@@ -274,6 +290,48 @@ def generate_spesen_pdf(month_data: dict) -> str:
         c.setFillColor(GREEN)
         c.setFont("Helvetica-Bold", 9.5)
         c.drawRightString(PAGE_W - MARGIN_X, y - 2, "Summe weiterverrechenbar: CHF " + chf(d.get("summe_weiter_chf")))
+        y -= 14
+
+    # --- Kontroll-Bestätigung (typed attestation, name + timestamp) ---
+    attest = d.get("attest") or {}
+    if attest.get("text"):
+        y -= 22
+        if y < BOTTOM + 70:
+            _footer(c, page_no)
+            c.showPage()
+            page_no += 1
+            y = TOP
+        c.setStrokeColor(LINE)
+        c.setLineWidth(0.5)
+        c.line(MARGIN_X, y, PAGE_W - MARGIN_X, y)
+        y -= 15
+        c.setFillColor(NAVY)
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(MARGIN_X, y, "Bestätigung")
+        y -= 15
+        c.setFillColor(INK)
+        c.setFont("Helvetica-Oblique", 9)
+        for line in _wrap(c, "«" + attest["text"] + "»", PAGE_W - 2 * MARGIN_X, "Helvetica-Oblique", 9):
+            if y < BOTTOM + 14:  # robust to any future (longer) attestation wording
+                _footer(c, page_no)
+                c.showPage()
+                page_no += 1
+                y = TOP
+                c.setFillColor(INK)
+                c.setFont("Helvetica-Oblique", 9)
+            c.drawString(MARGIN_X, y, line)
+            y -= 13
+        y -= 3
+        if y < BOTTOM + 14:
+            _footer(c, page_no)
+            c.showPage()
+            page_no += 1
+            y = TOP
+        c.setFillColor(MUTED)
+        c.setFont("Helvetica", 9)
+        _von = attest.get("von", "")
+        _am = attest.get("am", "")
+        c.drawString(MARGIN_X, y, f"{_von}   ·   {_am}".strip(" ·"))
 
     _footer(c, page_no)
     c.save()

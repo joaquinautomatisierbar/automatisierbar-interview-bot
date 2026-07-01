@@ -40,6 +40,24 @@ check("Pauschale ohne Code erkannt", "pauschale_code" in capture.validate_beleg_
 check("Pauschale mit Code ok",
       capture.validate_beleg_payload({**paus, "pauschale_code": "mittagessen_kunde"}) == [])
 
+# --- parse_amount (locale-tolerant; the <1 CHF / comma bug) ------------------
+check("parse 0,50 (Komma) -> 0.5", capture.parse_amount("0,50") == 0.5)
+check("parse 0.50 -> 0.5", capture.parse_amount("0.50") == 0.5)
+check("parse 1'200.50 (Apostroph) -> 1200.5", capture.parse_amount("1'200.50") == 1200.5)
+check("parse 1'200,50 -> 1200.5", capture.parse_amount("1'200,50") == 1200.5)
+check("parse 12.5 float durch", capture.parse_amount(12.5) == 12.5)
+check("parse '  3,20 ' getrimmt", capture.parse_amount("  3,20 ") == 3.2)
+check("parse '' -> None", capture.parse_amount("") is None)
+check("parse None -> None", capture.parse_amount(None) is None)
+check("parse 'abc' -> None", capture.parse_amount("abc") is None)
+check("parse '-5' -> None (<=0)", capture.parse_amount("-5") is None)
+check("parse '0' -> None (<=0)", capture.parse_amount("0") is None)
+check("Komma-Betrag validiert OK", capture.validate_beleg_payload(
+    {"art": "beleg", "datum": "2026-06-15", "kategorie": "Mahlzeit",
+     "betrag_original": "0,50", "waehrung": "CHF"}) == [])
+check("Betrag 'abc' -> Fehler", "betrag_original" in capture.validate_beleg_payload(
+    {**good, "betrag_original": "abc"}))
+
 # --- image save --------------------------------------------------------------
 jpeg = b"\xff\xd8\xff\xe0" + b"0" * 64  # bytes don't need to be a real image to store
 base = capture.save_receipt_image("Markus", jpeg, "image/jpeg", "beleg.jpg")

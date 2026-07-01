@@ -194,8 +194,9 @@
       <div class="kpi sub"><div class="l">Belege</div><div class="v" id="k-count">0</div></div>
       <div class="kpi sub"><div class="l">Weiterverr.</div><div class="v green" id="k-weiter">0.00</div></div>
     </div>
-    <div class="card hidden" id="kaffee-note" style="padding:11px 14px;border-color:#F0DCBE;background:var(--amber-soft)">
-      <div style="font-size:12.5px;color:var(--amber);font-weight:600">☕ Kaffeekasse (unter CHF 50, nicht im ZIP): CHF <span id="k-kaffee">0.00</span></div>
+    <div class="card hidden" id="kaffee-note" style="padding:11px 14px;border-color:#F0DCBE;background:var(--amber-soft);cursor:pointer;display:flex;align-items:center;gap:8px">
+      <div style="flex:1;font-size:12.5px;color:var(--amber);font-weight:600">☕ Kaffeekasse (unter CHF 50, nicht im ZIP): CHF <span id="k-kaffee">0.00</span></div>
+      <span style="font-size:12px;color:var(--amber);font-weight:700;white-space:nowrap">Team ansehen ›</span>
     </div>
 
     <div class="belege" id="beleg-list"></div>
@@ -212,6 +213,8 @@
         <button class="btn ghost" id="reopen-month" style="margin-top:0;flex:1">Monat wieder öffnen</button>
       </div>
     </div>
+
+    <div id="storage-note" class="hidden" style="text-align:center;color:var(--dim);font-size:11.5px;margin:16px 2px 2px;line-height:1.5"></div>
   </div>
 
   <!-- ============ CAPTURE ============ -->
@@ -235,6 +238,11 @@
     </div>
 
     <form id="beleg-form" class="card hidden" autocomplete="off">
+      <!-- when correcting a saved beleg: the original receipt, always on top -->
+      <div id="form-receipt" class="hidden" style="margin-bottom:14px">
+        <img id="form-receipt-img" class="thumb hidden" alt="Beleg">
+        <a id="form-receipt-pdf" class="hidden" target="_blank" rel="noopener" style="align-items:center;gap:9px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;font-size:13px;font-weight:600;color:var(--navy);text-decoration:none">📄 Beleg-PDF öffnen</a>
+      </div>
       <div class="check" style="margin-top:0">
         <input type="checkbox" id="f-pauschale"><label for="f-pauschale">Pauschale (ohne Beleg)</label>
       </div>
@@ -249,11 +257,11 @@
       <div id="amount-block">
         <label>Betrag <span class="req">*</span></label>
         <div class="row-amt">
-          <input id="f-betrag" type="number" inputmode="decimal" step="0.05" placeholder="0.00">
+          <input id="f-betrag" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00">
           <select id="f-waehrung"></select>
         </div>
         <div class="hint hidden" id="fx-hint"></div>
-        <div id="manual-chf-wrap" class="hidden"><label>Betrag in CHF (manuell) <span class="req">*</span></label><input id="f-betrag-chf" type="number" inputmode="decimal" step="0.05" placeholder="0.00"></div>
+        <div id="manual-chf-wrap" class="hidden"><label>Betrag in CHF (manuell) <span class="req">*</span></label><input id="f-betrag-chf" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
       </div>
 
       <label>Datum <span class="req">*</span></label>
@@ -278,8 +286,14 @@
       <label>Notiz</label>
       <textarea id="f-notiz" placeholder="optional"></textarea>
 
+      <!-- only shown when correcting a saved beleg -->
+      <div id="edit-extra" class="hidden">
+        <div class="check"><input type="checkbox" id="f-kaffee"><label for="f-kaffee">Als Kaffeekasse führen (nicht im ZIP)</label></div>
+      </div>
+
       <button type="submit" class="btn primary" id="beleg-save">Beleg speichern</button>
       <button type="button" class="btn ghost" id="beleg-cancel">Abbrechen</button>
+      <button type="button" class="btn ghost hidden" id="form-delete" style="color:var(--red)">Beleg löschen</button>
     </form>
   </div>
 
@@ -299,27 +313,6 @@
   </div>
 </div>
 
-<!-- edit sheet -->
-<div class="sheet-bg" id="edit-bg"></div>
-<div class="sheet" id="edit-sheet">
-  <div class="grab"></div>
-  <h3>Beleg bearbeiten</h3>
-  <img id="edit-thumb" class="thumb hidden" alt="Beleg" style="margin-top:10px">
-  <label>Händler / Beschreibung</label><input id="e-haendler">
-  <div class="grid2">
-    <div><label>Datum</label><input id="e-datum" type="date"></div>
-    <div><label>Betrag CHF</label><input id="e-betrag" type="number" step="0.05"></div>
-  </div>
-  <div class="grid2">
-    <div><label>Kategorie</label><select id="e-kategorie"></select></div>
-    <div><label>Zahlungsart</label><select id="e-zahlungsart"></select></div>
-  </div>
-  <label>Projekt / Kunde</label><input id="e-projekt">
-  <div class="check"><input type="checkbox" id="e-weiter"><label for="e-weiter">Weiterverrechenbar</label></div>
-  <button class="btn primary" id="edit-save">Speichern</button>
-  <button class="btn ghost" id="edit-delete" style="color:var(--red)">Beleg löschen</button>
-</div>
-
 <!-- result sheet -->
 <div class="sheet-bg" id="res-bg"></div>
 <div class="sheet" id="res-sheet">
@@ -333,6 +326,33 @@
   <button class="btn ghost" id="res-copy">E-Mail-Text kopieren</button>
   <a id="res-mailto" class="btn ghost hidden" style="display:block;text-align:center;text-decoration:none">In Mail-App öffnen (Anhang manuell)</a>
   <button class="btn ghost" id="res-done">Fertig</button>
+</div>
+
+<!-- attestation (Kontroll-Bestätigung) sheet -->
+<div class="sheet-bg" id="att-bg"></div>
+<div class="sheet" id="att-sheet">
+  <div class="grab"></div>
+  <h3>Spesen bestätigen</h3>
+  <p class="hint" style="margin:0 2px 10px">Bitte tippe den folgenden Satz ab, um den Monat abzuschliessen und an die Buchhaltung weiterzuleiten:</p>
+  <div id="att-sentence" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 13px;font-size:13.5px;color:var(--ink);font-style:italic;line-height:1.55"></div>
+  <label style="margin-top:14px">Satz hier abtippen</label>
+  <textarea id="att-input" placeholder="Ich bestätige hiermit …" style="min-height:96px"></textarea>
+  <div class="hint" id="att-hint" style="margin-top:6px">&nbsp;</div>
+  <button class="btn primary" id="att-confirm" disabled>Monat abschliessen</button>
+  <button class="btn ghost" id="att-cancel">Abbrechen</button>
+</div>
+
+<!-- shared Kaffeekasse sheet -->
+<div class="sheet-bg" id="kaffee-bg"></div>
+<div class="sheet" id="kaffee-sheet">
+  <div class="grab"></div>
+  <h3>Gemeinsame Kaffeekasse</h3>
+  <p class="hint" style="margin:0 2px 4px">Alle KnowBodies · <span id="kaffee-month"></span></p>
+  <div class="result-total" style="padding:8px 0 12px"><div class="big">CHF <span id="kaffee-total">0.00</span></div><div class="sub">Total Team-Kaffeekasse (nicht im ZIP)</div></div>
+  <div id="kaffee-people" style="display:flex;flex-direction:column;gap:7px"></div>
+  <h2 style="margin:18px 2px 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Einträge</h2>
+  <div id="kaffee-items" class="belege"></div>
+  <button class="btn ghost" id="kaffee-close">Schliessen</button>
 </div>
 
 <!-- feedback sheet -->
@@ -356,6 +376,26 @@ let toastT;
 function toast(msg,kind){const t=$('toast');t.textContent=msg;t.className='toast show'+(kind?(' '+kind):'');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),3200);}
 function pad(n){return n<10?'0'+n:''+n;}
 function chf(n){const v=Number(n||0);return v.toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2});}
+// Locale-tolerant amount parse (mirror of tools/spesen/capture.parse_amount): accepts
+// "0,50", "1'200.50", "12.5" -> Number > 0, or null. Fixes the "<1 CHF / enter a valid
+// number" bug where a comma decimal made <input type=number> reject the value.
+function parseAmount(v){
+  if(v==null)return null;
+  let s=String(v).trim();if(!s)return null;
+  s=s.replace(/[\s'’′]/g,'').replace(/chf/ig,'');
+  if(s.indexOf(',')>=0&&s.indexOf('.')>=0)s=s.replace(/,/g,'');
+  else s=s.replace(',','.');
+  const f=parseFloat(s);
+  return (isFinite(f)&&f>0)?f:null;
+}
+const attNorm=(s)=>String(s==null?'':s).trim().toLowerCase().replace(/\s+/g,' ');
+function relTime(iso){
+  if(!iso)return null;const t=new Date(iso);if(isNaN(t))return null;
+  const mins=Math.floor((Date.now()-t.getTime())/60000);
+  if(mins<60)return 'vor '+Math.max(1,mins)+' Min';
+  const h=Math.floor(mins/60);if(h<24)return 'vor '+h+' h';
+  const dd=Math.floor(h/24);return 'vor '+dd+' Tag'+(dd>1?'en':'');
+}
 const MONTHS=['','Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
 async function api(path,opts){
@@ -374,7 +414,7 @@ function setMonthLabel(){$('m-label').textContent=MONTHS[CUR.month]+' '+CUR.year
 function shiftMonth(d){let m=CUR.month+d,y=CUR.year;if(m<1){m=12;y--;}if(m>12){m=1;y++;}CUR.month=m;CUR.year=y;setMonthLabel();loadDash();}
 
 /* ---------- view switching ---------- */
-function showDash(){hide($('view-capture'));show($('view-dash'));show($('bottombar'));setMonthLabel();loadDash();}
+function showDash(){editingId=null;editingBeleg=null;hide($('view-capture'));show($('view-dash'));show($('bottombar'));setMonthLabel();loadDash();}
 function showCapture(){resetForm();hide($('view-dash'));show($('view-capture'));hide($('bottombar'));}
 
 /* ---------- config + dropdowns ---------- */
@@ -384,8 +424,6 @@ async function loadConfig(){
   fillSelect($('f-kategorie'),CFG.categories,'— Kategorie —');
   fillSelect($('f-zahlungsart'),CFG.payment_methods,'—');
   fillSelect($('f-waehrung'),CFG.currencies);
-  fillSelect($('e-kategorie'),CFG.categories);
-  fillSelect($('e-zahlungsart'),CFG.payment_methods);
   const ps=$('f-pauschale-code');ps.innerHTML='';
   CFG.pauschalen.forEach(p=>{const o=document.createElement('option');o.value=p.code;o.dataset.rate=p.rate_chf;o.dataset.ph=p.is_placeholder;o.dataset.unit=p.unit;o.textContent=p.label+(p.is_placeholder?' (Tarif folgt)':(' · CHF '+chf(p.rate_chf)));ps.appendChild(o);});
 }
@@ -399,6 +437,11 @@ async function loadDash(){
     $('k-count').textContent=d.anzahl;
     $('k-weiter').textContent=chf(d.weiter_chf);
     if(d.kaffeekasse_chf>0){$('k-kaffee').textContent=chf(d.kaffeekasse_chf);show($('kaffee-note'));}else hide($('kaffee-note'));
+    // storage transparency — answers "how do we know the receipts are safe?"
+    (function(){const n=d.receipts_stored||0,bk=relTime(d.last_backup_at),el=$('storage-note');
+      let s='🔒 '+(n>0?(n+' Beleg'+(n>1?'e':'')+' sicher auf dem Server gespeichert'):'Belege werden sicher auf dem Server gespeichert');
+      s+=' · '+(bk?('letztes Backup '+bk):'tägliches Backup aktiv');
+      el.textContent=s;show(el);})();
     // closed banner + lock UI
     lastClose=d.closed?d.close:null;
     $('closed-banner').classList.toggle('hidden',!d.closed);
@@ -424,8 +467,10 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 /* ---------- capture: image ---------- */
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 function resetForm(){
-  selectedFile=null;$('beleg-form').reset();hide($('beleg-form'));show($('pick-row'));
+  selectedFile=null;editingId=null;editingBeleg=null;$('beleg-form').reset();hide($('beleg-form'));show($('pick-row'));
   hide($('thumb'));hide($('pdf-chip'));hide($('ocrbar'));hide($('manual-chf-wrap'));hide($('fx-hint'));
+  hide($('form-receipt'));hide($('form-receipt-img'));hide($('form-receipt-pdf'));hide($('edit-extra'));hide($('form-delete'));
+  $('f-pauschale').disabled=false;$('f-pauschale-code').disabled=false;$('beleg-save').textContent='Beleg speichern';$('beleg-save').disabled=false;
   $('f-datum').value=todayISO();$('f-pauschale').checked=false;togglePauschale();
 }
 async function downscale(file,max){
@@ -497,10 +542,10 @@ $('f-menge').addEventListener('input',pauschalePreview);
 let fxT;
 function fxPreview(){
   clearTimeout(fxT);fxT=setTimeout(async()=>{
-    const cur=$('f-waehrung').value,betrag=$('f-betrag').value,datum=$('f-datum').value;
+    const cur=$('f-waehrung').value,betrag=parseAmount($('f-betrag').value),datum=$('f-datum').value;
     if(!cur||cur==='CHF'||!betrag){hide($('fx-hint'));hide($('manual-chf-wrap'));return;}
     try{
-      const r=await api('/api/spesen/convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({betrag:Number(betrag),waehrung:cur,datum})});
+      const r=await api('/api/spesen/convert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({betrag:betrag,waehrung:cur,datum})});
       if(r.ok){$('fx-hint').innerHTML='≈ <b>CHF '+chf(r.betrag_chf)+'</b> (Kurs '+r.wechselkurs+')';show($('fx-hint'));hide($('manual-chf-wrap'));}
       else{$('fx-hint').innerHTML='<span style="color:var(--amber)">Kein Tageskurs, bitte CHF manuell eingeben.</span>';show($('fx-hint'));show($('manual-chf-wrap'));}
     }catch(e){if(e&&e.auth)return gate();}
@@ -515,74 +560,127 @@ $('beleg-cancel').addEventListener('click',showDash);
 $('beleg-form').addEventListener('submit',async(ev)=>{
   ev.preventDefault();
   const isPauschale=$('f-pauschale').checked;
-  const fd=new FormData();
-  fd.append('datum',$('f-datum').value);
-  fd.append('kategorie',$('f-kategorie').value);
-  fd.append('zahlungsart',$('f-zahlungsart').value);
-  fd.append('projekt',$('f-projekt').value);
-  fd.append('haendler',$('f-haendler').value);
-  fd.append('notiz',$('f-notiz').value);
-  fd.append('weiterverrechenbar',$('f-weiter').checked?'true':'false');
-  if(isPauschale){
-    fd.append('art','pauschale');
-    fd.append('pauschale_code',$('f-pauschale-code').value);
-    fd.append('menge',$('f-menge').value||'1');
-  }else{
-    fd.append('art','beleg');
-    fd.append('betrag_original',$('f-betrag').value);
-    fd.append('waehrung',$('f-waehrung').value);
-    if(!$('manual-chf-wrap').classList.contains('hidden')&&$('f-betrag-chf').value)fd.append('betrag_chf',$('f-betrag-chf').value);
-    if(selectedFile)fd.append('beleg',selectedFile,selectedFile.name||'beleg.jpg');
+  if(!isPauschale&&parseAmount($('f-betrag').value)==null){
+    toast('Bitte einen gültigen Betrag eingeben, z.B. 0.50','warn');return;
   }
   const btn=$('beleg-save');btn.disabled=true;btn.textContent='Speichere …';
   try{
-    const r=await api('/api/spesen/beleg',{method:'POST',body:fd});
-    if(r.warnung)toast(r.warnung,'warn');else toast('Beleg gespeichert ✓');
-    showDash();
+    if(editingId){
+      // ---- correction (PATCH) — reuses this same form as the editor ----
+      const payload={
+        beleg_datum:$('f-datum').value,kategorie:$('f-kategorie').value,
+        zahlungsart:$('f-zahlungsart').value,projekt:$('f-projekt').value,
+        haendler:$('f-haendler').value,notiz:$('f-notiz').value,
+        weiterverrechenbar:$('f-weiter').checked,ist_kaffeekasse:$('f-kaffee').checked,
+      };
+      if(!isPauschale){
+        payload.betrag_original=String(parseAmount($('f-betrag').value));
+        payload.waehrung=$('f-waehrung').value;
+        if(!$('manual-chf-wrap').classList.contains('hidden')&&$('f-betrag-chf').value)payload.betrag_chf=$('f-betrag-chf').value;
+      }
+      await api('/api/spesen/beleg/'+editingId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      toast('Änderungen gespeichert ✓');showDash();
+    }else{
+      // ---- new beleg (POST) ----
+      const fd=new FormData();
+      fd.append('datum',$('f-datum').value);
+      fd.append('kategorie',$('f-kategorie').value);
+      fd.append('zahlungsart',$('f-zahlungsart').value);
+      fd.append('projekt',$('f-projekt').value);
+      fd.append('haendler',$('f-haendler').value);
+      fd.append('notiz',$('f-notiz').value);
+      fd.append('weiterverrechenbar',$('f-weiter').checked?'true':'false');
+      if(isPauschale){
+        fd.append('art','pauschale');
+        fd.append('pauschale_code',$('f-pauschale-code').value);
+        fd.append('menge',$('f-menge').value||'1');
+      }else{
+        fd.append('art','beleg');
+        fd.append('betrag_original',String(parseAmount($('f-betrag').value)));
+        fd.append('waehrung',$('f-waehrung').value);
+        if(!$('manual-chf-wrap').classList.contains('hidden')&&$('f-betrag-chf').value)fd.append('betrag_chf',$('f-betrag-chf').value);
+        if(selectedFile)fd.append('beleg',selectedFile,selectedFile.name||'beleg.jpg');
+      }
+      const r=await api('/api/spesen/beleg',{method:'POST',body:fd});
+      if(r.warnung)toast(r.warnung,'warn');else toast('Beleg gespeichert ✓');
+      showDash();
+    }
   }catch(e){
     if(e&&e.auth)return gate();
     const b=e&&e.body;
     if(b&&b.need_manual_chf){show($('manual-chf-wrap'));toast('Bitte CHF-Betrag manuell eingeben','warn');}
     else if(b&&b.fields)toast('Fehlt: '+b.fields.join(', '),'err');
     else toast((b&&b.error)||'Fehler beim Speichern','err');
-  }finally{btn.disabled=false;btn.textContent='Beleg speichern';}
+  }finally{btn.disabled=false;btn.textContent=editingId?'Änderungen speichern':'Beleg speichern';}
 });
 
 /* ---------- edit sheet ---------- */
 function openSheet(bg,sheet){show(bg);bg.classList.add('show');sheet.classList.add('show');}
 function closeSheet(bg,sheet){bg.classList.remove('show');sheet.classList.remove('show');setTimeout(()=>hide(bg),220);}
+// Correcting a saved beleg reuses the SAME capture form (single source of truth):
+// receipt on top, then every field editable. `editingId` flips the submit to PATCH.
 function openEdit(b){
-  editingId=b.id;editingBeleg=b;
-  $('e-haendler').value=b.haendler||'';$('e-datum').value=b.beleg_datum||'';
-  $('e-betrag').value=b.betrag_chf;$('e-kategorie').value=b.kategorie||'';
-  $('e-zahlungsart').value=b.zahlungsart||'';$('e-projekt').value=b.projekt||'';
-  $('e-weiter').checked=!!b.weiterverrechenbar;
-  if(b.bild_pfad){$('edit-thumb').src='';hide($('edit-thumb'));}else hide($('edit-thumb'));
-  openSheet($('edit-bg'),$('edit-sheet'));
+  editingId=b.id;editingBeleg=b;selectedFile=null;
+  hide($('view-dash'));show($('view-capture'));hide($('bottombar'));
+  hide($('pick-row'));hide($('thumb'));hide($('pdf-chip'));hide($('ocrbar'));hide($('fx-hint'));hide($('manual-chf-wrap'));
+  // original receipt, always on top
+  if(b.bild_pfad){
+    const isPdf=/\.pdf$/i.test(b.bild_pfad),url='/api/spesen/beleg/'+b.id+'/image';
+    show($('form-receipt'));
+    if(isPdf){$('form-receipt-pdf').href=url;$('form-receipt-pdf').style.display='flex';hide($('form-receipt-img'));}
+    else{$('form-receipt-img').src=url;show($('form-receipt-img'));$('form-receipt-pdf').style.display='none';}
+  }else hide($('form-receipt'));
+  const isPauschale=b.art==='pauschale';
+  $('f-pauschale').checked=isPauschale;$('f-pauschale').disabled=true;togglePauschale();
+  if(isPauschale){
+    if(b.pauschale_code)$('f-pauschale-code').value=b.pauschale_code;
+    $('f-pauschale-code').disabled=true;pauschalePreview();
+  }else{
+    $('f-betrag').value=(b.betrag_original!=null?b.betrag_original:b.betrag_chf);
+    $('f-waehrung').value=b.waehrung||'CHF';
+    // pre-fill the manual-CHF field with the stored value, so if the FX lookup fails
+    // on edit (foreign currency) the KnowBody sees the current CHF and can just confirm.
+    $('f-betrag-chf').value=(b.betrag_chf!=null?b.betrag_chf:'');
+  }
+  $('f-datum').value=b.beleg_datum||'';
+  $('f-kategorie').value=b.kategorie||'';
+  $('f-zahlungsart').value=b.zahlungsart||'';
+  $('f-haendler').value=b.haendler||'';
+  $('f-projekt').value=b.projekt||'';
+  $('f-weiter').checked=!!b.weiterverrechenbar;
+  $('f-notiz').value=b.notiz||'';
+  $('f-kaffee').checked=!!b.ist_kaffeekasse;
+  show($('edit-extra'));show($('form-delete'));
+  $('beleg-save').textContent='Änderungen speichern';$('beleg-save').disabled=false;
+  show($('beleg-form'));
+  if(!isPauschale)fxPreview();
 }
-$('edit-bg').addEventListener('click',()=>closeSheet($('edit-bg'),$('edit-sheet')));
-$('edit-save').addEventListener('click',async()=>{
-  try{
-    await api('/api/spesen/beleg/'+editingId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      haendler:$('e-haendler').value,beleg_datum:$('e-datum').value,betrag_chf:$('e-betrag').value,
-      kategorie:$('e-kategorie').value,zahlungsart:$('e-zahlungsart').value,projekt:$('e-projekt').value,
-      weiterverrechenbar:$('e-weiter').checked})});
-    closeSheet($('edit-bg'),$('edit-sheet'));toast('Gespeichert ✓');loadDash();
-  }catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Fehler','err');}
-});
-$('edit-delete').addEventListener('click',async()=>{
+$('form-delete').addEventListener('click',async()=>{
+  if(!editingId)return;
   if(!confirm('Diesen Beleg löschen?'))return;
-  try{await api('/api/spesen/beleg/'+editingId,{method:'DELETE'});closeSheet($('edit-bg'),$('edit-sheet'));toast('Gelöscht');loadDash();}
+  try{await api('/api/spesen/beleg/'+editingId,{method:'DELETE'});toast('Gelöscht');showDash();}
   catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Fehler','err');}
 });
 
-/* ---------- month close ---------- */
+/* ---------- month close (with typed Kontroll-Bestätigung) ---------- */
 $('btn-new').addEventListener('click',showCapture);
-$('btn-close-month').addEventListener('click',async()=>{
-  if(!confirm('Monat '+MONTHS[CUR.month]+' '+CUR.year+' abschliessen? Es wird ein ZIP für die Buchhaltung erstellt.'))return;
-  const btn=$('btn-close-month');btn.disabled=true;btn.textContent='Erstelle …';
+$('btn-close-month').addEventListener('click',()=>{
+  $('att-sentence').textContent=(CFG&&CFG.attestation_text)||'';
+  $('att-input').value='';$('att-hint').innerHTML='&nbsp;';$('att-confirm').disabled=true;
+  openSheet($('att-bg'),$('att-sheet'));
+});
+$('att-cancel').addEventListener('click',()=>closeSheet($('att-bg'),$('att-sheet')));
+$('att-bg').addEventListener('click',()=>closeSheet($('att-bg'),$('att-sheet')));
+$('att-input').addEventListener('input',()=>{
+  const ok=CFG&&attNorm($('att-input').value)===attNorm(CFG.attestation_text||'');
+  $('att-confirm').disabled=!ok;
+  $('att-hint').innerHTML=$('att-input').value?(ok?'<span style="color:var(--green)">✓ Stimmt überein</span>':'<span style="color:var(--amber)">Noch nicht identisch …</span>'):'&nbsp;';
+});
+$('att-confirm').addEventListener('click',async()=>{
+  const btn=$('att-confirm');btn.disabled=true;btn.textContent='Erstelle …';
   try{
-    const r=await api('/api/spesen/month-close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:ym()})});
+    const r=await api('/api/spesen/month-close',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({month:ym(),bestaetigung_text:$('att-input').value})});
+    closeSheet($('att-bg'),$('att-sheet'));
     lastClose={zip:r.download};
     shareData={subject:r.email.subject,body:r.email.body,download:r.download,file:null};
     $('res-total').textContent=chf(r.total_chf);
@@ -619,6 +717,35 @@ $('reopen-month').addEventListener('click',async()=>{
     toast('Monat wieder geöffnet ✓');loadDash();
   }catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Fehler','err');}
 });
+
+/* ---------- shared Kaffeekasse (team overview) ---------- */
+$('kaffee-note').addEventListener('click',openKaffee);
+$('kaffee-close').addEventListener('click',()=>closeSheet($('kaffee-bg'),$('kaffee-sheet')));
+$('kaffee-bg').addEventListener('click',()=>closeSheet($('kaffee-bg'),$('kaffee-sheet')));
+async function openKaffee(){
+  try{
+    const d=await api('/api/spesen/kaffeekasse?month='+ym());
+    $('kaffee-month').textContent=MONTHS[CUR.month]+' '+CUR.year;
+    $('kaffee-total').textContent=chf(d.total_chf);
+    const pe=$('kaffee-people');pe.innerHTML='';
+    (d.per_person||[]).forEach(p=>{
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px';
+      row.innerHTML='<span style="font-weight:600;font-size:13.5px">'+esc(p.name)+' <span style="color:var(--dim);font-weight:500">· '+p.anzahl+'</span></span><span style="font-weight:800;color:var(--navy)">CHF '+chf(p.summe_chf)+'</span>';
+      pe.appendChild(row);
+    });
+    if(!(d.per_person||[]).length)pe.innerHTML='<div class="hint" style="text-align:center;padding:6px">Noch keine Kaffeekasse-Einträge diesen Monat.</div>';
+    const it=$('kaffee-items');it.innerHTML='';
+    (d.items||[]).forEach(b=>{
+      const el=document.createElement('div');el.className='beleg kaffee';
+      const title=(b.haendler||b.kategorie||'Beleg');
+      const sub=esc((b.beleg_datum||'')+' · '+(b.knowbody_name||''));
+      el.innerHTML='<div class="ic">'+KAT_ICON+'</div><div class="mid"><div class="t">'+esc(title)+'</div><div class="s">'+sub+'</div></div><div class="amt"><div class="chf">'+chf(b.betrag_chf)+'</div></div>';
+      it.appendChild(el);
+    });
+    openSheet($('kaffee-bg'),$('kaffee-sheet'));
+  }catch(e){if(e&&e.auth)return gate();toast('Kaffeekasse laden fehlgeschlagen','err');}
+}
 
 /* ---------- capture back + feedback ---------- */
 $('cap-back').addEventListener('click',showDash);

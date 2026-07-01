@@ -32,7 +32,7 @@ def _safe(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", (s or "").strip())[:40] or "x"
 
 
-def build_month_data(knowbody: dict, jahr_monat: str, belege: list) -> dict:
+def build_month_data(knowbody: dict, jahr_monat: str, belege: list, attest: dict | None = None) -> dict:
     total = round(sum(float(b.get("betrag_chf") or 0) for b in belege), 2)
     kat_sums: dict = {}
     for b in belege:
@@ -50,6 +50,7 @@ def build_month_data(knowbody: dict, jahr_monat: str, belege: list) -> dict:
         "weiterverrechenbar": weiter,
         "summe_weiter_chf": summe_weiter,
         "anzahl": len(belege),
+        "attest": attest or None,
     }
 
 
@@ -61,13 +62,14 @@ def _receipt_arcname(b: dict, nr: int) -> str:
     return f"Belege/{datum}_{kat}_{betrag}CHF_{nr:03d}{ext}"
 
 
-def close_month(knowbody_id: int, jahr_monat: str, accountant_email: str = "") -> dict:
+def close_month(knowbody_id: int, jahr_monat: str, accountant_email: str = "",
+                attest: dict | None = None) -> dict:
     kb = db.get_knowbody(knowbody_id)
     if not kb:
         return {"ok": False, "error": "KnowBody nicht gefunden"}
 
     belege = db.belege_for_month(knowbody_id, jahr_monat, include_kaffeekasse=False)
-    month_data = build_month_data(kb, jahr_monat, belege)
+    month_data = build_month_data(kb, jahr_monat, belege, attest=attest)
 
     pdf_path = report_pdf.generate_spesen_pdf(month_data)
     xlsx_path = report_excel.generate_spesen_xlsx(month_data)
@@ -86,6 +88,7 @@ def close_month(knowbody_id: int, jahr_monat: str, accountant_email: str = "") -
                 zf.writestr(_receipt_arcname(b, nr), open(src, "rb").read())
         zf.writestr("Begleitmail.txt", f"Betreff: {email['subject']}\n\n{email['body']}\n")
 
+    _att = attest or {}
     ma_id = db.finalize_close(
         knowbody_id, jahr_monat,
         summe_chf=month_data["total_chf"],
@@ -93,6 +96,8 @@ def close_month(knowbody_id: int, jahr_monat: str, accountant_email: str = "") -
         anzahl=month_data["anzahl"],
         beleg_ids=[b["id"] for b in belege],
         pdf_pfad=pdf_path, xlsx_pfad=xlsx_path, zip_pfad=zip_path,
+        bestaetigung_text=_att.get("text", ""), bestaetigt_von=_att.get("von", ""),
+        bestaetigt_am=_att.get("am", ""),
     )
 
     return {

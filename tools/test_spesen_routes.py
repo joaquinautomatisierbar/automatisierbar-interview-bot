@@ -22,7 +22,7 @@ os.environ["SPESEN_OUTPUT_DIR"] = tempfile.mkdtemp(prefix="spout_")
 os.environ["SPESEN_ACCOUNTANT_EMAIL"] = "buchhaltung@gubser-kalt.ch"
 
 import api  # noqa: E402
-from spesen import db, currency, ocr  # noqa: E402
+from spesen import db, currency, ocr, config  # noqa: E402
 
 FAILS = []
 
@@ -106,16 +106,66 @@ check("Liste: weiterverrechenbar 134.90", lj["weiter_chf"] == 134.90)
 check("Liste: kaffeekasse 30.00", lj["kaffeekasse_chf"] == 30.00)
 check("Liste: noch nicht geschlossen", lj["closed"] is False)
 
-# --- edit + delete (a Kaffeekasse beleg) ------------------------------------
+# --- comma-amount beleg (the <1 CHF bug) -------------------------------------
+r = c.post("/api/spesen/beleg" + Q, data={
+    "art": "beleg", "datum": "2026-06-14", "kategorie": "Material",
+    "betrag_original": "0,50", "waehrung": "CHF", "zahlungsart": "Privat-Cash"})
+check("Komma-Betrag 0,50 -> 200 + 0.5 CHF", r.status_code == 200 and r.get_json()["betrag_chf"] == 0.5)
+
+# --- image endpoint (owner-scoped) ------------------------------------------
+r = c.post("/api/spesen/beleg" + Q, data={
+    "art": "beleg", "datum": "2026-06-16", "kategorie": "Transport",
+    "betrag_original": "80", "waehrung": "CHF", "zahlungsart": "Firmenkreditkarte",
+    "beleg": (io.BytesIO(b"\xff\xd8\xff" + b"x" * 60), "r.jpg")}, content_type="multipart/form-data")
+img_id = r.get_json()["beleg_id"]
+r = c.get(f"/api/spesen/beleg/{img_id}/image" + Q)
+check("Bild-Endpoint 200 + jpeg", r.status_code == 200 and r.data[:2] == b"\xff\xd8")
+check("Bild-Endpoint ohne Token -> 401", c.get(f"/api/spesen/beleg/{img_id}/image").status_code == 401)
+
+# --- full-fidelity PATCH: change currency (EUR) + notiz + kaffee override -----
+r = c.patch(f"/api/spesen/beleg/{img_id}" + Q,
+            json={"betrag_original": "100", "waehrung": "EUR", "notiz": "Taxi Berlin",
+                  "kategorie": "Transport", "ist_kaffeekasse": True})
+check("PATCH Währungswechsel ok", r.get_json().get("ok") is True)
+_b = db.get_beleg(img_id)
+check("PATCH: EUR -> 95.00 CHF (FX)", _b["betrag_chf"] == 95.0 and _b["waehrung"] == "EUR")
+check("PATCH: notiz gesetzt", _b["notiz"] == "Taxi Berlin")
+check("PATCH: Kaffeekasse-Override greift (trotz 95 CHF)", _b["ist_kaffeekasse"] == 1)
+
+# --- edit a Kaffeekasse beleg ------------------------------------------------
 kaffee_id = next(b["id"] for b in lj["belege"] if b["ist_kaffeekasse"])
 r = c.patch(f"/api/spesen/beleg/{kaffee_id}" + Q, json={"notiz": "Kaffee mit Kunde"})
 check("PATCH offener Beleg ok", r.get_json().get("ok") is True)
 
-# --- month-close -------------------------------------------------------------
+# --- shared Kaffeekasse overview (spans KnowBodies) --------------------------
+r = c.get("/api/spesen/kaffeekasse" + Q + "&month=2026-06")
+ov = r.get_json()
+check("Kaffeekasse-Overview 200 + total > 0", r.status_code == 200 and ov["total_chf"] > 0)
+check("Kaffeekasse-Overview: Markus enthalten",
+      any(p["name"] == "Markus Schacher" for p in ov["per_person"]))
+
+# --- health endpoint ---------------------------------------------------------
+r = c.get("/api/spesen/health")
+hj = r.get_json()
+check("health 200 + status ok", r.status_code == 200 and hj["status"] == "ok")
+check("health checks db + receipts", hj["checks"]["db"] == "ok" and hj["checks"]["receipts_writable"] == "ok")
+
+# --- month-close needs the typed Kontroll-Bestätigung ------------------------
 r = c.post("/api/spesen/month-close" + Q, json={"month": "2026-06"})
+check("month-close ohne Bestätigung -> 400", r.status_code == 400 and r.get_json().get("need_attest"))
+r = c.post("/api/spesen/month-close" + Q, json={"month": "2026-06", "bestaetigung_text": "irgendwas"})
+check("month-close falscher Text -> 400", r.status_code == 400)
+
+# correct text (case/space tolerant)
+_typed = "  " + config.ATTESTATION_TEXT.upper() + "  "
+r = c.post("/api/spesen/month-close" + Q, json={"month": "2026-06", "bestaetigung_text": _typed})
 mj = r.get_json()
-check("month-close ok", r.status_code == 200 and mj["ok"])
-check("month-close total 222.40", mj["total_chf"] == 222.40)
+check("month-close mit Bestätigung ok", r.status_code == 200 and mj["ok"])
+# active total unchanged: the 0,50 is Kaffeekasse and the 95-CHF beleg got a Kaffeekasse override
+check("month-close total 222.40 (Kaffeekasse ausgeschlossen)", mj["total_chf"] == 222.40)
+check("Bestätigung in Buchhaltungs-Mail", "wahrheitsgetreu" in mj["email"]["body"].lower())
+_close = db.get_close(1, "2026-06")
+check("Bestätigung in DB (von + am)", bool(_close["bestaetigung_text"]) and _close["bestaetigt_von"] == "Markus Schacher")
 check("month-close Email-Entwurf vorhanden", mj["email"]["subject"].startswith("Spesenabrechnung"))
 check("month-close download-link", mj["download"].startswith("/api/spesen/download"))
 

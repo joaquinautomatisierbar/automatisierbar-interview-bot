@@ -54,6 +54,16 @@ def build_accountant_email(month_data: dict, accountant_email: str = "") -> dict
         "",
         "Im ZIP finden Sie die PDF-Abrechnung, eine Excel-Übersicht und alle "
         "Originalbelege.",
+    ]
+    attest = d.get("attest") or {}
+    if attest.get("text"):
+        lines += [
+            "",
+            "Bestätigung:",
+            attest["text"],
+            f"({attest.get('von', name)}, {attest.get('am', '')})".replace(", )", ")"),
+        ]
+    lines += [
         "",
         "Freundliche Grüsse",
         name,

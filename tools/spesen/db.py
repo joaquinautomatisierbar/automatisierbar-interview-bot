@@ -150,14 +150,32 @@ CREATE TABLE IF NOT EXISTS app_meta (
 
 
 def init_db() -> None:
-    """Create all tables/indexes if missing, then sync the rate table from config."""
+    """Create all tables/indexes if missing, run additive migrations, then sync the
+    rate table from config. All steps are idempotent (safe on every startup)."""
     conn = get_conn()
     try:
         conn.executescript(_SCHEMA)
         conn.commit()
+        _migrate(conn)
         seed_pauschalen(conn)
     finally:
         conn.close()
+
+
+def _add_column_if_missing(conn: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
+    have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if col not in have:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}")
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive-only schema migrations for existing DBs (CREATE TABLE IF NOT EXISTS
+    never adds a column to a table that already exists). Idempotent."""
+    # Kontroll-Bestätigung (attestation) on month-close — added Fix-Round 2.
+    _add_column_if_missing(conn, "monatsabschluesse", "bestaetigung_text", "TEXT")
+    _add_column_if_missing(conn, "monatsabschluesse", "bestaetigt_von", "TEXT")
+    _add_column_if_missing(conn, "monatsabschluesse", "bestaetigt_am", "TEXT")
+    conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -378,12 +396,53 @@ def belege_for_month(knowbody_id: int, jahr_monat: str, include_kaffeekasse: boo
         conn.close()
 
 
+def kaffeekasse_overview(jahr_monat: str) -> dict:
+    """Team-wide Kaffeekasse for a month (the coffee fund is communal): a grand total
+    over ALL KnowBodies, a per-person breakdown of the CONTRIBUTORS (members with no
+    Kaffeekasse item that month are omitted, not shown as 0.00), and the individual
+    items. Excludes placeholder items with no CHF amount."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT k.id AS knowbody_id, k.name AS name,
+                   COUNT(b.id) AS anzahl,
+                   COALESCE(SUM(b.betrag_chf), 0) AS summe_chf
+            FROM knowbodies k
+            JOIN belege b ON b.knowbody_id = k.id
+            WHERE b.ist_kaffeekasse = 1 AND b.betrag_chf IS NOT NULL
+                  AND substr(b.beleg_datum, 1, 7) = ?
+            GROUP BY k.id, k.name
+            ORDER BY summe_chf DESC, k.name ASC
+            """, (jahr_monat,)).fetchall()
+        per_person = []
+        for r in rows:
+            per_person.append({"knowbody_id": r["knowbody_id"], "name": r["name"],
+                               "anzahl": r["anzahl"], "summe_chf": round(float(r["summe_chf"] or 0), 2)})
+        total = round(sum(p["summe_chf"] for p in per_person), 2)
+        items = conn.execute(
+            """
+            SELECT b.id, b.beleg_datum, b.haendler, b.kategorie, b.betrag_chf,
+                   b.knowbody_id, k.name AS knowbody_name
+            FROM belege b JOIN knowbodies k ON k.id = b.knowbody_id
+            WHERE b.ist_kaffeekasse = 1 AND b.betrag_chf IS NOT NULL
+                  AND substr(b.beleg_datum, 1, 7) = ?
+            ORDER BY b.beleg_datum DESC, b.id DESC
+            """, (jahr_monat,)).fetchall()
+        return {"total_chf": total, "per_person": per_person,
+                "items": [dict(r) for r in items], "anzahl": len(items)}
+    finally:
+        conn.close()
+
+
 def finalize_close(knowbody_id: int, jahr_monat: str, *, summe_chf: float,
                    summe_weiter_chf: float, anzahl: int, beleg_ids: list[int],
-                   pdf_pfad: str = "", xlsx_pfad: str = "", zip_pfad: str = "") -> int:
-    """Atomically: upsert the monatsabschluss row, then lock every included beleg
-    by stamping its monatsabschluss_id. Re-closing a month overwrites artifacts and
-    re-locks the current set. Returns the monatsabschluss id."""
+                   pdf_pfad: str = "", xlsx_pfad: str = "", zip_pfad: str = "",
+                   bestaetigung_text: str = "", bestaetigt_von: str = "",
+                   bestaetigt_am: str = "") -> int:
+    """Atomically: upsert the monatsabschluss row (incl. the typed Kontroll-
+    Bestätigung), then lock every included beleg by stamping its monatsabschluss_id.
+    Re-closing a month overwrites artifacts and re-locks the current set. Returns id."""
     conn = get_conn()
     try:
         conn.execute("BEGIN")
@@ -394,17 +453,21 @@ def finalize_close(knowbody_id: int, jahr_monat: str, *, summe_chf: float,
             ma_id = existing["id"]
             conn.execute(
                 "UPDATE monatsabschluesse SET summe_chf=?, summe_weiterverrechenbar_chf=?, "
-                "anzahl_belege=?, pdf_pfad=?, xlsx_pfad=?, zip_pfad=?, geschlossen_am=? WHERE id=?",
-                (summe_chf, summe_weiter_chf, anzahl, pdf_pfad, xlsx_pfad, zip_pfad, now_iso(), ma_id),
+                "anzahl_belege=?, pdf_pfad=?, xlsx_pfad=?, zip_pfad=?, geschlossen_am=?, "
+                "bestaetigung_text=?, bestaetigt_von=?, bestaetigt_am=? WHERE id=?",
+                (summe_chf, summe_weiter_chf, anzahl, pdf_pfad, xlsx_pfad, zip_pfad, now_iso(),
+                 bestaetigung_text or None, bestaetigt_von or None, bestaetigt_am or None, ma_id),
             )
             # release any previously-locked belege for this month before re-locking the current set
             conn.execute("UPDATE belege SET monatsabschluss_id=NULL WHERE monatsabschluss_id=?", (ma_id,))
         else:
             cur = conn.execute(
                 "INSERT INTO monatsabschluesse (knowbody_id, jahr_monat, summe_chf, "
-                "summe_weiterverrechenbar_chf, anzahl_belege, pdf_pfad, xlsx_pfad, zip_pfad) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (knowbody_id, jahr_monat, summe_chf, summe_weiter_chf, anzahl, pdf_pfad, xlsx_pfad, zip_pfad),
+                "summe_weiterverrechenbar_chf, anzahl_belege, pdf_pfad, xlsx_pfad, zip_pfad, "
+                "bestaetigung_text, bestaetigt_von, bestaetigt_am) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (knowbody_id, jahr_monat, summe_chf, summe_weiter_chf, anzahl, pdf_pfad, xlsx_pfad,
+                 zip_pfad, bestaetigung_text or None, bestaetigt_von or None, bestaetigt_am or None),
             )
             ma_id = cur.lastrowid
         for bid in beleg_ids:

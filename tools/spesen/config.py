@@ -14,6 +14,32 @@ amount on a client deliverable.
 
 from __future__ import annotations
 
+import re as _re
+
+# --- Kontroll-Bestätigung (attestation on month-close) --------------------------
+# Before a KnowBody closes a month, they must TYPE this exact sentence. It is stored
+# with their name + timestamp and printed on the PDF + accountant mail, so a wrong
+# expense is the submitter's responsibility, not ours. Single source of truth: the
+# frontend gets it via /api/spesen/config, the route validates against it, the PDF
+# renders it. Verbatim wording is the operator's; edit here to change it everywhere.
+ATTESTATION_TEXT = (
+    "Ich bestätige hiermit dass ich die Spesen kontrolliert habe, "
+    "diese wahrheitsgetreu sind und genehmige diese für die Weiterleitung."
+)
+
+
+def _norm_attest(s: str) -> str:
+    """Normalise for a forgiving-but-real comparison: trim, collapse whitespace,
+    lowercase. The point is that they actually TYPE the sentence, not that they
+    match stray double-spaces or capitalisation."""
+    return _re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def attestation_matches(typed: str) -> bool:
+    """True if `typed` matches ATTESTATION_TEXT (normalised)."""
+    return bool(typed) and _norm_attest(typed) == _norm_attest(ATTESTATION_TEXT)
+
+
 # --- Global rule (from the interview: Steueramt-Vereinbarung) -------------------
 # Pauschalspesen under this amount are not individually reimbursable; they get
 # collected in the "Kaffeekasse" and excluded from the monthly ZIP.

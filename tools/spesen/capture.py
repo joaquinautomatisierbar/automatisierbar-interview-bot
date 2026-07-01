@@ -102,6 +102,40 @@ def to_bool(v) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "ja", "on")
 
 
+def parse_amount(v):
+    """Locale-tolerant amount parse -> float > 0, or None if invalid / <= 0.
+
+    Swiss/German users type the decimal separator as a comma ("0,50") and may use
+    the apostrophe thousands separator ("1'200.50"). A browser <input type=number>
+    rejects the comma outright ("enter a valid number"), which is exactly the <1 CHF
+    bug. Normalise here so both the API and (via the mirrored JS helper) the form
+    accept them:
+      - strip spaces + apostrophes ('  ’)
+      - if BOTH ',' and '.' present -> ',' is thousands, drop it
+      - else ',' is the decimal point -> '.'
+    """
+    if v is None:
+        return None
+    if isinstance(v, bool):  # guard: bool is an int subclass
+        return None
+    if isinstance(v, (int, float)):
+        f = float(v)
+        return f if f > 0 else None
+    s = str(v).strip()
+    if not s:
+        return None
+    s = s.replace(" ", "").replace("'", "").replace("’", "").replace(" ", "")
+    if "," in s and "." in s:
+        s = s.replace(",", "")
+    else:
+        s = s.replace(",", ".")
+    try:
+        f = float(s)
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 else None
+
+
 def validate_beleg_payload(p: dict) -> list:
     """Return a list of invalid/missing field names ([] = ok)."""
     bad = []
@@ -121,10 +155,7 @@ def validate_beleg_payload(p: dict) -> list:
             bad.append("pauschale_code")
     else:
         betrag = p.get("betrag_original", p.get("betrag"))
-        try:
-            if betrag is None or float(betrag) <= 0:
-                bad.append("betrag_original")
-        except (TypeError, ValueError):
+        if parse_amount(betrag) is None:
             bad.append("betrag_original")
         waehrung = (p.get("waehrung") or "").strip()
         if not _CCY_RE.match(waehrung):

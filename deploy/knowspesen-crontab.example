@@ -1,0 +1,15 @@
+# KnowSpesen cron jobs — install into the `paperclip` user crontab on the VPS:
+#   crontab -l -u paperclip                # inspect current
+#   crontab -e -u paperclip                # edit (paste the lines below)
+#
+# All three wrappers source /etc/knowspesen/env themselves, so no env is needed here.
+# Logs go to /srv/knowspesen/logs/*.log (mkdir -p that dir + chown paperclip first).
+
+# Uptime probe every 10 minutes — alerts on down / recovered (state-change only).
+*/10 * * * * /srv/knowspesen/healthcheck.sh >> /srv/knowspesen/logs/healthcheck.log 2>&1
+
+# Nightly backup at 03:14 (online SQLite snapshot + receipts tar + rotation + off-box).
+14 3 * * * /srv/knowspesen/backup.sh >> /srv/knowspesen/logs/backup.log 2>&1
+
+# Developer-feedback backlog alert every 6h (pre-existing; wrapper at /srv/knowspesen/feedback_alert.sh).
+7 */6 * * * /srv/knowspesen/feedback_alert.sh >> /srv/knowspesen/logs/feedback_alert.log 2>&1

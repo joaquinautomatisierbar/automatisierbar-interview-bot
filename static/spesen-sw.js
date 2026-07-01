@@ -2,7 +2,7 @@
    Shell: cache-first (instant launch, offline shell).
    Never touches non-GET (OCR + beleg + month-close POSTs pass straight through —
    capture is online-only; a failed call surfaces a retry toast). */
-const CACHE = 'knowspesen-v2';
+const CACHE = 'knowspesen-v3';
 const SHELL = [
   '/spesen',
   '/spesen.webmanifest',
