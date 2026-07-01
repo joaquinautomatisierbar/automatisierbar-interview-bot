@@ -1,0 +1,46 @@
+# Juglans Offerten-Generator — Streamlit quote builder for the client
+# Juglans Landschaftsarchitektur (Philipp Busslinger), on the VPS.
+# Separate sibling service from cockpit/knowspesen: own process, own
+# /etc/juglans/env, own data dir, own dedicated venv, own Caddy host.
+# A client-app crash/OOM never touches the cockpit ops or KnowSpesen.
+#
+# NOTE: the app code (offerten-generator/) is NOT in the git repo (it carries
+# client PII in seed/projects_json/). It is rsync'd to /srv/juglans/app. See
+# deploy/juglans-deploy.md for the full runbook.
+#
+# Install:
+#   sudo mkdir -p /srv/juglans/{app,data,tmp}
+#   # rsync the offerten-generator bundle into /srv/juglans/app (see deploy doc)
+#   sudo python3 -m venv /srv/juglans/venv
+#   sudo /srv/juglans/venv/bin/pip install -r /srv/juglans/app/requirements.txt
+#   sudo cp deploy/juglans.service /etc/systemd/system/juglans.service
+#   sudo cp deploy/juglans.env.example /etc/juglans/env   # then edit + chmod 600
+#   sudo chown -R paperclip:paperclip /srv/juglans
+#   sudo systemctl daemon-reload && sudo systemctl enable --now juglans
+# Update code:  rsync new bundle -> /srv/juglans/app && sudo systemctl restart juglans
+# Logs:         journalctl -u juglans -f
+
+[Unit]
+Description=Juglans Offerten-Generator (Streamlit quote builder)
+After=network.target
+
+[Service]
+Type=simple
+User=paperclip
+WorkingDirectory=/srv/juglans/app
+EnvironmentFile=/etc/juglans/env
+# Streamlit adds the script's dir (tools/) to sys.path, so the app's flat
+# imports (generate_quote, llm_suggest, feedback_notion, ...) resolve.
+# baseUrlPath=offerten must match the Caddy path; Caddy must NOT strip it.
+ExecStart=/srv/juglans/venv/bin/streamlit run tools/quote_builder_app.py \
+    --server.port=8085 \
+    --server.address=127.0.0.1 \
+    --server.baseUrlPath=offerten \
+    --server.headless=true \
+    --server.enableXsrfProtection=true \
+    --browser.gatherUsageStats=false
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+# Caddy site block for the Juglans Offerten-Generator — append to
+# /etc/caddy/Caddyfile (same box as cockpit/knowspesen/walkin/fitness).
+# Caddy auto-provisions the Let's Encrypt cert once the DNS A-record
+# (juglans -> 187.124.188.2) resolves.  After editing:  sudo systemctl reload caddy
+#
+# Auth: HTTP Basic Auth gates the whole app (the Streamlit app itself has no
+# login). Generate the bcrypt hash on the VPS and paste it inline below:
+#   caddy hash-password --plaintext 'CHOOSE_A_PASSWORD'
+# Then hand Busslinger the username + password out-of-band.
+#
+# Do NOT add handle_path / strip the /offerten prefix — Streamlit runs with
+# baseUrlPath=offerten and expects to receive the full path. reverse_proxy
+# upgrades the Streamlit WebSocket (/offerten/_stcore/stream) automatically.
+
+juglans.automatisierbar.ch {
+	encode zstd gzip
+
+	basic_auth {
+		# busslinger  $2a$14$REPLACE_WITH_REAL_BCRYPT_HASH
+		BASIC_AUTH_USER_HERE  BASIC_AUTH_HASH_HERE
+	}
+
+	redir / /offerten/ 308
+	reverse_proxy 127.0.0.1:8085
+}
