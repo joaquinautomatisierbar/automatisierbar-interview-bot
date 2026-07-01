@@ -21,6 +21,10 @@
       "env": {
         "CONTEXT7_API_KEY": "${CONTEXT7_API_KEY:-}"
       }
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest", "--user-data-dir", "/Users/sexyjoaquin/.chrome-devtools-mcp/clickup-capture"]
     }
   }
 }

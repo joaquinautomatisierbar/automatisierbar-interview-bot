@@ -7,5 +7,10 @@
   "revenue": [],
   "spent_usd": 0.0,
   "revenue_usd": 0.0,
-  "counted": []
+  "counted": [],
+  "active_cycle": {
+    "id": "cortana-20260624-1345",
+    "started_at": "2026-06-24T11:46:14.045845+00:00",
+    "cap_usd": null
+  }
 }

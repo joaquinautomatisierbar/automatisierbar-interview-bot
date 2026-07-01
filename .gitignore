@@ -24,3 +24,10 @@ references/library/fulltext.db
 # Script-Tuner voice session store (customer-PII-adjacent transcripts — never commit)
 data/voice_sessions/*
 !data/voice_sessions/.gitkeep
+
+# Generated LinkedIn post images (regenerable from Image Spec in Notion)
+linkedin_images/
+
+# Juglans Offerten-Generator bundle — deployed via rsync, never git'd (client PII,
+# real .env, ~1GB .venv + local GGUF model). Deploy docs live in deploy/juglans-*.md.
+offerten-generator/
