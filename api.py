@@ -3718,6 +3718,27 @@ def walkin_create_lead():
     return jsonify(result)
 
 
+@app.route("/api/walkin/card-ocr", methods=["POST"])
+def walkin_card_ocr():
+    """Read a business-card photo with Claude Vision and return prefill fields for the
+    Neuer-Lead form (name/company/role/email/phone/website/city/…). Advisory only, like
+    /api/spesen/ocr: even a failure returns 200 with ok=false so the operator just fills
+    the form manually and saves via /api/walkin/lead. The photo is used for extraction
+    only and is never stored."""
+    if not _team_member():
+        return jsonify({"error": "Unauthorized"}), 401
+    f = request.files.get("file") or request.files.get("beleg")
+    if not f:
+        return jsonify({"error": "Bild fehlt (multipart 'file')"}), 400
+    content = f.read()
+    if not content:
+        return jsonify({"error": "leeres Bild"}), 400
+    if len(content) > SPESEN_MAX_IMAGE_BYTES:  # reuse the shared image size cap
+        return jsonify({"error": f"Bild zu gross (max {SPESEN_MAX_IMAGE_MB} MB)"}), 413
+    import walkin_card_ocr as _card
+    return jsonify(_card.extract_card(content, f.mimetype or ""))
+
+
 @app.route("/api/walkin/memo", methods=["POST"])
 def walkin_upload_memo():
     """Accept a recorded voice memo (multipart), store it on the VPS with a pending
@@ -3858,6 +3879,7 @@ def spesen_config():
         "currencies": _cfg.CURRENCIES,
         "pauschalen": _sdb.list_pauschalen(),
         "accountant_email": SPESEN_ACCOUNTANT_EMAIL,
+        "attestation_text": _cfg.ATTESTATION_TEXT,
     })
 
 
@@ -3883,8 +3905,9 @@ def spesen_convert():
     if not _spesen_member():
         return jsonify({"error": "Unauthorized"}), 401
     d = request.get_json(silent=True) or {}
-    from spesen import currency as _cur
-    return jsonify(_cur.convert_to_chf(d.get("betrag"), d.get("waehrung") or "CHF", d.get("datum") or ""))
+    from spesen import currency as _cur, capture as _cap
+    betrag = _cap.parse_amount(d.get("betrag"))
+    return jsonify(_cur.convert_to_chf(betrag, d.get("waehrung") or "CHF", d.get("datum") or ""))
 
 
 @app.route("/api/spesen/beleg", methods=["POST"])
@@ -3916,17 +3939,16 @@ def spesen_create_beleg():
         resolved.update({"betrag_chf": res["betrag_chf"], "betrag_original": res["betrag_chf"],
                          "waehrung": "CHF", "kurs_quelle": "PAUSCHALE", "pauschale_code": code})
     else:
-        try:
-            betrag_original = float(form.get("betrag_original") or form.get("betrag"))
-        except (TypeError, ValueError):
+        betrag_original = _cap.parse_amount(form.get("betrag_original") or form.get("betrag"))
+        if betrag_original is None:
             return jsonify({"error": "Betrag ungültig"}), 400
         waehrung = (form.get("waehrung") or "CHF").strip().upper()
         manual_chf = form.get("betrag_chf")
         if manual_chf not in (None, ""):
-            try:
-                mc = round(float(manual_chf), 2)
-            except (TypeError, ValueError):
+            mc = _cap.parse_amount(manual_chf)
+            if mc is None:
                 return jsonify({"error": "CHF-Betrag ungültig"}), 400
+            mc = round(mc, 2)
             resolved.update({"betrag_chf": mc, "betrag_original": betrag_original, "waehrung": waehrung,
                              "kurs_quelle": "MANUELL",
                              "wechselkurs": (round(mc / betrag_original, 6) if betrag_original else None)})
@@ -3984,35 +4006,120 @@ def spesen_list_belege():
     close = _sdb.get_close(kb["id"], month)
     return jsonify({"month": month, "belege": belege, "total_chf": total, "weiter_chf": weiter,
                     "kaffeekasse_chf": kaffee, "anzahl": len(active),
-                    "closed": bool(close), "close": close})
+                    "closed": bool(close), "close": close,
+                    "receipts_stored": sum(1 for b in belege if b.get("bild_pfad")),
+                    "last_backup_at": _sdb.meta_get("last_backup_at")})
+
+
+@app.route("/api/spesen/kaffeekasse", methods=["GET"])
+def spesen_kaffeekasse():
+    """Shared Kaffeekasse overview across ALL KnowBodies for a month: team total +
+    per-person breakdown + the items. The coffee fund is communal, so every member
+    sees it."""
+    kb = _spesen_member()
+    if not kb:
+        return jsonify({"error": "Unauthorized"}), 401
+    from spesen import db as _sdb
+    month = request.args.get("month") or _now_local().strftime("%Y-%m")
+    ov = _sdb.kaffeekasse_overview(month)
+    ov["month"] = month
+    return jsonify(ov)
 
 
 @app.route("/api/spesen/beleg/<int:beleg_id>", methods=["PATCH"])
 def spesen_update_beleg(beleg_id):
+    """Full-fidelity correction: every field the capture form has is editable here
+    (the app reuses the capture form as the single editor). Amount/currency go
+    through the same FX resolution as create; Kaffeekasse can be forced/unforced via
+    an explicit override, else it is recomputed from the new amount."""
     kb = _spesen_member()
     if not kb:
         return jsonify({"error": "Unauthorized"}), 401
-    from spesen import db as _sdb, pauschalen as _pau, capture as _cap
+    from spesen import db as _sdb, pauschalen as _pau, capture as _cap, currency as _cur
     existing = _sdb.get_beleg(beleg_id)
     if not existing or existing["knowbody_id"] != kb["id"]:
         return jsonify({"error": "Nicht gefunden"}), 404
     if existing["monatsabschluss_id"] is not None:
         return jsonify({"error": "Monat bereits abgeschlossen"}), 409
     d = request.get_json(silent=True) or {}
+    art = existing["art"]
+
+    # simple text / flag fields
     allowed = {k: d[k] for k in ("haendler", "beleg_datum", "kategorie", "unterkategorie",
-                                 "zahlungsart", "projekt", "weiterverrechenbar", "betrag_chf",
-                                 "notiz") if k in d}
-    if "weiterverrechenbar" in allowed:
-        allowed["weiterverrechenbar"] = 1 if _cap.to_bool(allowed["weiterverrechenbar"]) else 0
-    if "betrag_chf" in allowed:
-        try:
-            allowed["betrag_chf"] = round(float(allowed["betrag_chf"]), 2)
-        except (TypeError, ValueError):
+                                 "zahlungsart", "projekt", "notiz") if k in d}
+    if "weiterverrechenbar" in d:
+        allowed["weiterverrechenbar"] = 1 if _cap.to_bool(d["weiterverrechenbar"]) else 0
+
+    # amount / currency — same resolution path as create (FX or manual CHF)
+    if art == "pauschale" and ("pauschale_code" in d or "menge" in d):
+        code = (d.get("pauschale_code") or existing.get("pauschale_code") or "").strip()
+        res = _pau.resolve_by_code(code, menge=(d.get("menge") or 1), tariffs=_sdb.list_pauschalen())
+        if not res["ok"]:
+            return jsonify({"error": res.get("error") or "Pauschaltarif nicht verfügbar",
+                            "placeholder": res.get("is_placeholder", False)}), 422
+        allowed.update({"pauschale_code": code, "betrag_chf": res["betrag_chf"],
+                        "betrag_original": res["betrag_chf"], "waehrung": "CHF",
+                        "wechselkurs": None, "kurs_quelle": "PAUSCHALE"})
+    elif art == "beleg" and ("betrag_original" in d or "waehrung" in d or "betrag_chf" in d):
+        bo = _cap.parse_amount(d["betrag_original"]) if "betrag_original" in d else _cap.parse_amount(existing.get("betrag_original"))
+        if bo is None:
             return jsonify({"error": "Betrag ungültig"}), 400
+        waehrung = (d.get("waehrung") or existing.get("waehrung") or "CHF").strip().upper()
+        datum = (d.get("beleg_datum") or existing.get("beleg_datum") or "")
+        manual_chf = d.get("betrag_chf")
+        if manual_chf not in (None, ""):
+            mc = _cap.parse_amount(manual_chf)
+            if mc is None:
+                return jsonify({"error": "CHF-Betrag ungültig"}), 400
+            allowed.update({"betrag_chf": round(mc, 2), "betrag_original": bo, "waehrung": waehrung,
+                            "kurs_quelle": "MANUELL",
+                            "wechselkurs": (round(mc / bo, 6) if bo else None)})
+        elif waehrung == "CHF":
+            allowed.update({"betrag_chf": round(bo, 2), "betrag_original": bo, "waehrung": "CHF",
+                            "wechselkurs": 1.0, "kurs_quelle": "DIREKT_CHF"})
+        else:
+            conv = _cur.convert_to_chf(bo, waehrung, datum)
+            if not conv["ok"]:
+                return jsonify({"error": conv.get("error") or "Wechselkurs nicht verfügbar",
+                                "need_manual_chf": True}), 422
+            allowed.update({"betrag_chf": conv["betrag_chf"], "betrag_original": bo,
+                            "waehrung": waehrung, "wechselkurs": conv["wechselkurs"],
+                            "kurs_quelle": conv["kurs_quelle"]})
+
+    # Kaffeekasse: explicit manual override wins; else recompute from the new amount
+    if "ist_kaffeekasse" in d:
+        allowed["ist_kaffeekasse"] = 1 if _cap.to_bool(d["ist_kaffeekasse"]) else 0
+    elif "betrag_chf" in allowed:
         allowed["ist_kaffeekasse"] = 1 if _pau.is_kaffeekasse(
-            allowed["betrag_chf"], ist_pauschale=(existing["art"] == "pauschale")) else 0
+            allowed["betrag_chf"], ist_pauschale=(art == "pauschale")) else 0
+
+    if not allowed:
+        return jsonify({"ok": False, "error": "Nichts zu ändern"}), 400
     ok = _sdb.update_beleg(beleg_id, allowed)
     return jsonify({"ok": ok})
+
+
+@app.route("/api/spesen/beleg/<int:beleg_id>/image", methods=["GET"])
+def spesen_beleg_image(beleg_id):
+    """Serve the stored receipt (image or PDF) so the KnowBody can re-check it while
+    correcting the beleg. Owner-scoped; the image lives on disk, only the basename is
+    in the DB."""
+    kb = _spesen_member()
+    if not kb:
+        return jsonify({"error": "Unauthorized"}), 401
+    from spesen import db as _sdb, capture as _cap
+    b = _sdb.get_beleg(beleg_id)
+    if not b or b["knowbody_id"] != kb["id"]:
+        return jsonify({"error": "Nicht gefunden"}), 404
+    if not b.get("bild_pfad"):
+        return jsonify({"error": "Kein Beleg-Bild"}), 404
+    # bild_pfad is a server-generated basename; basename() again defends against traversal
+    path = _cap.abs_path_for(os.path.basename(b["bild_pfad"]))
+    if not os.path.isfile(path):
+        return jsonify({"error": "Datei nicht gefunden"}), 404
+    import mimetypes
+    mt = mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return send_file(path, mimetype=mt)
 
 
 @app.route("/api/spesen/beleg/<int:beleg_id>", methods=["DELETE"])
@@ -4036,9 +4143,16 @@ def spesen_month_close():
         return jsonify({"error": "Unauthorized"}), 401
     d = request.get_json(silent=True) or {}
     month = (d.get("month") or "").strip() or _now_local().strftime("%Y-%m")
-    from spesen import month_close as _mc
+    from spesen import month_close as _mc, config as _cfg
+    # Kontroll-Bestätigung: the KnowBody must type the exact sentence (their liability).
+    attest_text = (d.get("bestaetigung_text") or "").strip()
+    if not _cfg.attestation_matches(attest_text):
+        return jsonify({"error": "Bitte den Bestätigungssatz exakt abtippen.",
+                        "need_attest": True}), 400
+    attest = {"text": attest_text, "von": kb.get("name", ""),
+              "am": _now_local().isoformat(timespec="seconds")}
     try:
-        res = _mc.close_month(kb["id"], month, accountant_email=SPESEN_ACCOUNTANT_EMAIL)
+        res = _mc.close_month(kb["id"], month, accountant_email=SPESEN_ACCOUNTANT_EMAIL, attest=attest)
     except Exception as e:
         app.logger.error("spesen month-close failed: %s", e)
         return jsonify({"error": "Abschluss fehlgeschlagen"}), 500
@@ -4086,6 +4200,11 @@ def spesen_feedback():
         return jsonify({"error": "Nachricht ist leer"}), 400
     from spesen import db as _sdb
     fid = _sdb.add_feedback(kb["id"], kb.get("name", ""), text[:4000])
+    try:  # best-effort mirror into the "KnowSpesen Feedback" Notion DB
+        from spesen import notion_feedback as _nf
+        _nf.mirror(fid, kb.get("name", ""), text[:4000], "Offen", _now_local().date().isoformat())
+    except Exception as e:
+        app.logger.warning("feedback notion mirror failed: %s", e)
     return jsonify({"ok": True, "id": fid})
 
 
@@ -4124,6 +4243,75 @@ def spesen_setup_db():
             app.logger.error("spesen seed_demo failed: %s", e)
             out["demo_error"] = str(e)
     return jsonify(out)
+
+
+@app.route("/api/spesen/health", methods=["GET"])
+def spesen_health():
+    """Deep liveness check for the KnowSpesen service (the health-check cron polls
+    this): DB reachable, receipts dir writable, free disk space, last-backup age.
+    Returns 200 when all critical checks pass, else 503. Public (no data leaked)."""
+    import shutil
+    import tempfile
+    from spesen import db as _sdb, capture as _cap
+    checks = {}
+    ok = True
+
+    # DB reachable + core table present
+    try:
+        conn = _sdb.get_conn()
+        try:
+            conn.execute("SELECT COUNT(*) FROM knowbodies").fetchone()
+        finally:
+            conn.close()
+        checks["db"] = "ok"
+    except Exception as e:
+        checks["db"] = f"error: {type(e).__name__}"
+        ok = False
+
+    # receipts dir writable (atomic temp write + remove)
+    rdir = _cap.receipt_dir()
+    try:
+        os.makedirs(rdir, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=rdir, suffix=".healthcheck")
+        os.close(fd)
+        os.remove(tmp)
+        checks["receipts_writable"] = "ok"
+    except Exception as e:
+        checks["receipts_writable"] = f"error: {type(e).__name__}"
+        ok = False
+
+    # free disk space (warn, not fail, unless critically low)
+    try:
+        free_mb = int(shutil.disk_usage(rdir).free / (1024 * 1024))
+        checks["disk_free_mb"] = free_mb
+        if free_mb < 200:
+            checks["disk"] = "critical"
+            ok = False
+    except Exception as e:
+        checks["disk_free_mb"] = f"error: {type(e).__name__}"
+
+    # last-backup age (informational)
+    try:
+        last = _sdb.meta_get("last_backup_at")
+        checks["last_backup_at"] = last
+        checks["last_backup_ok"] = _sdb.meta_get("last_backup_ok")
+    except Exception:
+        checks["last_backup_at"] = None
+
+    return jsonify({"status": "ok" if ok else "degraded", "checks": checks}), (200 if ok else 503)
+
+
+# On the KnowSpesen deployment only (KNOWSPESEN_HOME=1), ensure the schema is current
+# + rates re-synced on every startup. init_db() is idempotent (CREATE IF NOT EXISTS +
+# additive ALTERs), so a redeploy auto-migrates without a manual setup-db call — and the
+# guard keeps the shared codebase on Render/cockpit from ever touching /srv/knowspesen.
+if os.environ.get("KNOWSPESEN_HOME"):
+    try:
+        from spesen import db as _sdb_boot
+        _sdb_boot.init_db()
+        app.logger.info("KnowSpesen schema ensured on startup")
+    except Exception as _e:  # never let a DB hiccup crash the whole app import
+        app.logger.warning("KnowSpesen init_db on startup failed: %s", _e)
 
 
 # ---------------------------------------------------------------------------
