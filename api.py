@@ -2912,17 +2912,50 @@ from datetime import (datetime as _dt2, timedelta as _td2, date as _date2,
 BOOKING_TZ = "Europe/Zurich"
 SLOT_MINUTES = int(os.environ.get("COCKPIT_SLOT_MINUTES", "60"))
 # Weekly bookable windows in local time, keyed by weekday() (Mon=0 … Sun=6).
-# Mirrors the team's Google "general availability": Mon–Fri business hours; the linked
-# calendar's free/busy carves out the real openings. Edit here to change availability.
+# All 7 days open for the current push (weekends included, when we're in town); the
+# blackout ranges below carve out the weeks we're away, and the linked calendar's
+# free/busy carves out the real openings. Edit here to change availability.
 BOOKING_WINDOWS = {
     0: [("08:00", "18:00")],  # Mon
     1: [("08:00", "18:00")],  # Tue
     2: [("08:00", "18:00")],  # Wed
     3: [("08:00", "18:00")],  # Thu
     4: [("08:00", "18:00")],  # Fri
+    5: [("08:00", "18:00")],  # Sat
+    6: [("08:00", "18:00")],  # Sun
 }
 BOOKING_LEAD_DAYS = int(os.environ.get("COCKPIT_LEAD_DAYS", "1"))      # earliest = now +N days (24h)
-BOOKING_HORIZON_DAYS = int(os.environ.get("COCKPIT_HORIZON_DAYS", "30"))
+BOOKING_HORIZON_DAYS = int(os.environ.get("COCKPIT_HORIZON_DAYS", "75"))
+# Fixed last bookable date — an absolute cap that overrides the rolling horizon above.
+# Set to "" to disable the cap and fall back to the rolling BOOKING_HORIZON_DAYS window.
+BOOKING_HORIZON_DATE = os.environ.get("COCKPIT_HORIZON_DATE", "2026-09-30").strip()
+# Vacation / blackout ranges — inclusive local-date spans with NO bookable slots.
+# Hand-managed availability config (mirrors BOOKING_WINDOWS). Edit here for future
+# absences, or override without a redeploy via COCKPIT_BLACKOUT_RANGES, e.g.
+# "2026-07-17:2026-07-27,2026-08-11:2026-09-02".
+BOOKING_BLACKOUT_RANGES = [
+    (_date2(2026, 7, 17), _date2(2026, 7, 27)),  # Sommerpause
+    (_date2(2026, 8, 11), _date2(2026, 9, 2)),   # Abwesenheit
+]
+
+
+def _parse_blackout_env(raw: str) -> list:
+    ranges = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            a, b = chunk.split(":")
+            ranges.append((_date2.fromisoformat(a.strip()), _date2.fromisoformat(b.strip())))
+        except ValueError:
+            app.logger.warning("ignoring bad COCKPIT_BLACKOUT_RANGES chunk: %r", chunk)
+    return ranges
+
+
+_blackout_env = os.environ.get("COCKPIT_BLACKOUT_RANGES", "").strip()
+if _blackout_env:
+    BOOKING_BLACKOUT_RANGES = _parse_blackout_env(_blackout_env)
 # Buffer (min) added around every busy block so back-to-back/near bookings are blocked
 # (≈ travel time for on-site visits). Mirrors Google's 45-min buffer.
 COCKPIT_BUFFER_MINUTES = int(os.environ.get("COCKPIT_BUFFER_MINUTES", "45"))
@@ -3032,6 +3065,23 @@ def _now_local():
 def _parse_hhmm(s: str) -> _time2:
     h, m = s.split(":")
     return _time2(int(h), int(m))
+
+
+def _is_blacked_out(d: _date2) -> bool:
+    """True if local date `d` falls in any configured blackout (vacation) range."""
+    return any(a <= d <= b for (a, b) in BOOKING_BLACKOUT_RANGES)
+
+
+def _booking_end_date(today: _date2) -> _date2:
+    """Last bookable local date: the fixed BOOKING_HORIZON_DATE if configured, else the
+    rolling BOOKING_HORIZON_DAYS window from `today`."""
+    if BOOKING_HORIZON_DATE:
+        try:
+            return _date2.fromisoformat(BOOKING_HORIZON_DATE)
+        except ValueError:
+            app.logger.warning("bad COCKPIT_HORIZON_DATE %r — using rolling horizon",
+                               BOOKING_HORIZON_DATE)
+    return today + _td2(days=BOOKING_HORIZON_DAYS)
 
 
 def _window_slots_for_date(d: _date2) -> list:
@@ -3149,9 +3199,10 @@ def _bookable_slots(date_from: _date2, date_to: _date2) -> list:
     cand_by_day: dict = {}
     d = date_from
     while d <= date_to:
-        for (s, e) in _window_slots_for_date(d):
-            if s >= earliest:
-                cand_by_day.setdefault(d, []).append((s, e))
+        if not _is_blacked_out(d):
+            for (s, e) in _window_slots_for_date(d):
+                if s >= earliest:
+                    cand_by_day.setdefault(d, []).append((s, e))
         d += _td2(days=1)
     if not cand_by_day:
         return []
@@ -3395,7 +3446,7 @@ def book_slots():
             slots = _bookable_slots(d, d)
         else:
             today = _now_local().date()
-            slots = _bookable_slots(today, today + _td2(days=BOOKING_HORIZON_DAYS))
+            slots = _bookable_slots(today, _booking_end_date(today))
     except ValueError:
         return jsonify({"error": "bad date"}), 400
     days: dict = {}
@@ -3438,6 +3489,11 @@ def book_confirm():
     except ValueError:
         return jsonify({"error": "Ungültiger Termin."}), 400
     end_dt = start_dt + _td2(minutes=SLOT_MINUTES)
+
+    # Enforce the booking horizon — the per-day re-check below doesn't bound the range.
+    if start_dt.date() > _booking_end_date(_now_local().date()):
+        return jsonify({"error": "Dieser Termin liegt außerhalb des Buchungszeitraums.",
+                        "code": "out_of_horizon"}), 409
 
     # Re-check the slot is still offered + free (guards races + tampering).
     same_day = _bookable_slots(start_dt.date(), start_dt.date())
