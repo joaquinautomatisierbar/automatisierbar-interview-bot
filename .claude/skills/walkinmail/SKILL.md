@@ -19,7 +19,8 @@ Notion. The operator just opens the draft and hits send. Bike Method Phase 1: op
 ```
 SENDER     = Joaquin Gamonal
 FROM       = joaquin@automatisierbar.ch   # operator copies + sends from Infomaniak webmail
-BOOKING    = https://calendar.app.google/mWy2heiDmRFcgFKA7   # ⚠️ Google booking link, being replaced — update here
+CC         = tej@automatisierbar.ch       # every walk-in draft Cc's the team (added by the tool)
+BOOKING    = https://cockpit.automatisierbar.ch/book
 PHONE      = +41 76 477 11 07
 ORT        = Baden
 ```
@@ -34,6 +35,15 @@ ORT        = Baden
 - Tool: `tools/walkin/infomaniak_draft.py` — appends each mail as a `\Draft` into `Drafts`
   via IMAP (imaplib only, **never SMTP** → cannot send). Mail-side defaults (host/port/subfolder)
   live in `tools/walkin/walkin_config.json`.
+- **Signature is automatic — never hand-write one.** The tool builds each draft as
+  `multipart/alternative` (plain + HTML) and appends the operator's real default Infomaniak
+  signature, pulled live via the Mail API (`tools/walkin/infomaniak_signature.py`, token
+  `INFOMANIAK_MAIL_TOKEN`) with a committed fallback in `tools/walkin/signature.html`. So the
+  `body` you pass must **end at the closing salutation** (`Freundliche Grüsse aus Baden,`) — the
+  name/role/company/phone/email/website come from the signature. Inspect it with
+  `python3 tools/walkin/infomaniak_signature.py --show`.
+- **Cc is automatic.** Every draft Cc's the team (`tej@automatisierbar.ch`, the `cc` field in
+  `walkin_config.json`) — the tool adds the Cc header itself, so don't put it in the payload.
 - Auth in `.env`: `INFOMANIAK_IMAP_USER`, `INFOMANIAK_IMAP_PASSWORD` (an Infomaniak **application
   password**, generated in the Infomaniak Manager → Mail → security).
 - **Creds-missing / IMAP error is non-fatal:** the tool prints `creds fehlen` or a login error and
@@ -86,7 +96,9 @@ ORT        = Baden
      the offer above. **Never** write "gratis"/"kostenlos" repeatedly, "kostet keinen Rappen", or
      self-deprecating lines like "Bringt's nichts, ist auch gut". Confident, not billig.
    - CTA (two options): the `BOOKING` link **or** a quick reply.
-   - Sign-off: `Freundliche Grüsse aus {ORT}, / {SENDER} / Automatisierbar / {PHONE}`.
+   - Sign-off: end the body with `Freundliche Grüsse aus {ORT},` and nothing after it. **Do not
+     add the name, company, or phone** — the tool auto-appends the operator's real Infomaniak
+     signature, so a manual one would duplicate it.
    - **Honor the per-line note:** if it says the contact forwards to the team (e.g. Q27, Avantec),
      add a forward-invite line: *„Falls jemand anderes bei Ihnen dafür zuständig ist, leiten Sie
      die Nachricht gerne weiter."* Address a known person by name (`Guten Tag Herr/Frau X`),
