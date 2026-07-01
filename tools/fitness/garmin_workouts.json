@@ -1,0 +1,40 @@
+{
+  "_doc": "Declarative Garmin (FR265) workout definitions for the Comeback Protokoll. Built by garmin_workout_builder.py via garth, which expands each exercise into flat ExecutableStepDTO steps: per-side moves -> 'links' step + side-switch rest + 'rechts' step; multi-set -> repeated steps with a set rest; a transition rest after every exercise. sportType = strength_training (id 5, FR265-downloadable). exerciseName must be a valid FIT enum or Garmin silently nulls it (null = generic step labelled by description). Update-in-place by workoutId via PUT.",
+  "step_type_ids": {"warmup": 1, "cooldown": 2, "interval": 3, "recovery": 4, "rest": 5, "repeat": 6},
+  "end_condition_ids": {"lap": 1, "time": 2, "reps": 10, "iterations": 7},
+  "invalid_codes_do_not_use": ["90_DEGREE_CABLE_EXTERNAL_ROTATION", "FACE_PULL", "SCAPULAR_PULL_UP", "BAND_PULL_APART", "SCAPTION", "REVERSE_FLY"],
+  "workouts": [
+    {
+      "id": "1596765340",
+      "name": "🧘 Mobility — Daily (Comeback)",
+      "description": "Tägliche Mobility. Übungen mit 'pro Seite' laufen jetzt als zwei Schritte (links/rechts) mit Pause dazwischen; nach jeder Übung kurze Umbau-Pause.",
+      "defaults": {"side_switch_s": 10, "set_rest_s": 15, "transition_s": 20},
+      "exercises": [
+        {"code": "CAT_COW", "category": "CORE", "end": "reps", "value": 10, "desc": "Cat-Cow: langsam die ganze Wirbelsäule rollen, 8–10 Wdh."},
+        {"code": "THORACIC_ROTATION", "category": "WARM_UP", "end": "reps", "value": 8, "per_side": true, "desc": "Open Book / BWS-Rotation: 8 Wdh., am Endpunkt 2s halten."},
+        {"code": "BACK_ROLL_FOAM_ROLLER", "category": "WARM_UP", "end": "time", "value": 90, "desc": "BWS über Foam Roller: Roller quer unter die Brustwirbelsäule, segmentweise. 60–90s."},
+        {"code": "SHOULDER_CIRCLES", "category": "WARM_UP", "end": "reps", "value": 5, "per_side": true, "desc": "Shoulder CARs: langsame, kontrollierte volle Schulterkreise, je 3–5 vor- und rückwärts."},
+        {"code": "NINETY_NINETY_HIP_SWITCH", "category": "WARM_UP", "end": "reps", "value": 16, "desc": "90/90 Hip Switch: kontrolliert von Seite zu Seite wechseln, 16 total (8 pro Seite)."},
+        {"code": "STRETCH_HIP_FLEXOR_AND_QUAD", "category": "WARM_UP", "end": "time", "value": 45, "per_side": true, "desc": "Couch Stretch / Hüftbeuger: 45s halten."},
+        {"code": "BACK_SQUATS", "category": "SQUAT", "end": "time", "value": 90, "desc": "Tiefe Hocke halten (Asian Squat): 60–90s, optional Arme nach vorne."},
+        {"code": "STAND_AND_HANG", "category": "MOVE", "end": "time", "value": 30, "desc": "Passiver Dead Hang: 20–30s, nur schmerzfrei — dekomprimiert Wirbelsäule & Schulter."}
+      ]
+    },
+    {
+      "id": "1596765342",
+      "name": "🛡️ Cuff & Schulter-Reha (Comeback)",
+      "description": "Rotatorenmanschette + Schulterstabilität. Mehrsätzige Übungen laufen als getrennte Sätze mit Pause; isometrische Rotationen pro Seite (links/rechts) mit Umschalt-Pause.",
+      "defaults": {"side_switch_s": 10, "set_rest_s": 30, "transition_s": 20},
+      "exercises": [
+        {"code": null, "category": "SHOULDER_STABILITY", "end": "reps", "value": 10, "sets": 2, "desc": "Scapular Pull-ups: an der Stange hängen, NUR Schulterblätter nach unten/hinten ziehen, Arme gestreckt."},
+        {"code": "FLOOR_Y_RAISE", "category": "SHOULDER_STABILITY", "end": "reps", "value": 10, "sets": 2, "desc": "Prone Y-Raise: Bauchlage, Arme zu 'Y', Daumen hoch, Schulterblätter zusammen. Sehr leicht."},
+        {"code": "FLOOR_T_RAISE", "category": "SHOULDER_STABILITY", "end": "reps", "value": 10, "sets": 2, "desc": "Prone T-Raise: Arme zu 'T' (90°), Schulterblätter zusammen, kein Schwung."},
+        {"code": "FLOOR_I_RAISE", "category": "SHOULDER_STABILITY", "end": "reps", "value": 10, "sets": 2, "desc": "Prone I-Raise (für das 'W'): Arme über Kopf zu 'I', Daumen hoch."},
+        {"code": "CABLE_EXTERNAL_ROTATION", "category": "SHOULDER_STABILITY", "end": "time", "value": 30, "per_side": true, "sets": 2, "desc": "Isometrisch gegen Türrahmen: Ellbogen 90° am Körper, nach AUSSEN drücken ohne Bewegung, ~30–50% Kraft."},
+        {"code": "CABLE_INTERNAL_ROTATION", "category": "SHOULDER_STABILITY", "end": "time", "value": 20, "per_side": true, "sets": 1, "desc": "Isometrisch nach INNEN gegen Türrahmen, zur Balance."},
+        {"code": "DUMBBELL_FACE_PULL_WITH_EXTERNAL_ROTATION", "category": "SHOULDER_STABILITY", "end": "reps", "value": 15, "sets": 3, "desc": "Face Pull mit Aussenrotation (Band/Kabel): zum Gesicht ziehen + Hände nach aussen drehen."},
+        {"code": "BAND_EXTERNAL_ROTATION", "category": "SHOULDER_STABILITY", "end": "reps", "value": 15, "per_side": true, "sets": 1, "desc": "AB PHASE 2 (wenn Iso schmerzfrei): leichtes Band, langsam. In Phase 1 überspringen."}
+      ]
+    }
+  ]
+}

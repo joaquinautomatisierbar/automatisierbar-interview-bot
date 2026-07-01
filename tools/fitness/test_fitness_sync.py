@@ -43,7 +43,7 @@ def check(name, cond):
     (PASS if cond else FAIL).append(name)
     print(("  ok  " if cond else "FAIL  ") + name)
 
-# planned cardio days in W1 are Wed(2) + Sat(5); strength Tue(1) + Fri(4); mobility daily; cuff Mon/Wed/Fri.
+# planned cardio days in W1 are Wed(2) + Sat(5); strength Tue(1)/Thu(3)/Fri(4); mobility daily; cuff Mon/Wed/Fri.
 
 # 1) THE BUG: swim for Wed done Monday (surplus), Saturday NOT done.
 #    -> Wed cardio covered (from Mon); Sat stays missed; cardio credited 1/2 (not inflated to 2).
@@ -58,7 +58,7 @@ check("Saturday stays uncovered", "cardio" not in day(r,5)["covered"])
 # the surplus swim must be credited exactly once (cap 1 of 2), never doubled by the cover flag
 pb, db = fs.week_bag(r)[:2]
 check("cardio credited 1 of 2 (surplus not double-counted)", min(db["cardio"], pb["cardio"]) == 1)
-check("week planned total = 14", planned == 14)
+check("week planned total = 15", planned == 15)   # mobility7 + cuff3 + cardio2 + strength3 (Tue/Thu/Fri)
 
 # 2) build_week_view summary must match the bag (coverage is display-only, never re-counts)
 wv = fs.build_week_view(MON, {x["date"]: x for x in r}, SUN)

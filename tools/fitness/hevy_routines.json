@@ -1,0 +1,45 @@
+{
+  "_doc": "Declarative Hevy routine config for the Comeback Protokoll (folder 3019499). hevy_routine_sync.py uses this to (a) patch rest_seconds on existing routines via GET->patch->PUT (preserves all logged sets/reps/weights) and (b) create the Increase Repetitions rep-ladder via POST. Principled rest scheme: compound near-max (1-2 RIR) ~120s, accessory ~90s, isolation/core/rehab 45-60s. Full Body / Cuff / Abs were already sensible and are intentionally NOT touched.",
+  "folder_id": 3019499,
+  "rest_overrides": {
+    "7290b7e0-383e-4401-bac3-492e0ca05da3": {
+      "_name": "💪 Back & Biceps — Pull",
+      "Pull Up": 120,
+      "Chin Up": 120,
+      "Australian Pull up (Wide + Shoulder + Close Grip)": 90,
+      "Archer Australian Chin ups": 90,
+      "Bicep Curl (Barbell)": 75,
+      "Commando Pull Up": 90
+    },
+    "6f930fde-8a7e-463e-af18-747680e6e468": {
+      "_name": "🔱 Chest & Triceps — Push",
+      "Chest Dip": 120,
+      "Push Up": 90,
+      "Explosive Push Up": 90,
+      "Spider-Man push ups": 60,
+      "Skull Crushers": 60,
+      "Bench Dip": 60,
+      "Tricep Extension": 60
+    },
+    "5b321cb1-b502-4dec-a7c9-2afe94b79e7c": {
+      "_name": "🦵 Leg Day — Gym",
+      "Single Leg Standing Calf Raise": 90,
+      "Tibialis Raises": 60
+    }
+  },
+  "new_routines": [
+    {
+      "key": "increase_reps",
+      "id": "addc05de-5d53-4871-a9a0-9467e83e97ce",
+      "title": "🟩 Increase Repetitions (Comeback)",
+      "notes": "Rep-Ladder (Donnerstag, Phase 1). Auf-/absteigende Leiter pro Übung, RIR 1-2, NICHT bis Versagen. Ziel: über die Wochen die Leiter verlängern / mehr Wdh. pro Stufe. Kurze Pausen zwischen den Stufen.",
+      "exercises": [
+        {"template_id": "1B2B1E7C", "title": "Pull Up", "rest": 60, "ladder": [1, 2, 3, 4, 3, 2, 1], "notes": "Strikt, voller ROM. RIR 1-2."},
+        {"template_id": "6FCD7755", "title": "Chest Dip", "rest": 60, "ladder": [2, 3, 4, 5, 4, 3, 2], "notes": "Nur schmerzfreie Tiefe, sonst Push-ups."},
+        {"template_id": "392887AA", "title": "Push Up", "rest": 45, "ladder": [5, 7, 9, 7, 5], "notes": "Sauber, Core fest."},
+        {"template_id": "425805F4", "title": "Inverted Row", "rest": 45, "ladder": [3, 4, 5, 6, 5, 4, 3], "notes": "Brust zur Stange, Schulterblätter zusammen."},
+        {"template_id": "08590920", "title": "Hanging Knee Raise", "rest": 45, "ladder": [2, 3, 4, 5, 4, 3, 2], "notes": "Kontrolliert, kein Schwung."}
+      ]
+    }
+  ]
+}

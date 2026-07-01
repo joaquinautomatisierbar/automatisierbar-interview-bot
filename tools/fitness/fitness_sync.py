@@ -286,7 +286,7 @@ def planned_for(d):
     phase = 1 if wk <= 3 else 2
     if dow in (2,5): p.add("cardio")      # Wed + Sat
     if phase == 1:
-        if dow in (1,4): p.add("strength")   # Tue legs, Fri full-body
+        if dow in (1,3,4): p.add("strength")   # Tue legs, Thu increase-reps (rep ladder), Fri full-body
     else:
         if dow in (0,1,2,3): p.add("strength")  # Mon/Tue/Wed/Thu
     return p
