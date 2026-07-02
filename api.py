@@ -2963,6 +2963,73 @@ COCKPIT_BUFFER_MINUTES = int(os.environ.get("COCKPIT_BUFFER_MINUTES", "45"))
 # "max bookings per day"; counted from busy blocks as a proxy). 0 disables the cap.
 COCKPIT_MAX_PER_DAY = int(os.environ.get("COCKPIT_MAX_PER_DAY", "6"))
 
+# --- Remote availability config (Hub v2·M5a) ---------------------------------
+# JSON override file merged over the env/hardcoded defaults above, so the Hub's
+# booking page can change availability remotely. Lazily created; read per-request
+# via an mtime cache so edits apply WITHOUT a restart and both gunicorn workers
+# converge on their next request. No file ⇒ byte-identical to the constants-only
+# behavior. Endpoints are inert (404) until COCKPIT_CONFIG_SECRET is set.
+BOOKING_CONFIG_PATH = _Path(__file__).resolve().parent / "data" / "booking_config.json"
+COCKPIT_CONFIG_SECRET = os.environ.get("COCKPIT_CONFIG_SECRET", "").strip()
+_BOOKING_CFG_LOCK = _threading.Lock()
+_BOOKING_OV_CACHE = {"mtime": None, "data": {}}
+_BOOKING_CFG_KEYS = ("slot_minutes", "lead_days", "horizon_days", "horizon_date",
+                     "buffer_minutes", "max_per_day", "blackout_ranges", "windows")
+
+
+def _booking_overrides() -> dict:
+    """Raw override dict from data/booking_config.json ({} if absent/corrupt).
+    mtime-cached: re-parsed only when the file changes (os.replace bumps mtime)."""
+    try:
+        st = os.stat(BOOKING_CONFIG_PATH)
+    except OSError:
+        _BOOKING_OV_CACHE.update(mtime=None, data={})
+        return {}
+    if _BOOKING_OV_CACHE["mtime"] != st.st_mtime_ns:
+        try:
+            data = _json.loads(BOOKING_CONFIG_PATH.read_text(encoding="utf-8"))
+            data = ({k: v for k, v in data.items() if k in _BOOKING_CFG_KEYS}
+                    if isinstance(data, dict) else {})
+        except Exception as e:
+            app.logger.error("booking_config.json unreadable — ignoring overrides: %s", e)
+            data = {}
+        _BOOKING_OV_CACHE.update(mtime=st.st_mtime_ns, data=data)
+    return _BOOKING_OV_CACHE["data"]
+
+
+def _booking_cfg() -> dict:
+    """Effective availability config: JSON overrides merged over the module
+    defaults, with Python-native types (drop-in for the constants). Never raises —
+    a bad override falls back to the defaults (this engine takes real bookings)."""
+    cfg = {
+        "slot_minutes": SLOT_MINUTES,
+        "lead_days": BOOKING_LEAD_DAYS,
+        "horizon_days": BOOKING_HORIZON_DAYS,
+        "horizon_date": BOOKING_HORIZON_DATE,          # "" = no fixed cap
+        "buffer_minutes": COCKPIT_BUFFER_MINUTES,
+        "max_per_day": COCKPIT_MAX_PER_DAY,
+        "blackout_ranges": BOOKING_BLACKOUT_RANGES,    # list[(date, date)]
+        "windows": BOOKING_WINDOWS,                    # {int: [(hh:mm, hh:mm)]}
+    }
+    ov = _booking_overrides()
+    try:
+        for k in ("slot_minutes", "lead_days", "horizon_days",
+                  "buffer_minutes", "max_per_day"):
+            if k in ov:
+                cfg[k] = int(ov[k])
+        if "horizon_date" in ov:
+            cfg["horizon_date"] = (ov["horizon_date"] or "").strip()
+        if "blackout_ranges" in ov:
+            cfg["blackout_ranges"] = [
+                (_date2.fromisoformat(a), _date2.fromisoformat(b))
+                for (a, b) in ov["blackout_ranges"]]
+        if "windows" in ov:
+            cfg["windows"] = {int(k): [tuple(w) for w in v]
+                              for k, v in ov["windows"].items()}
+    except Exception as e:
+        app.logger.error("booking override merge failed — using defaults: %s", e)
+    return cfg
+
 COCKPIT_APPOINTMENTS_DB_ID = os.environ.get("COCKPIT_APPOINTMENTS_DB_ID", "")
 COCKPIT_CALENDAR_ID = os.environ.get("COCKPIT_CALENDAR_ID", "")
 COCKPIT_BOOK_SECRET = os.environ.get("COCKPIT_BOOK_SECRET", "")        # optional confirm gate
@@ -3067,29 +3134,32 @@ def _parse_hhmm(s: str) -> _time2:
     return _time2(int(h), int(m))
 
 
-def _is_blacked_out(d: _date2) -> bool:
+def _is_blacked_out(d: _date2, cfg: dict = None) -> bool:
     """True if local date `d` falls in any configured blackout (vacation) range."""
-    return any(a <= d <= b for (a, b) in BOOKING_BLACKOUT_RANGES)
+    cfg = cfg or _booking_cfg()
+    return any(a <= d <= b for (a, b) in cfg["blackout_ranges"])
 
 
-def _booking_end_date(today: _date2) -> _date2:
-    """Last bookable local date: the fixed BOOKING_HORIZON_DATE if configured, else the
-    rolling BOOKING_HORIZON_DAYS window from `today`."""
-    if BOOKING_HORIZON_DATE:
+def _booking_end_date(today: _date2, cfg: dict = None) -> _date2:
+    """Last bookable local date: the fixed horizon_date if configured, else the
+    rolling horizon_days window from `today`."""
+    cfg = cfg or _booking_cfg()
+    if cfg["horizon_date"]:
         try:
-            return _date2.fromisoformat(BOOKING_HORIZON_DATE)
+            return _date2.fromisoformat(cfg["horizon_date"])
         except ValueError:
-            app.logger.warning("bad COCKPIT_HORIZON_DATE %r — using rolling horizon",
-                               BOOKING_HORIZON_DATE)
-    return today + _td2(days=BOOKING_HORIZON_DAYS)
+            app.logger.warning("bad horizon_date %r — using rolling horizon",
+                               cfg["horizon_date"])
+    return today + _td2(days=cfg["horizon_days"])
 
 
-def _window_slots_for_date(d: _date2) -> list:
+def _window_slots_for_date(d: _date2, cfg: dict = None) -> list:
     """Tz-aware (start,end) slot candidates for local date `d`, pre busy-filter."""
+    cfg = cfg or _booking_cfg()
     tz = _zurich()
     out = []
-    step = _td2(minutes=SLOT_MINUTES)
-    for (w_start, w_end) in BOOKING_WINDOWS.get(d.weekday(), []):
+    step = _td2(minutes=cfg["slot_minutes"])
+    for (w_start, w_end) in cfg["windows"].get(d.weekday(), []):
         ws = _dt2.combine(d, _parse_hhmm(w_start), tzinfo=tz)
         we = _dt2.combine(d, _parse_hhmm(w_end), tzinfo=tz)
         cur = ws
@@ -3195,12 +3265,13 @@ def _bookable_slots(date_from: _date2, date_to: _date2) -> list:
     'now', the per-day booking cap, and busy intervals (expanded by the buffer) from the
     linked calendar (if configured)."""
     tz = _zurich()
-    earliest = _dt2.now(tz) + _td2(days=BOOKING_LEAD_DAYS)
+    cfg = _booking_cfg()
+    earliest = _dt2.now(tz) + _td2(days=cfg["lead_days"])
     cand_by_day: dict = {}
     d = date_from
     while d <= date_to:
-        if not _is_blacked_out(d):
-            for (s, e) in _window_slots_for_date(d):
+        if not _is_blacked_out(d, cfg):
+            for (s, e) in _window_slots_for_date(d, cfg):
                 if s >= earliest:
                     cand_by_day.setdefault(d, []).append((s, e))
         d += _td2(days=1)
@@ -3210,17 +3281,17 @@ def _bookable_slots(date_from: _date2, date_to: _date2) -> list:
     span_start = min(s for slots in cand_by_day.values() for (s, _e) in slots)
     span_end = max(e for slots in cand_by_day.values() for (_s, e) in slots)
     raw_busy = _calendar_busy(span_start, span_end)
-    buf = _td2(minutes=COCKPIT_BUFFER_MINUTES)
+    buf = _td2(minutes=cfg["buffer_minutes"])
     busy_exp = [(bs - buf, be + buf) for (bs, be) in raw_busy]
 
     out = []
     for day, slots in cand_by_day.items():
         # Per-day cap: count raw busy blocks intersecting this calendar day.
-        if COCKPIT_MAX_PER_DAY:
+        if cfg["max_per_day"]:
             day_start = _dt2.combine(day, _time2(0, 0), tzinfo=tz)
             day_end = _dt2.combine(day, _time2(23, 59, 59), tzinfo=tz)
             booked = sum(1 for (bs, be) in raw_busy if _overlaps(bs, be, day_start, day_end))
-            if booked >= COCKPIT_MAX_PER_DAY:
+            if booked >= cfg["max_per_day"]:
                 continue
         for (s, e) in slots:
             if not any(_overlaps(s, e, bs, be) for (bs, be) in busy_exp):
@@ -3440,13 +3511,14 @@ def team_setup_webhook():
 def book_slots():
     """Bookable slots. ?date=YYYY-MM-DD for one day, else the next horizon grouped
     by day. Public (no auth)."""
+    cfg = _booking_cfg()
     try:
         if request.args.get("date"):
             d = _date2.fromisoformat(request.args["date"])
             slots = _bookable_slots(d, d)
         else:
             today = _now_local().date()
-            slots = _bookable_slots(today, _booking_end_date(today))
+            slots = _bookable_slots(today, _booking_end_date(today, cfg))
     except ValueError:
         return jsonify({"error": "bad date"}), 400
     days: dict = {}
@@ -3454,7 +3526,7 @@ def book_slots():
         days.setdefault(s.date().isoformat(), []).append(
             {"start": s.isoformat(), "label": s.strftime("%H:%M")})
     out = [{"date": k, "slots": v} for k, v in sorted(days.items())]
-    return jsonify({"slot_minutes": SLOT_MINUTES, "tz": BOOKING_TZ, "days": out})
+    return jsonify({"slot_minutes": cfg["slot_minutes"], "tz": BOOKING_TZ, "days": out})
 
 
 @app.route("/api/book/confirm", methods=["POST"])
@@ -3488,10 +3560,15 @@ def book_confirm():
                     else start_dt.astimezone(tz))
     except ValueError:
         return jsonify({"error": "Ungültiger Termin."}), 400
-    end_dt = start_dt + _td2(minutes=SLOT_MINUTES)
+    # Snapshot the config once; a config write landing mid-request could otherwise
+    # give end_dt and the slot re-check different slot lengths (the re-check inside
+    # _bookable_slots re-derives cfg — harmless, it's the stricter gate).
+    cfg = _booking_cfg()
+    slot_minutes = cfg["slot_minutes"]
+    end_dt = start_dt + _td2(minutes=slot_minutes)
 
     # Enforce the booking horizon — the per-day re-check below doesn't bound the range.
-    if start_dt.date() > _booking_end_date(_now_local().date()):
+    if start_dt.date() > _booking_end_date(_now_local().date(), cfg):
         return jsonify({"error": "Dieser Termin liegt außerhalb des Buchungszeitraums.",
                         "code": "out_of_horizon"}), 409
 
@@ -3581,7 +3658,7 @@ def book_confirm():
         import cockpit_email as _ce
         if not _ce.send_confirmation(
                 to_email=email, to_name=name, when_label=when_label, address=adresse,
-                slot_minutes=SLOT_MINUTES, start_dt=start_dt, end_dt=end_dt,
+                slot_minutes=slot_minutes, start_dt=start_dt, end_dt=end_dt,
                 summary=summary, description=description):
             app.logger.warning("confirmation email not sent (no mail credential or send failed)")
     except Exception as e:
@@ -3592,11 +3669,11 @@ def book_confirm():
     # operator-bot ping (the team PWA claim covers it either way).
     team_msg = ("📅 <b>Neue Buchung</b> (Prozessermittlung vor Ort) — <b>UNASSIGNED</b>\n"
                 f"🏢 {firma}\n👤 {name} · {phone}\n📍 {adresse}\n"
-                f"🕐 {when_label} ({SLOT_MINUTES} Min)\n❓ Wer übernimmt?")
+                f"🕐 {when_label} ({slot_minutes} Min)\n❓ Wer übernimmt?")
     if not (COCKPIT_TEAM_BOT_TOKEN and appt_id and _send_team_claim_message(team_msg, appt_id)):
         _send_team_telegram(team_msg)
 
-    return jsonify({"ok": True, "when": when_label, "slot_minutes": SLOT_MINUTES,
+    return jsonify({"ok": True, "when": when_label, "slot_minutes": slot_minutes,
                     "calendar": bool(event_id)})
 
 
@@ -3649,6 +3726,157 @@ def book_request():
         "📨 <b>Custom Terminanfrage</b> (kein passender Slot)\n"
         f"🏢 {firma or '—'}\n👤 {name} · {phone or '—'}\n✉️ {email}\n📝 {message}")
     return jsonify({"ok": True})
+
+
+# --- Remote availability-config endpoints (Hub v2·M5a) ------------------------
+
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _validate_booking_patch(patch: dict):
+    """Validate + normalize a partial config update. Returns (clean, errors).
+    A key set to JSON null means 'remove this override' and passes through as None."""
+    clean, errors = {}, []
+    int_rules = {"slot_minutes": (5, 480), "lead_days": (0, 60),
+                 "horizon_days": (1, 365), "buffer_minutes": (0, 240),
+                 "max_per_day": (0, 24)}
+    for k, v in patch.items():
+        if k not in _BOOKING_CFG_KEYS:
+            errors.append(f"unknown key: {k}")
+            continue
+        if v is None:                                  # override removal
+            clean[k] = None
+            continue
+        if k in int_rules:
+            lo, hi = int_rules[k]
+            if not (isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi):
+                errors.append(f"{k}: expected int {lo}..{hi}")
+            else:
+                clean[k] = v
+        elif k == "horizon_date":                      # "" = disable the fixed cap
+            if not isinstance(v, str):
+                errors.append("horizon_date: expected ISO date string, '' or null")
+                continue
+            v = v.strip()
+            if v:
+                try:
+                    _date2.fromisoformat(v)
+                except ValueError:
+                    errors.append(f"horizon_date: bad ISO date {v!r}")
+                    continue
+            clean[k] = v
+        elif k == "blackout_ranges":                   # whole-list replacement
+            ok, out = isinstance(v, list) and len(v) <= 50, []
+            if ok:
+                for pair in v:
+                    try:
+                        a, b = pair
+                        da, db = _date2.fromisoformat(a), _date2.fromisoformat(b)
+                        if da > db:
+                            raise ValueError
+                        out.append([da.isoformat(), db.isoformat()])
+                    except Exception:
+                        ok = False
+                        break
+            if ok:
+                clean[k] = out
+            else:
+                errors.append("blackout_ranges: expected list of [start,end] ISO dates,"
+                              " start<=end, max 50")
+        elif k == "windows":                           # whole-map replacement; absent day = closed
+            ok, out = isinstance(v, dict), {}
+            if ok:
+                for day, wins in v.items():
+                    if (str(day) not in {"0", "1", "2", "3", "4", "5", "6"}
+                            or not isinstance(wins, list) or len(wins) > 4):
+                        ok = False
+                        break
+                    dw = []
+                    for w in wins:
+                        try:
+                            s, e = w
+                        except Exception:
+                            ok = False
+                            break
+                        if not (isinstance(s, str) and isinstance(e, str)
+                                and _HHMM_RE.match(s) and _HHMM_RE.match(e) and s < e):
+                            ok = False
+                            break
+                        dw.append([s, e])
+                    if not ok:
+                        break
+                    out[str(day)] = dw
+            if ok:
+                clean[k] = out
+            else:
+                errors.append('windows: expected {"0".."6": [["HH:MM","HH:MM"], ...]}'
+                              " with start<end, max 4 windows/day")
+    return clean, errors
+
+
+def _config_auth():
+    """(ok, status). Inert by default: no COCKPIT_CONFIG_SECRET ⇒ 404 for everyone.
+    Set ⇒ require X-Config-Secret (constant-time compare) OR the cockpit session."""
+    if not COCKPIT_CONFIG_SECRET:
+        return False, 404
+    import hmac as _hmac
+    if _hmac.compare_digest(request.headers.get("X-Config-Secret", ""),
+                            COCKPIT_CONFIG_SECRET) or _cockpit_auth_ok():
+        return True, 200
+    return False, 403
+
+
+@app.route("/api/book/config", methods=["GET"])
+def book_config_get():
+    """Effective availability config + which keys are overridden. Gated (see
+    _config_auth); serves the Hub's /app/booking availability panel."""
+    ok, status = _config_auth()
+    if not ok:
+        return jsonify({"error": "not found" if status == 404 else "Unauthorized"}), status
+    cfg = _booking_cfg()
+    effective = dict(
+        cfg,
+        blackout_ranges=[[a.isoformat(), b.isoformat()] for (a, b) in cfg["blackout_ranges"]],
+        windows={str(k): [list(w) for w in v] for k, v in cfg["windows"].items()},
+        horizon_date=cfg["horizon_date"] or None)
+    ov = _booking_overrides()
+    return jsonify({"effective": effective, "overrides": ov,
+                    "overridden_keys": sorted(ov.keys()), "tz": BOOKING_TZ})
+
+
+@app.route("/api/book/config", methods=["PUT", "POST"])
+def book_config_put():
+    """Partial availability-config update. null clears a key's override; an empty
+    override set deletes the file (pristine defaults). Whole-value replacement for
+    blackout_ranges/windows; a day absent from an overridden windows map is closed."""
+    ok, status = _config_auth()
+    if not ok:
+        return jsonify({"error": "not found" if status == 404 else "Unauthorized"}), status
+    patch = request.get_json(silent=True)
+    if not isinstance(patch, dict):
+        return jsonify({"error": "expected a JSON object"}), 400
+    clean, errors = _validate_booking_patch(patch)
+    if errors:
+        return jsonify({"error": "validation failed", "details": errors}), 400
+    with _BOOKING_CFG_LOCK:   # in-worker read-modify-write guard; cross-worker
+        merged = dict(_booking_overrides())   # PUTs are last-write-wins (single admin)
+        for k, v in clean.items():
+            if v is None:
+                merged.pop(k, None)
+            else:
+                merged[k] = v
+        try:
+            BOOKING_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            if merged:
+                tmp = BOOKING_CONFIG_PATH.with_suffix(".json.tmp")
+                tmp.write_text(_json.dumps(merged, indent=2), encoding="utf-8")
+                os.replace(tmp, BOOKING_CONFIG_PATH)   # atomic; bumps mtime ⇒ cache busts
+            else:
+                BOOKING_CONFIG_PATH.unlink(missing_ok=True)  # empty ⇒ pristine default state
+        except Exception as e:
+            app.logger.error("booking config write failed: %s", e)
+            return jsonify({"error": "write failed"}), 500
+    return book_config_get()
 
 
 # Default parent for the appointments DB: the Operations Cockpit page (the prod
