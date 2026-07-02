@@ -1,0 +1,10 @@
+{
+  "ist_befund": true,
+  "nachname": "Beispiel",
+  "vorname": "Anna",
+  "geburtsdatum": "07.11.1992",
+  "berichtsdatum": "15.06.2026",
+  "titel_erwartet": "NIPT V-Natal",
+  "titel_ist_aus_liste": true,
+  "gate_pass": true
+}

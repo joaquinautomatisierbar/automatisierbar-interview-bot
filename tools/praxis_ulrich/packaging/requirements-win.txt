@@ -1,0 +1,9 @@
+# Befund-Automat — Windows runtime dependencies (build machine + packaged app).
+# Dev on macOS needs only: pymupdf anthropic
+pymupdf>=1.24
+anthropic>=0.40
+winotify>=1.1        ; sys_platform == 'win32'
+pystray>=0.19
+Pillow>=10.0
+pyperclip>=1.9
+keyring>=25.0

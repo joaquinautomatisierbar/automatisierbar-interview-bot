@@ -1,0 +1,10 @@
+{
+  "ist_befund": true,
+  "nachname": "Muster",
+  "vorname": "Eva",
+  "geburtsdatum": "02.02.1969",
+  "berichtsdatum": "25.06.2026",
+  "titel_erwartet": "Brustzentrum Mamma-US",
+  "titel_ist_aus_liste": true,
+  "gate_pass": true
+}

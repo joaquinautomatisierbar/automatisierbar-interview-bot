@@ -1,0 +1,10 @@
+{
+  "ist_befund": true,
+  "nachname": "Muster",
+  "vorname": "Maria",
+  "geburtsdatum": "12.03.1985",
+  "berichtsdatum": "10.06.2026",
+  "titel_erwartet": "Austrittsbericht Geburt USZ",
+  "titel_ist_aus_liste": true,
+  "gate_pass": true
+}

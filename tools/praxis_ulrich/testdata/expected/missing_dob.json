@@ -1,0 +1,10 @@
+{
+  "ist_befund": true,
+  "nachname": "Testfall",
+  "vorname": "Nora",
+  "geburtsdatum": null,
+  "berichtsdatum": "26.06.2026",
+  "titel_erwartet": null,
+  "titel_ist_aus_liste": false,
+  "gate_pass": false
+}

@@ -1,0 +1,10 @@
+{
+  "ist_befund": true,
+  "nachname": "Negativ",
+  "vorname": "Rhea",
+  "geburtsdatum": "17.06.1993",
+  "berichtsdatum": "01.07.2026",
+  "titel_erwartet": "Fetale RHD Genotypisierung (Rhesusfaktor)",
+  "titel_ist_aus_liste": true,
+  "gate_pass": true
+}

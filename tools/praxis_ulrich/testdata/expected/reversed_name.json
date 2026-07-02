@@ -1,0 +1,11 @@
+{
+  "ist_befund": true,
+  "nachname": "Sanchez Rivera",
+  "vorname": "Carmen",
+  "geburtsdatum": "19.07.1991",
+  "berichtsdatum": "27.06.2026",
+  "titel_erwartet": "Ultraschallbericht Dr. T. Burkhardt USZ",
+  "titel_ist_aus_liste": true,
+  "gate_pass": true,
+  "lenient_name_order": true
+}

@@ -1,0 +1,10 @@
+{
+  "ist_befund": true,
+  "nachname": "Probe",
+  "vorname": "Petra",
+  "geburtsdatum": "23.01.1978",
+  "berichtsdatum": "18.06.2026",
+  "titel_erwartet": "Urinkultur",
+  "titel_ist_aus_liste": true,
+  "gate_pass": true
+}

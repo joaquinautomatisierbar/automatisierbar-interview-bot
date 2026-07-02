@@ -1,0 +1,11 @@
+{
+  "ist_befund": true,
+  "nachname": "Bildtest",
+  "vorname": "Sofia",
+  "geburtsdatum": "03.04.1994",
+  "berichtsdatum": "28.06.2026",
+  "titel_erwartet": "Ultraschallbericht Dr. T. Burkhardt USZ",
+  "titel_ist_aus_liste": true,
+  "gate_pass": true,
+  "scanned": true
+}

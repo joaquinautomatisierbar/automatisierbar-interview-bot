@@ -1,0 +1,10 @@
+{
+  "ist_befund": false,
+  "nachname": null,
+  "vorname": null,
+  "geburtsdatum": null,
+  "berichtsdatum": null,
+  "titel_erwartet": null,
+  "titel_ist_aus_liste": false,
+  "gate_pass": false
+}
