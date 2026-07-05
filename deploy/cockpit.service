@@ -16,7 +16,10 @@ WorkingDirectory=/srv/cockpit/app
 # Secrets + config live here (root-only, NOT in git). See cockpit.env.example.
 EnvironmentFile=/etc/cockpit/env
 # Bind to localhost only — Caddy reverse-proxies cockpit.automatisierbar.ch to it.
-ExecStart=/srv/cockpit/venv/bin/gunicorn api:app --bind 127.0.0.1:8082 --workers 2 --timeout 120
+# --timeout 300 (was 120): /api/brief/generate (Hub M9) runs a synchronous Claude call +
+# web_search that can take ~90-150s. The Hub worker POSTs briefs one at a time, so at most one
+# slow generation runs at once, leaving the 2nd worker free for normal cockpit traffic.
+ExecStart=/srv/cockpit/venv/bin/gunicorn api:app --bind 127.0.0.1:8082 --workers 2 --timeout 300
 Restart=on-failure
 RestartSec=3
 

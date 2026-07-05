@@ -1,0 +1,19 @@
+# Caddy site block for briefs.automatisierbar.ch — company briefs (Hub M9).
+#
+# Same host-prefix pattern as walkin.automatisierbar.ch: the subdomain reverse-proxies to the
+# shared cockpit Flask app on :8082, which dispatches by request.host (api.py index()) and serves
+# each brief at its unguessable /b/<token>.html URL. There is deliberately NO directory index —
+# briefs hold confidential client info and are reachable only via their token URL (embedded in the
+# Hub client page + linked from the "Brief ist bereit" inbox notification).
+#
+# Prereqs before appending this to /etc/caddy/Caddyfile:
+#   1. DNS A-record:  briefs.automatisierbar.ch -> 187.124.188.2
+#   2. Then:  caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+# Until DNS + this block exist, briefs are still reachable at cockpit.automatisierbar.ch/b/<token>.html
+# (BRIEF_BASE_URL defaults to the cockpit host). Flip BRIEF_BASE_URL to https://briefs.automatisierbar.ch
+# in /etc/cockpit/env once this is live.
+
+briefs.automatisierbar.ch {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8082
+}

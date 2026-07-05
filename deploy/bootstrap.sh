@@ -45,7 +45,7 @@ Type=simple
 User=paperclip
 WorkingDirectory=/srv/cockpit/app
 EnvironmentFile=/etc/cockpit/env
-ExecStart=/srv/cockpit/venv/bin/gunicorn api:app --bind 127.0.0.1:8082 --workers 2 --timeout 120
+ExecStart=/srv/cockpit/venv/bin/gunicorn api:app --bind 127.0.0.1:8082 --workers 2 --timeout 300
 Restart=on-failure
 RestartSec=3
 [Install]

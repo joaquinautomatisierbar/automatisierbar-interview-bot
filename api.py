@@ -61,6 +61,25 @@ WALKIN_MAX_AUDIO_MB = _env_int("WALKIN_MAX_AUDIO_MB", 20)
 WALKIN_MAX_AUDIO_BYTES = WALKIN_MAX_AUDIO_MB * 1024 * 1024
 WALKIN_KB_DB_ID = os.environ.get("WALKIN_KB_DB_ID", "")
 
+# --- Company Brief automation (Hub M9) --------------------------------------
+# Generated HTML briefs are written here and served by this app at /b/<token>.html. Default
+# base URL is the cockpit host so briefs are reachable immediately (no new DNS); flip
+# BRIEF_BASE_URL to https://briefs.automatisierbar.ch once that subdomain proxies to :8082.
+BRIEFS_DIR = os.environ.get(
+    "BRIEFS_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tmp", "briefs"))
+BRIEF_BASE_URL = os.environ.get("BRIEF_BASE_URL", "https://cockpit.automatisierbar.ch").rstrip("/")
+BRIEF_SHARED_SECRET = os.environ.get("BRIEF_SHARED_SECRET", "")
+_BRIEF_TOKEN_RE = re.compile(r"^[0-9a-fA-F]{16,64}$")
+
+
+def _brief_auth_ok() -> bool:
+    """Fail-closed: the Hub's brief worker authenticates with the X-Brief-Secret header.
+    If the secret isn't configured, refuse (never fall open)."""
+    if not BRIEF_SHARED_SECRET:
+        app.logger.warning("BRIEF_SHARED_SECRET not set — /api/brief/generate refused")
+        return False
+    return request.headers.get("X-Brief-Secret") == BRIEF_SHARED_SECRET
+
 # Flask-level request body cap. Above the larger of the per-file caps to leave
 # room for multipart overhead. Anything larger fails fast at the WSGI layer.
 app.config["MAX_CONTENT_LENGTH"] = max(
@@ -196,6 +215,10 @@ def index():
     # Internal expense tracker: ausgaben.automatisierbar.ch -> /ausgaben (Blueprint).
     if host.startswith("ausgaben"):
         return redirect("/ausgaben")
+    # Company briefs: briefs.automatisierbar.ch has no index — a brief is only reachable at
+    # its unguessable /b/<token>.html URL (non-enumerable, holds confidential client info).
+    if host.startswith("briefs"):
+        return ("Not found", 404)
     # On the cockpit VPS deployment the bare domain is the public booking front door,
     # so it serves a small landing page; the interview bot moves to /interview (below).
     # On Render (COCKPIT_HOME unset) the root keeps serving the interview bot.
@@ -214,6 +237,117 @@ def interview_page():
     if os.environ.get("RENDER") and not _cockpit_home():
         return _redirect_to_cockpit_interview()
     return send_from_directory("static", "index.html")
+
+
+# ---------------------------------------------------------------------------
+# Company Brief automation (Hub M9): serve generated briefs + generate on demand
+# ---------------------------------------------------------------------------
+
+@app.route("/b/<path:fname>", methods=["GET"])
+def serve_brief(fname):
+    """Serve a generated brief HTML by its unguessable token filename. No directory index;
+    only exact <token>.html names resolve. Reached at cockpit.../b/<token>.html and (once
+    the subdomain proxies here) briefs.automatisierbar.ch/b/<token>.html."""
+    if not (fname.endswith(".html") and _BRIEF_TOKEN_RE.match(fname[:-5])):
+        return ("Not found", 404)
+    if not os.path.isfile(os.path.join(BRIEFS_DIR, fname)):
+        return ("Brief nicht gefunden.", 404)
+    return send_from_directory(BRIEFS_DIR, fname)
+
+
+def _brief_file(name: str) -> str:
+    return os.path.join(BRIEFS_DIR, name)
+
+
+def _write_brief_file(name: str, content: str) -> None:
+    os.makedirs(BRIEFS_DIR, exist_ok=True)
+    with open(_brief_file(name), "w", encoding="utf-8") as fh:
+        fh.write(content)
+
+
+def _run_brief_generation(token: str, lead_page_id: str, brief_type):
+    """Background worker body: generate the brief and persist its result as sidecar files
+    (<token>.html + .meta.json on success, .skip on a normal skip, .error on failure). Runs in
+    a daemon thread because generation takes minutes (web_search + a large completion)."""
+    import json as _json
+    import brief_generator as bg
+    try:
+        result = bg.generate(lead_page_id, brief_type)
+        _write_brief_file(f"{token}.html", result["html"])
+        _write_brief_file(f"{token}.meta.json", _json.dumps({
+            "firma": result["firma"], "brief_type": result["brief_type"],
+            "summary": result["summary"],
+        }))
+    except ValueError as e:
+        # No brief for this stage / lead not found — a normal skip, not an error.
+        _write_brief_file(f"{token}.skip", str(e)[:500])
+    except Exception as e:  # noqa: BLE001
+        app.logger.exception("brief generation failed")
+        _write_brief_file(f"{token}.error", str(e)[:500])
+
+
+@app.route("/api/brief/generate", methods=["POST"])
+def brief_generate():
+    """Kick off async company-brief generation. Called by the Hub's M9 brief worker
+    (X-Brief-Secret). Body: {lead_page_id, brief_type?, appointment_id?}. Returns 202 with a
+    token + the eventual brief_url + status_url immediately; the caller polls
+    GET /api/brief/status/<token> until done (generation takes minutes). brief_type is
+    auto-derived from the lead's pipeline stage when omitted."""
+    if not _brief_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    lead_page_id = str(data.get("lead_page_id", "")).strip()
+    brief_type = (str(data.get("brief_type", "")).strip() or None)
+    if not lead_page_id:
+        return jsonify({"error": "lead_page_id required"}), 400
+    if brief_type and brief_type not in ("wf", "pilot", "general"):
+        return jsonify({"error": "brief_type must be wf|pilot|general"}), 400
+
+    import threading
+    import uuid as _uuid
+    token = _uuid.uuid4().hex
+    try:
+        os.makedirs(BRIEFS_DIR, exist_ok=True)
+    except OSError as e:
+        return jsonify({"error": f"briefs dir not writable: {e}"}), 500
+    threading.Thread(target=_run_brief_generation, args=(token, lead_page_id, brief_type),
+                     daemon=True).start()
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "status": "pending",
+        "brief_url": f"{BRIEF_BASE_URL}/b/{token}.html",
+        "status_url": f"{BRIEF_BASE_URL}/api/brief/status/{token}",
+    }), 202
+
+
+@app.route("/api/brief/status/<token>", methods=["GET"])
+def brief_status(token):
+    """Poll a brief's generation status. done -> brief_url (+ firma/type/summary); skip/error ->
+    reason; else pending. Same shared-secret auth as generate."""
+    if not _brief_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _BRIEF_TOKEN_RE.match(token or ""):
+        return jsonify({"error": "bad token"}), 400
+    import json as _json
+    if os.path.isfile(_brief_file(f"{token}.html")):
+        meta = {}
+        try:
+            with open(_brief_file(f"{token}.meta.json"), encoding="utf-8") as fh:
+                meta = _json.load(fh)
+        except (OSError, ValueError):
+            pass
+        return jsonify({"status": "done", "brief_url": f"{BRIEF_BASE_URL}/b/{token}.html", **meta})
+    for state in ("skip", "error"):
+        p = _brief_file(f"{token}.{state}")
+        if os.path.isfile(p):
+            try:
+                with open(p, encoding="utf-8") as fh:
+                    reason = fh.read()[:500]
+            except OSError:
+                reason = ""
+            return jsonify({"status": state, "reason": reason})
+    return jsonify({"status": "pending"})
 
 
 # ---------------------------------------------------------------------------
