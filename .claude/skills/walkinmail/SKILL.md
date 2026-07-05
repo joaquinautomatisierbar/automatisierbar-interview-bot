@@ -1,9 +1,22 @@
 ---
 name: walkinmail
-description: Use when the operator types /walkinmail or asks to "draft the walk-in mails", "do the walk-in follow-ups", "schreib die Walk-in Mails" — typically after a day of door-to-door walk-ins. Reads the new walk-in entries from the 💡-callout on the Operations Cockpit, finds each company's website + contact email, picks the matching industry pain-hypothesis from the Follow-Up Email Script, and drafts one send-ready German (Hochdeutsch, Sie) follow-up email per company as an openable draft directly in the operator's Infomaniak mailbox (Drafts folder, via IMAP — never sent), with a Notion archive copy on the "📧 Walk-in Mail Drafts" page, then marks each processed callout line ✅ + date. Drafts only — never sends.
+description: "[RETIRED — superseded by the automatic walk-in draft pipeline] Walk-in follow-up emails now draft AUTOMATICALLY when a lead is entered in the field PWA (server-side, into the ENTERING person's mailbox). Do NOT use this skill in the normal flow. To IMPROVE the automatic drafts, use /walkinmail-improvement. This file is kept only as a manual break-glass fallback for a total pipeline outage, and depends on the 💡-callout which is no longer written."
 ---
 
-# /walkinmail — Walk-in follow-up email drafter
+# /walkinmail — Walk-in follow-up email drafter  ·  ⚠️ RETIRED
+
+> **This skill is retired.** Walk-in follow-up emails are now drafted **automatically** by the
+> server-side pipeline the moment a lead is entered in the field PWA — into the ENTERING person's
+> own Infomaniak Drafts, at the same quality, authored as them. See
+> `workflows/walkin_followup_automation.md`.
+>
+> - To **improve** the automatic drafts (copy, framing, appointment-time phrasing, etc.) →
+>   **`/walkinmail-improvement`**.
+> - The 💡-callout this skill reads is **no longer written** by the walk-in endpoint, so a normal
+>   run finds nothing. Kept only as a documented break-glass fallback if the auto-pipeline is fully
+>   down and you must hand-draft from a manually-populated callout.
+
+# (legacy) Walk-in follow-up email drafter
 
 After a walk-in where the prospect said *"schicken Sie mir ein Mail"*, turn each callout
 entry into a finished, send-ready email. One run = N openable drafts in the Infomaniak mailbox
@@ -83,9 +96,24 @@ ORT        = Baden
    - Subject: `Unser Besuch bei Ihnen, kurzer nächster Schritt` (or a script variant).
    - Warm anchor: `wie besprochen, wir waren diese Woche kurz bei Ihnen im Büro. Sie haben uns
      empfohlen, Ihnen eine kurze Nachricht zu schicken …` (use the actual weekday if known).
-   - Pain hook (1 sentence): the sector hypothesis framed as the weekly time it costs them
-     (**the pain is the pitch**), **no jargon** (never "API", "n8n", "Automatisierung" in the
-     tech sense), **no prices**.
+   - **Write it simple (Drittklässler-Niveau).** Short sentences, everyday words. Hormozi:
+     simpler copy lifts reply rates. **Kill the Beamtendeutsch** — never "wiederkehrende
+     Korrespondenz", "administrative Abläufe", "Ressourcenplanung". Name the concrete boring task
+     the way the prospect would: "jeden Kunden einzeln anschreiben", "Zahlen aus PDFs abtippen",
+     "jede Woche dieselbe Liste zusammenstellen". Still **no jargon** (never "API", "n8n",
+     "Automatisierung" in the tech sense), **no prices**.
+   - **Lead with the Dream Outcome, not the process.** Don't open the mini-pitch with "wir kommen,
+     wir schauen, wir bauen". Open with the *result*: the hours per week that go back to the team.
+     Then name the one specific tedious task (sector hypothesis) that eats that time. **The pain is
+     the pitch, but the outcome is the hook.**
+   - **The "10-Stunden-Hebel" anchor — as the GOAL of the interview, never as proof or a promise.**
+     We are pre-revenue: **no completed case studies, no measured client savings, no named
+     references.** So **never** write "bei Firma X haben wir Y Stunden gespart" or any specific
+     saved-hours claim — that is fabricated proof and is banned. Instead frame the number as what
+     we *look for together*: e.g. *„Beim Workflow-Interview suchen wir gezielt den einen Prozess,
+     der Sie jede Woche am meisten Zeit kostet. Ob am Ende 2 oder 10 Stunden drinliegen, sehen wir
+     dort, bevor für Sie Kosten entstehen."* Under-promise: if you name a range, keep it
+     conservative and always tied to "das finden wir im Interview heraus".
    - The offer = our **Grand Slam Offer**, used close to verbatim (it sits at the top of the
      Notion Final Script + as the red callout on the Operations Cockpit):
      *„Wir schauen uns Ihren Betrieb und Ihre Prozesse genau an, von A bis Z. Dann optimieren wir
@@ -95,7 +123,16 @@ ORT        = Baden
    - **Sell the value, never sound cheap.** State that it costs nothing **exactly once**, inside
      the offer above. **Never** write "gratis"/"kostenlos" repeatedly, "kostet keinen Rappen", or
      self-deprecating lines like "Bringt's nichts, ist auch gut". Confident, not billig.
-   - CTA (two options): the `BOOKING` link **or** a quick reply.
+   - **CTA = combined A/B-Zeitwahl + Buchungslink (both, in this order).** "The more ways you give
+     people to book, the more book" — but reduce cognitive load with an A/B choice instead of an
+     open "wann passt es?". Keep the **60-minute on-site** frame ("wir kommen zu Ihnen ins Büro").
+     Pattern:
+     *„Wäre Ihnen [Tag A, z.B. Dienstagvormittag] oder [Tag B, z.B. Mittwochnachmittag] lieber?
+     Wir kommen für 60 Minuten zu Ihnen ins Büro, antworten Sie einfach kurz auf diese Nachricht.
+     Falls Sie Ihren Kalender gerade vor sich haben, wählen Sie Ihren Termin in 10 Sekunden direkt:
+     👉 {BOOKING}"* The reply-option comes first (persönlich, senkt Skepsis), the link second as
+     the friction-free shortcut. Pick two plausible near-future slots; do not invent a specific
+     date/time that implies a real calendar hold.
    - Sign-off: end the body with `Freundliche Grüsse aus {ORT},` and nothing after it. **Do not
      add the name, company, or phone** — the tool auto-appends the operator's real Infomaniak
      signature, so a manual one would duplicate it.

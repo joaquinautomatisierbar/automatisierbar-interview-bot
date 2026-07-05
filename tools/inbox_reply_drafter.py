@@ -63,7 +63,17 @@ from infomaniak_draft import (  # noqa: E402
 )
 from infomaniak_signature import get_signature, html_to_text  # noqa: E402
 
-STATE_PATH = os.path.join(_REPO_ROOT, ".tmp", "inbox-reply-drafter-state.json")
+STATE_PATH = os.path.join(_REPO_ROOT, ".tmp", "inbox-reply-drafter-state.json")  # legacy joaquin
+
+
+def _state_path(mailbox: str = "joaquin") -> str:
+    """Per-mailbox idempotency state. joaquin keeps the original filename (backward compat);
+    every other mailbox gets its own so drafts into different boxes never share state."""
+    if mailbox in ("joaquin", "", None):
+        return STATE_PATH
+    return os.path.join(_REPO_ROOT, ".tmp", f"inbox-reply-drafter-state.{mailbox}.json")
+
+
 DEFAULT_SINCE_DAYS = 3
 DEFAULT_MAX_PER_RUN = 10
 DEFAULT_MAX_SCAN = 80          # bound on classify calls per run (first run can see many mails)
@@ -263,9 +273,9 @@ def _now_iso() -> str:
 
 # ---- state (idempotency) ----------------------------------------------------
 
-def load_state() -> dict:
+def load_state(mailbox: str = "joaquin") -> dict:
     try:
-        with open(STATE_PATH) as f:
+        with open(_state_path(mailbox)) as f:
             st = json.load(f)
         st.setdefault("processed", {})
         st.setdefault("last_run", "")
@@ -274,27 +284,35 @@ def load_state() -> dict:
         return {"processed": {}, "last_run": ""}
 
 
-def save_state(state: dict) -> None:
-    os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+def save_state(state: dict, mailbox: str = "joaquin") -> None:
+    path = _state_path(mailbox)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     cutoff = (datetime.now(timezone.utc) - timedelta(days=STATE_RETENTION_DAYS)).isoformat()
     state["processed"] = {k: v for k, v in state.get("processed", {}).items()
                           if (v or "") >= cutoff}
-    tmp = STATE_PATH + ".tmp"
+    tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
-    os.replace(tmp, STATE_PATH)
+    os.replace(tmp, path)
 
 
 # ---- IMAP ------------------------------------------------------------------
 
-def _connect_inbox():
-    """Connect to the joaquin@ mailbox. Returns (imap, user) or (None, None)."""
-    user = env("JOAQUIN_IMAP_USER") or env("INFOMANIAK_IMAP_USER")
-    pw = env("JOAQUIN_IMAP_PASSWORD") or env("INFOMANIAK_IMAP_PASSWORD")
-    host = env("JOAQUIN_IMAP_HOST") or env("INFOMANIAK_IMAP_HOST") or "mail.infomaniak.com"
-    port = int(env("JOAQUIN_IMAP_PORT") or env("INFOMANIAK_IMAP_PORT") or 993)
+def _connect_inbox(mailbox: str = "joaquin"):
+    """Connect to `mailbox`'s inbox. Returns (imap, user) or (None, None). Creds resolve via
+    team_mailboxes: joaquin/info fall back to the legacy INFOMANIAK_* pair, but tej/nico/patrik
+    require their OWN {PREFIX}_IMAP_* (never the info@ fallback — that would poll the wrong box)."""
+    import team_mailboxes as tm
+    try:
+        user = env(tm.imap_user_env(mailbox)) or tm.address(mailbox)
+        pw = env(tm.imap_password_env(mailbox))
+    except KeyError:
+        print(f"[inbox] unknown mailbox {mailbox!r}")
+        return None, None
+    host = env("INFOMANIAK_IMAP_HOST") or "mail.infomaniak.com"
+    port = int(env("INFOMANIAK_IMAP_PORT") or 993)
     if not user or not pw:
-        print("[inbox] IMAP creds missing (set JOAQUIN_IMAP_USER / JOAQUIN_IMAP_PASSWORD)")
+        print(f"[inbox] IMAP creds missing for {mailbox} (set {tm.imap_password_env(mailbox)})")
         return None, None
     try:
         imap = imaplib.IMAP4_SSL(host, port)
@@ -403,20 +421,25 @@ def _notify(text: str) -> None:
 # ---- orchestration ----------------------------------------------------------
 
 def run(*, dry_run=False, max_per_run=DEFAULT_MAX_PER_RUN, max_scan=DEFAULT_MAX_SCAN,
-        since_days=DEFAULT_SINCE_DAYS, verbose=False) -> dict:
+        since_days=DEFAULT_SINCE_DAYS, verbose=False, mailbox="joaquin") -> dict:
     import claude_client as cc          # lazy (pulls anthropic) — keeps module import light
     import notion_session as ns         # lazy (pulls requests/Notion)
+    import team_mailboxes as tm
 
     cfg = load_config()
-    from_addr = env("JOAQUIN_FROM") or cfg.get("from") or "joaquin@automatisierbar.ch"
+    try:
+        from_addr = tm.address(mailbox)
+        cfg = tm.draft_cfg(mailbox, cfg)   # per-mailbox From + signature (mailbox_name/token)
+    except KeyError:
+        from_addr = env("JOAQUIN_FROM") or cfg.get("from") or "joaquin@automatisierbar.ch"
     booking_url = cfg.get("booking") or "https://cockpit.automatisierbar.ch/book"
     slots_url = env("BOOKING_SLOTS_URL") or "http://127.0.0.1:8082/api/book/slots"
     appointments_db = env("COCKPIT_APPOINTMENTS_DB_ID") or ""
 
-    state = load_state()
+    state = load_state(mailbox)
     since_str = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%d-%b-%Y")
 
-    imap, user = _connect_inbox()
+    imap, user = _connect_inbox(mailbox)
     if not imap:
         print("[inbox] no IMAP connection — skipping (no-op).")
         return {"skipped": "no_imap"}
@@ -539,15 +562,15 @@ def run(*, dry_run=False, max_per_run=DEFAULT_MAX_PER_RUN, max_scan=DEFAULT_MAX_
 
         if not dry_run:
             state["last_run"] = _now_iso()
-            save_state(state)
+            save_state(state, mailbox)
 
-        summary = (f"[inbox] drafted={counts['drafted']} "
+        summary = (f"[inbox:{mailbox}] drafted={counts['drafted']} "
                    f"skipped(rule={counts['skipped_rule']} irrelevant={counts['skipped_irrelevant']} "
                    f"dup={counts['skipped_dup']} seen={counts['skipped_seen']}) "
                    f"failed={counts['failed']} scanned={counts['scanned']} dry_run={dry_run}")
         print(summary)
         if not dry_run and (counts["drafted"] or counts["failed"]):
-            _notify(f"📥 Inbox-Drafter: {counts['drafted']} Entwürfe erstellt, "
+            _notify(f"📥 Inbox-Drafter ({mailbox}): {counts['drafted']} Entwürfe erstellt, "
                     f"{counts['failed']} fehlgeschlagen")
         return counts
     finally:
@@ -557,8 +580,8 @@ def run(*, dry_run=False, max_per_run=DEFAULT_MAX_PER_RUN, max_scan=DEFAULT_MAX_
             pass
 
 
-def cmd_list_folders() -> int:
-    imap, user = _connect_inbox()
+def cmd_list_folders(mailbox: str = "joaquin") -> int:
+    imap, user = _connect_inbox(mailbox)
     if not imap:
         return 2
     try:
@@ -587,13 +610,16 @@ def main():
     ap.add_argument("--since-days", type=int, default=DEFAULT_SINCE_DAYS, help="INBOX lookback window (days)")
     ap.add_argument("--list-folders", action="store_true", help="Login + show folders/detection, then exit")
     ap.add_argument("--verbose", action="store_true", help="Per-message skip/draft logging")
+    ap.add_argument("--mailbox", default="joaquin",
+                    choices=["joaquin", "tej", "nico", "nicolas", "patrik", "info"],
+                    help="Which mailbox to draft into (default joaquin)")
     args = ap.parse_args()
 
     if args.list_folders:
-        sys.exit(cmd_list_folders())
+        sys.exit(cmd_list_folders(args.mailbox))
 
     run(dry_run=args.dry_run, max_per_run=args.max_per_run, max_scan=args.max_scan,
-        since_days=args.since_days, verbose=args.verbose)
+        since_days=args.since_days, verbose=args.verbose, mailbox=args.mailbox)
 
 
 if __name__ == "__main__":

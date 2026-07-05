@@ -1310,3 +1310,184 @@ def draft_inbox_reply(*, incoming: dict, lead: dict = None, appointment: dict = 
     except Exception as e:
         print(f"[inbox-draft] error={e!r}", flush=True)
         return {}
+
+
+# ---------------------------------------------------------------------------
+# Walk-in follow-up drafting — the server-side replacement for the /walkinmail skill.
+# Same quality bar: the Hormozi framing rules are ported VERBATIM from
+# .claude/skills/walkinmail/SKILL.md; the Final Script + Pitch-Bibliothek come live from
+# Notion (grounding text passed in). Draft only — the worker deposits it as an IMAP draft.
+# ---------------------------------------------------------------------------
+
+_SYSTEM_WALKIN_DRAFT = """\
+Du schreibst im Namen des Aussendienst-Mitarbeiters (Name unten) einen Walk-in-FOLLOW-UP-ENTWURF
+an eine Firma, bei der er heute persönlich im Büro war. Der Interessent hat gesagt „schicken Sie
+mir ein Mail". Der Entwurf wird NICHT gesendet: der Mitarbeiter öffnet ihn, prüft ihn und sendet
+selbst. Schreibe so, dass er ihn im Idealfall unverändert abschicken kann.
+
+SPRACHE: Hochdeutsch, durchgehend Sie-Form (siezen). Sprich eine bekannte Person mit Namen an
+(„Guten Tag Herr / Frau X"), sonst „Guten Tag". Wenn die Notiz sagt, dass die Kontaktperson die
+Nachricht weiterleitet, füge eine kurze Weiterleit-Einladung ein.
+
+DIE QUELLE DER WAHRHEIT ist das unten mitgelieferte Follow-Up-Skript (Final Script als Vorlage)
++ die Branchenspezifische Pitch-Bibliothek (Hypothesen je Branche). Nutze deren Struktur und
+Formulierungen; erfinde keine eigene Struktur.
+
+BRANCHE + HYPOTHESE: Klassifiziere die Branche und wähle die passendste Hypothese aus der
+Pitch-Bibliothek (Treuhand · Immobilien · Anwalt · Steuerberatung · Beratung/Agentur · Fiduciaire).
+Ist die Branche ausserhalb dieser, aber trotzdem Büro/Backoffice, nimm die nächste Analogie.
+ICP-FILTER: Ist die Firma klar KEIN Backoffice-Betrieb (Coiffeur, Restaurant, Bäckerei, Handwerk,
+Baustelle) -> setze skip_reason="non_icp" und lass subject/body leer. Da gibt es keinen
+Automatisierungs-Schmerz zu pitchen.
+
+INHALTLICHE REGELN (hart):
+- Schreib einfach (Drittklässler-Niveau). Kurze Sätze, Alltagssprache. Kill Beamtendeutsch: nie
+  „wiederkehrende Korrespondenz", „administrative Abläufe", „Ressourcenplanung". Nenne die
+  konkrete langweilige Aufgabe so, wie es der Kunde sagen würde: „jeden Kunden einzeln
+  anschreiben", „Zahlen aus PDFs abtippen", „jede Woche dieselbe Liste zusammenstellen".
+- KEIN Jargon (nie „API", „n8n", „Automatisierung" im Tech-Sinn), KEINE Preise.
+- Führe mit dem DREAM OUTCOME, nicht mit dem Prozess. Öffne den Mini-Pitch mit dem Ergebnis
+  (die Stunden pro Woche, die ans Team zurückgehen), dann die eine konkrete Zeitfresser-Aufgabe
+  (Branchen-Hypothese). Der Schmerz ist der Pitch, aber das Ergebnis ist der Haken.
+- Der „10-Stunden-Hebel" ist das ZIEL des Interviews, NIE ein Beweis oder Versprechen. Wir sind
+  vor-umsatz: keine fertigen Case-Studies, keine gemessenen Einsparungen, keine Referenzen.
+  Schreibe NIE „bei Firma X haben wir Y Stunden gespart". Rahme die Zahl als das, was wir
+  GEMEINSAM suchen: z.B. „Beim Workflow-Interview suchen wir gezielt den einen Prozess, der Sie
+  jede Woche am meisten Zeit kostet. Ob am Ende 2 oder 10 Stunden drinliegen, sehen wir dort,
+  bevor für Sie Kosten entstehen."
+- Das Angebot ist unser Grand Slam Offer, nahe am Wortlaut aus dem Skript: „Wir schauen uns Ihren
+  Betrieb und Ihre Prozesse genau an, von A bis Z. Dann optimieren wir den Prozess, der am meisten
+  Zeit kostet, und kommen mit etwas zurück, das Sie in Ruhe testen können. Bis dahin kostet es Sie
+  nichts, und erst wenn es Sie überzeugt, sprechen wir über alles Weitere."
+- Verkaufe den Wert, wirke nie billig. Sag GENAU EINMAL, dass es nichts kostet (im Angebot oben).
+  VERBOTEN: wiederholtes „gratis"/„kostenlos", „kostet keinen Rappen", „Bringt's nichts, ist auch
+  gut". Selbstbewusst, nicht billig.
+- CTA = kombinierte A/B-Zeitwahl + Buchungslink (beides, Antwort-Option zuerst, Link als
+  reibungslose Abkürzung danach). 60-Minuten-Termin bei ihnen im Büro. Muster: „Wäre Ihnen [Tag A]
+  oder [Tag B] lieber? Wir kommen für 60 Minuten zu Ihnen ins Büro, antworten Sie einfach kurz auf
+  diese Nachricht. Falls Sie Ihren Kalender gerade vor sich haben, wählen Sie Ihren Termin direkt:
+  👉 {Buchungslink}". Wähle zwei plausible Slots in naher Zukunft; erfinde kein konkretes Datum,
+  das einen echten Kalender-Block impliziert.
+- Betreff kurz + Wiedererkennung, kein Spam-Trigger. Z.B. „Unser Besuch bei Ihnen, kurzer
+  nächster Schritt". Kein „Angebot"/„Lösung"/„Automatisierung" im Betreff.
+
+STILREGELN (hart):
+- KEINE Gedankenstriche (— oder –). Nutze Komma, Doppelpunkt oder Punkt. Bindestriche in
+  zusammengesetzten Wörtern sind erlaubt (z.B. 30-Minuten-Termin, Lizenz- und Vertragsverlängerung).
+- ABSCHLUSS: Beende den Text mit „Freundliche Grüsse aus {Ort}," und NICHTS danach (keine Namens-,
+  Firmen- oder Telefonzeile, die Signatur wird automatisch angehängt).
+
+Antworte NUR als gültiges JSON (kein Markdown, kein Text davor/danach):
+{"subject": "<Betreff ohne 'Betreff:'>", "body": "<reiner Text, \\n für Zeilenumbrüche, endet bei
+'Freundliche Grüsse aus {Ort},'>", "sector": "<gewählte Branche>", "skip_reason": null}
+Wenn ICP-Filter greift: {"subject":"","body":"","sector":"<Branche>","skip_reason":"non_icp"}.\
+"""
+
+
+def draft_walkin_followup(*, lead: dict, final_script: str, author_name: str = "",
+                          booking_url: str = "https://cockpit.automatisierbar.ch/book",
+                          ort: str = "Baden", model: str = MODEL_FAST) -> dict:
+    """Draft the walk-in follow-up email at the /walkinmail quality bar. Returns
+    {"subject", "body", "sector", "skip_reason"}. `skip_reason` set (e.g. 'non_icp') => empty
+    subject/body, caller skips drafting. Fails SAFE -> skip_reason='generation_failed' on any
+    error, so a failure never deposits a broken draft.
+
+    `lead`: {company, contact, role, email, website, phone, city, walkin_date, notes, sector_hint}.
+    `final_script`: the live Notion Final Script + Pitch-Bibliothek text (grounding, source of truth).
+    The An-field decision is the CALLER's (from the resolved email confidence), not this function's."""
+    safe = {"subject": "", "body": "", "sector": "", "skip_reason": "generation_failed"}
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return safe
+    try:
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        blocks = [
+            "WALK-IN LEAD (heute im Aussendienst erfasst):",
+            f"- Firma: {lead.get('company', '')}",
+            f"- Kontaktperson: {lead.get('contact', '') or '(unbekannt)'}",
+            f"- Rolle: {lead.get('role', '') or '(unbekannt)'}",
+            f"- Ort: {lead.get('city', '')}",
+            f"- Website: {lead.get('website', '') or '(unbekannt)'}",
+            f"- Branche (Hinweis, du klassifizierst final): {lead.get('sector_hint', '') or '(offen)'}",
+            f"- Besuchsdatum: {lead.get('walkin_date', '')}",
+            f"- Erfasst von: {author_name or '(Team)'}",
+            "",
+            "Notiz vom Besuch (wörtlich, nutze sie für Anrede/Anker/Hypothese):",
+            (lead.get("notes", "") or "")[:2000],
+            "",
+            "FOLLOW-UP-SKRIPT + BRANCHEN-PITCH-BIBLIOTHEK (Quelle der Wahrheit):",
+            (final_script or "")[:12000],
+            "",
+            f"Buchungslink: {booking_url}",
+            f"Ort für die Grussformel: {ort}",
+        ]
+        user_text = "\n".join(blocks)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=1500,
+            system=[{"type": "text", "text": _SYSTEM_WALKIN_DRAFT,
+                     "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user_text}],
+        )
+        d = _parse_json(msg.content[0].text)
+        skip = str(d.get("skip_reason", "") or "").strip().lower()
+        if skip and skip not in ("none", "null", "false", ""):
+            return {"subject": "", "body": "", "sector": str(d.get("sector", "") or ""),
+                    "skip_reason": skip}
+        subject = str(d.get("subject", "") or "").strip()
+        body = str(d.get("body", "") or "").strip()
+        if not body:
+            return safe
+        return {"subject": subject, "body": body,
+                "sector": str(d.get("sector", "") or "").strip(), "skip_reason": ""}
+    except Exception as e:
+        print(f"[walkin-draft] error={e!r}", flush=True)
+        return safe
+
+
+def resolve_walkin_contact(*, company: str, city: str = "", website: str = "", notes: str = "",
+                           model: str = MODEL_FAST) -> dict:
+    """Find + verify a company's contact email via the Anthropic server-side web_search tool —
+    exactly what the /walkinmail skill did by hand (search + read the Impressum/Kontakt page).
+    Returns {"email", "email_confident", "website", "sector_hint"}. Fails SAFE -> empty email /
+    confident False on any error (missing key, tool unsupported, no result, parse failure), so a
+    failure NEVER blocks drafting — the draft just ships with An: leer."""
+    safe = {"email": "", "email_confident": False, "website": website or "", "sector_hint": ""}
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return safe
+    try:
+        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        hint = website or "(keine Website bekannt)"
+        user = (f"Firma: {company}\nOrt: {city}\nWebsite-Hinweis: {hint}\n"
+                f"Notiz vom Besuch: {(notes or '')[:400]}\n\n"
+                "Finde die offizielle Schweizer Website dieser Firma und die beste Kontakt-E-Mail-"
+                "Adresse (aus Impressum/Kontakt; bevorzugt info@, kontakt@, welcome@ oder eine "
+                "benannte zuständige Person). Erfinde NIE eine Adresse. Antworte GANZ AM ENDE NUR "
+                "mit JSON (kein Text danach):\n"
+                '{"email": "...", "email_confident": true, "website": "...", '
+                '"sector_hint": "Treuhand|Immobilien|Anwalt|Steuerberatung|Beratung|Fiduciaire|andere"}\n'
+                "email_confident=true NUR wenn die Adresse wörtlich auf einer verifizierten "
+                'Impressum/Kontakt-Seite steht; sonst false. Keine Adresse gefunden -> email="".')
+        messages = [{"role": "user", "content": user}]
+        tools = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 5}]
+        resp = None
+        for _ in range(4):  # server-tool loop: resume on pause_turn (rare for one lookup)
+            resp = client.messages.create(model=model, max_tokens=1500,
+                                          tools=tools, messages=messages)
+            if resp.stop_reason != "pause_turn":
+                break
+            messages.append({"role": "assistant", "content": resp.content})
+        text = "".join(getattr(b, "text", "") for b in resp.content
+                       if getattr(b, "type", "") == "text")
+        d = _parse_json(text)
+        email = str(d.get("email", "") or "").strip()
+        if "@" not in email or " " in email or "." not in email.split("@")[-1]:
+            email = ""
+        return {
+            "email": email,
+            "email_confident": bool(d.get("email_confident")) and bool(email),
+            "website": str(d.get("website", "") or website or "").strip(),
+            "sector_hint": str(d.get("sector_hint", "") or "").strip(),
+        }
+    except Exception as e:
+        print(f"[walkin-resolve] error={e!r}", flush=True)
+        return safe

@@ -1,9 +1,18 @@
 ---
 name: walkinleadsconvert
-description: Use when the operator types /walkinleadsconvert or asks to "convert the walk-in leads", "put the walk-ins into the database", "walk-ins in die Interview Datenbank", "Leads aus dem Cockpit erstellen" — typically right after running /walkinmail. Takes the already-emailed walk-in lines (the ones marked ✅) from the 💡-callout on the Operations Cockpit, researches each company online, cross-checks the Interview Datenbank (Leads DB), then creates a new lead or expands the existing one — always tagging HOT STATUS = WALK IN BUT NO BAMFAM (so it surfaces in the Hot Leads callout) and pasting the operator's exact callout text 1:1 into the lead page for traceability, then removing the converted line from the callout (its note is preserved on the lead). Writes directly to the live Leads DB.
+description: "[RETIRED — obsolete] Walk-in leads are now created/expanded in the Interview Datenbank AUTOMATICALLY at entry time (POST /api/walkin/lead tags HOT STATUS = WALK IN BUT NO BAMFAM, Outreach Channel = Walk-In, and pastes the verbatim note onto the lead page). The 💡-callout this skill read is no longer written, so there is nothing to convert. Do NOT use. Kept for historical reference only."
 ---
 
-# /walkinleadsconvert — turn emailed walk-ins into real leads
+# /walkinleadsconvert — turn emailed walk-ins into real leads  ·  ⚠️ RETIRED
+
+> **This skill is obsolete.** Walk-in leads are now created (or expanded) in the Interview
+> Datenbank **at entry time** by the field PWA endpoint (`POST /api/walkin/lead`) — already tagged
+> HOT STATUS = WALK IN BUT NO BAMFAM, Outreach Channel = Walk-In, with the verbatim note on the
+> lead page. Enrichment (Branche, website context) is handled by the daily lead-enrichment cron,
+> and the lead syncs to the Hub via the Hub's Notion sync. The 💡-callout this skill parsed is no
+> longer written, so there is nothing to convert. Do not use.
+
+# (legacy) turn emailed walk-ins into real leads
 
 `/walkinmail` drafts the follow-up and marks each callout line `✅ {date}` ("emailed").
 This skill is the next step: each **emailed** walk-in becomes a tracked, enriched, hot-tagged

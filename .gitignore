@@ -13,6 +13,12 @@ n8n-skills/
 
 # paperclip orchestrator runtime artifacts
 tools/paperclip/.orchestrator-state.json
+
+# walk-in auto-draft runtime artifacts (regenerable; committed fallback is final_script_fallback.md)
+tools/walkin/final_script_cache.txt
+# NOTE: per-person signature.<name>.html/.txt ARE committed (they're the fallback used when the
+# mailbox has no Infomaniak-configured signature). A successful live API fetch overwrites them as
+# a cache on the VPS working tree only.
 tools/paperclip/.pipeline-events.log
 
 # transient scheduler lock — never commit

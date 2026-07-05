@@ -1,28 +1,34 @@
 #!/usr/bin/env bash
-# Inbox auto-reply drafter — VPS cron entrypoint (every ~10 min).
+# Inbox auto-reply drafter — VPS cron entrypoint (every ~10 min), one run per mailbox.
+# Usage: inbox-reply-drafter.sh [mailbox]   (mailbox: joaquin|tej|nico|patrik|info; default joaquin)
 # Install on the cockpit VPS (runs as the cockpit.service user `paperclip`):
 #   chmod +x /srv/cockpit/app/tools/scheduled/inbox-reply-drafter.sh
-#   crontab -u paperclip -e   # then add:
+#   crontab -u paperclip -e   # then add ONE staggered line per mailbox that has creds:
 #     CRON_TZ=Europe/Zurich
-#     */10 * * * * /srv/cockpit/app/tools/scheduled/inbox-reply-drafter.sh
+#     */10   * * * * /srv/cockpit/app/tools/scheduled/inbox-reply-drafter.sh joaquin
+#     1-51/10 * * * * /srv/cockpit/app/tools/scheduled/inbox-reply-drafter.sh tej
+#     2-52/10 * * * * /srv/cockpit/app/tools/scheduled/inbox-reply-drafter.sh nico
+#     3-53/10 * * * * /srv/cockpit/app/tools/scheduled/inbox-reply-drafter.sh patrik
+#     4-54/10 * * * * /srv/cockpit/app/tools/scheduled/inbox-reply-drafter.sh info
 #
-# Sources /etc/cockpit/env (same secrets file as cockpit.service), prefers the cockpit
-# venv, runs tools/inbox_reply_drafter.py. ALWAYS exits 0 — a non-zero from Python is
-# logged but must not bubble up (cron would otherwise email failures).
+# Sources /etc/cockpit/env, prefers the cockpit venv, runs tools/inbox_reply_drafter.py.
+# ALWAYS exits 0 — a non-zero from Python is logged but must not bubble up.
 #
-# Needs JOAQUIN_IMAP_USER / JOAQUIN_IMAP_PASSWORD (joaquin@ mailbox app-password) in the
-# env file; the cockpit's INFOMANIAK_IMAP_* point at info@, a different mailbox.
+# Creds per mailbox (env file): JOAQUIN_IMAP_* (joaquin@; INFOMANIAK_IMAP_* = info@ is the
+# fallback ONLY for joaquin/info), TEJ_IMAP_*, NICO_IMAP_*, PATRIK_IMAP_*. A mailbox with no
+# creds is a clean no-op ('creds missing' -> skip).
 
 set -u
 
+MAILBOX="${1:-joaquin}"
 APP_DIR="/srv/cockpit/app"
 ENV_FILE="/etc/cockpit/env"
-LOG_FILE="$APP_DIR/.tmp/inbox-reply-drafter.log"
-ERR_FILE="$APP_DIR/.tmp/inbox-reply-drafter.err"
+LOG_FILE="$APP_DIR/.tmp/inbox-reply-drafter.$MAILBOX.log"
+ERR_FILE="$APP_DIR/.tmp/inbox-reply-drafter.$MAILBOX.err"
 mkdir -p "$(dirname "$LOG_FILE")"
 
 now() { date '+%Y-%m-%d %H:%M:%S %Z'; }
-echo "[$(now)] === inbox-reply-drafter start ===" >> "$LOG_FILE"
+echo "[$(now)] === inbox-reply-drafter ($MAILBOX) start ===" >> "$LOG_FILE"
 
 cd "$APP_DIR" || { echo "[$(now)] ERR: cannot cd to $APP_DIR" >> "$ERR_FILE"; exit 0; }
 
@@ -41,7 +47,7 @@ fi
 PY="/srv/cockpit/venv/bin/python"
 [ -x "$PY" ] || PY="python3"
 
-"$PY" tools/inbox_reply_drafter.py >> "$LOG_FILE" 2>> "$ERR_FILE"
+"$PY" tools/inbox_reply_drafter.py --mailbox "$MAILBOX" >> "$LOG_FILE" 2>> "$ERR_FILE"
 rc=$?
-echo "[$(now)] === inbox-reply-drafter end (rc=$rc) ===" >> "$LOG_FILE"
+echo "[$(now)] === inbox-reply-drafter ($MAILBOX) end (rc=$rc) ===" >> "$LOG_FILE"
 exit 0

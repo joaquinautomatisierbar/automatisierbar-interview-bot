@@ -282,3 +282,34 @@ def build_callout_line(p: dict) -> str:
     tail = (detail + (". " if notes else "")) if detail else ""
     line = f"{company} → {tail}{notes}".strip()
     return re.sub(r"\s+", " ", line).strip()
+
+
+def build_context_block(p: dict, *, sector: str = "", author: str = "", email: str = "",
+                        email_confident: bool = True, walkin_date: str = "") -> str:
+    """The removable 'who is this lead again' reminder that rides at the top of the draft (the
+    operator deletes it before sending). Pure/offline, same charter as build_callout_line.
+    Only non-empty lines are included; the verbatim visit note comes last."""
+    company = (p.get("company") or "").strip()
+    contact = (p.get("contact") or "").strip()
+    role = (p.get("role") or "").strip()
+    kontakt = f"{contact} ({role})" if contact and role else (contact or role)
+    email_line = email or (p.get("email") or "").strip()
+    if email_line and not email_confident:
+        email_line += "  (unsicher, bitte prüfen)"
+    rows = [
+        ("Firma", company),
+        ("Kontakt", kontakt),
+        ("Ort", (p.get("city") or "").strip()),
+        ("Website", (p.get("website") or "").strip()),
+        ("E-Mail", email_line),
+        ("Telefon", (p.get("phone") or "").strip()),
+        ("Besuchsdatum", (walkin_date or p.get("walkin_date") or "").strip()),
+        ("Erfasst von", (author or "").strip()),
+        ("Branche/Hypothese", (sector or "").strip()),
+    ]
+    lines = [f"{label}: {value}" for label, value in rows if value]
+    notes = (p.get("notes") or "").strip()
+    if notes:
+        lines.append("Notiz vom Besuch:")
+        lines.append(notes)
+    return "\n".join(lines)

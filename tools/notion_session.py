@@ -120,12 +120,14 @@ def _append_blocks(block_id: str, children: list) -> dict:
 
 
 def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100,
-              start_cursor: str = None) -> dict:
+              start_cursor: str = None, sorts: list = None) -> dict:
     body: dict = {"page_size": page_size}
     if filter_body:
         body["filter"] = filter_body
     if start_cursor:
         body["start_cursor"] = start_cursor
+    if sorts:
+        body["sorts"] = sorts
     r = requests.post(
         f"https://api.notion.com/v1/databases/{database_id}/query",
         headers=_notion_headers(),
@@ -136,12 +138,14 @@ def _query_db(database_id: str, filter_body: dict = None, page_size: int = 100,
     return r.json()
 
 
-def _query_db_all(database_id: str, filter_body: dict = None, max_pages: int = 20) -> list:
+def _query_db_all(database_id: str, filter_body: dict = None, max_pages: int = 20,
+                  sorts: list = None) -> list:
     """Paginate through all results — Notion caps at 100 per request."""
     all_results = []
     cursor = None
     for _ in range(max_pages):
-        r = _query_db(database_id, filter_body=filter_body, page_size=100, start_cursor=cursor)
+        r = _query_db(database_id, filter_body=filter_body, page_size=100,
+                      start_cursor=cursor, sorts=sorts)
         all_results.extend(r.get("results", []))
         if not r.get("has_more"):
             break
@@ -247,6 +251,9 @@ def create_session(context: str, lead_page_id: Optional[str] = None) -> str:
         "attachments": [],
         # New: free-text "Extras & Dateien" notes pad — autosaved by frontend.
         "extra_context": "",
+        # New: OTHER automation ideas the interviewee mentions in passing. Kept
+        # SEPARATE from the current build spec — [{title, note, created_round}].
+        "additional_automations": [],
     }
 
     # Primary path: store on the lead page (auto-provisions State property if missing)
@@ -370,6 +377,56 @@ def update_extras(session_id: str, extra_context: str) -> bool:
     return True
 
 
+MAX_ADDITIONAL_AUTOMATIONS = 20
+
+
+def update_additional_automations(session_id: str, items: list) -> bool:
+    """Persist the 'Weitere Automatisierungs-Ideen' list. Autosaved by the frontend.
+    Each item is normalised to {title, note, created_round}; kept out of the build
+    spec (generate_claude_code_prompt never reads State). Returns False if the
+    session isn't found."""
+    page, _ = _find_page(session_id)
+    if not page:
+        return False
+    state = _unpack(page["properties"].get("State", {}).get("rich_text", [])) or {}
+    cleaned = []
+    for it in (items or [])[:MAX_ADDITIONAL_AUTOMATIONS]:
+        if not isinstance(it, dict):
+            continue
+        cleaned.append({
+            "title": str(it.get("title", ""))[:200],
+            "note": str(it.get("note", ""))[:2000],
+            "created_round": int(it.get("created_round") or 0),
+        })
+    state["additional_automations"] = cleaned
+    _update_page(page["id"], {"State": {"rich_text": _pack(state)}})
+    return True
+
+
+def update_round_answers(session_id: str, round_num: int, answers: list) -> bool:
+    """Replace the answers of an already-submitted round (Feature C: back-nav editing).
+    Only the matching round's `qa` is replaced; its stored `questions` defs and every
+    other round are left untouched. Deliberately does NOT touch status/round/
+    current_questions, does NOT append a round, and does NOT re-append page blocks
+    (write_qa_to_page is append-only; the page Q&A log documents the interview as
+    originally conducted — edits flow into the build spec via all_qa at completion).
+    Returns False if the session or the round isn't found."""
+    page, _ = _find_page(session_id)
+    if not page:
+        return False
+    state = _unpack(page["properties"].get("State", {}).get("rich_text", [])) or {}
+    all_qa = state.get("all_qa", [])
+    for entry in all_qa:
+        if entry.get("round") == round_num:
+            entry["qa"] = answers
+            break
+    else:
+        return False
+    state["all_qa"] = all_qa
+    _update_page(page["id"], {"State": {"rich_text": _pack(state)}})
+    return True
+
+
 def update_process_map(session_id: str, process_map: list, process_map_notes: str = "") -> bool:
     """Persist the captured A→Z walkthrough (list of step rows + optional notes)."""
     page, _ = _find_page(session_id)
@@ -418,6 +475,69 @@ def _extract_lead(page: dict) -> dict:
         "pipeline_stage": _status_or_select("Pipeline Stage"),
         "session_id": _text("Session ID"),
     }
+
+
+def _interview_row_from_page(p: dict, *, lead: dict = None, source: str = "lead") -> dict:
+    """Flatten one Notion page + its State JSON into a row for the overview list."""
+    st = _unpack(p.get("properties", {}).get("State", {}).get("rich_text", [])) or {}
+    roi = st.get("roi") or {}
+    if lead is None:
+        lead = {}
+    props = p.get("properties", {})
+    rt = props.get("Session ID", {}).get("rich_text", [])
+    session_id = lead.get("session_id") or (rt[0]["plain_text"] if rt else "") or st.get("session_id", "")
+    name = lead.get("name") or (f"Interview {session_id[:8]}" if session_id else "Interview")
+    return {
+        "session_id": session_id,
+        "name": name,
+        "firma": lead.get("firma", ""),
+        "branche": lead.get("branche", ""),
+        "status": st.get("status", "active"),
+        "round": st.get("round", 0),
+        "interviewer": st.get("interviewer", ""),
+        "process_name": st.get("process_name") or roi.get("process", ""),
+        "chf_monthly_savings": roi.get("chf_monthly_savings"),
+        "last_edited": p.get("last_edited_time"),
+        "additional_automations_count": len(st.get("additional_automations") or []),
+        "source": source,
+    }
+
+
+def list_interviews(limit: int = 100) -> dict:
+    """Recently-conducted interviews for the operator overview: Leads DB pages that
+    have a Session ID, newest first (Notion last_edited_time — the UUID isn't
+    time-sortable). Merges lead-less Sessions DB rows if NOTION_DATABASE_ID is set.
+    Returns {"interviews": [...], "truncated": bool}."""
+    if not available():
+        return {"interviews": [], "truncated": False}
+    filt = {"property": "Session ID", "rich_text": {"is_not_empty": True}}
+    sorts = [{"timestamp": "last_edited_time", "direction": "descending"}]
+
+    pages = _query_db_all(_leads_db(), filter_body=filt, max_pages=2, sorts=sorts)
+    truncated = len(pages) > limit
+
+    rows = []
+    seen = set()
+    for p in pages[:limit]:
+        row = _interview_row_from_page(p, lead=_extract_lead(p), source="lead")
+        if row["session_id"]:
+            seen.add(row["session_id"])
+        rows.append(row)
+
+    if os.environ.get("NOTION_DATABASE_ID"):
+        try:
+            spages = _query_db_all(_db(), filter_body=filt, max_pages=1, sorts=sorts)
+            for p in spages:
+                row = _interview_row_from_page(p, source="session")
+                if row["session_id"] and row["session_id"] in seen:
+                    continue  # already surfaced via the lead page
+                rows.append(row)
+        except Exception as e:
+            print(f"[notion] list_interviews sessions merge failed: {e}")
+
+    # Re-sort the merged set by recency (merging two sorted lists disturbs order).
+    rows.sort(key=lambda x: x.get("last_edited") or "", reverse=True)
+    return {"interviews": rows[:limit], "truncated": truncated}
 
 
 def get_lead_by_page_id(page_id: str) -> Optional[dict]:
@@ -616,9 +736,9 @@ def _table_rows_for_process_map(process_map: list, classification: list = None) 
 _PAYOFF_HEADING = "Aktueller Prozess (Ist-Zustand)"
 
 
-def _page_already_has_payoff(lead_page_id: str) -> bool:
-    """Idempotency: scan top-level blocks for our heading. We don't recurse into
-    children — payoff is always written at top-level and the heading text is unique."""
+def _page_has_heading(lead_page_id: str, heading: str) -> bool:
+    """Idempotency: scan top-level heading_2 blocks for `heading`. We don't recurse
+    into children — our sections are always written at top-level with unique headings."""
     try:
         cursor = None
         for _ in range(8):  # cap at 8 pages of pagination (~800 blocks)
@@ -632,15 +752,52 @@ def _page_already_has_payoff(lead_page_id: str) -> bool:
                 if block.get("type") == "heading_2":
                     rt = block.get("heading_2", {}).get("rich_text", [])
                     text = "".join(seg.get("plain_text", "") for seg in rt)
-                    if _PAYOFF_HEADING in text:
+                    if heading in text:
                         return True
             if not data.get("has_more"):
                 break
             cursor = data.get("next_cursor")
         return False
     except Exception as e:
-        print(f"[notion] _page_already_has_payoff lookup failed: {e}")
-        return False  # On error, prefer writing (rare duplicates beat missing payoff)
+        print(f"[notion] _page_has_heading lookup failed: {e}")
+        return False  # On error, prefer writing (rare duplicates beat a missing section)
+
+
+def _page_already_has_payoff(lead_page_id: str) -> bool:
+    return _page_has_heading(lead_page_id, _PAYOFF_HEADING)
+
+
+_ADDITIONAL_AUTOMATIONS_HEADING = "💡 Weitere Automatisierungs-Ideen"
+
+
+def write_additional_automations_to_page(lead_page_id: str, items: list) -> bool:
+    """Append the interviewee's OTHER automation ideas as an actionable follow-up
+    section on their lead page. Idempotent — skips if the heading is already present.
+    Returns True if written, False if skipped/empty/unavailable."""
+    if not available() or not lead_page_id or not items:
+        return False
+    if _page_has_heading(lead_page_id, _ADDITIONAL_AUTOMATIONS_HEADING):
+        return False
+
+    blocks = [{"object": "block", "type": "heading_2",
+               "heading_2": {"rich_text": _rt(_ADDITIONAL_AUTOMATIONS_HEADING)}}]
+    for it in items:
+        title = (it.get("title") or "").strip()
+        note = (it.get("note") or "").strip()
+        if not title and not note:
+            continue
+        line = title + (f" — {note}" if title and note else note)
+        blocks.append({"object": "block", "type": "bulleted_list_item",
+                       "bulleted_list_item": {"rich_text": _rt(line)}})
+
+    if len(blocks) < 2:  # heading only, no real ideas
+        return False
+    try:
+        _append_blocks(lead_page_id, blocks)
+        return True
+    except Exception as e:
+        print(f"[notion] write_additional_automations_to_page failed: {e}")
+        return False
 
 
 def write_payoff_to_page(
@@ -912,6 +1069,62 @@ def _fetch_page_blocks(page_id: str, max_pages: int = 8) -> list[dict]:
         if not cursor:
             break
     return blocks
+
+
+def _rich_text_to_plain(rich) -> str:
+    """Concatenate a Notion rich_text array to plain text."""
+    out = []
+    for seg in rich or []:
+        t = seg.get("plain_text")
+        if t is None:
+            t = (seg.get("text") or {}).get("content", "")
+        out.append(t or "")
+    return "".join(out)
+
+
+def _block_plain_text(block: dict) -> str:
+    """One block -> a plain-text line (with a light markdown-ish prefix for headings/lists)."""
+    bt = block.get("type")
+    payload = block.get(bt, {}) or {}
+    rich = payload.get("rich_text")
+    if rich is None:
+        return ""
+    prefix = ""
+    if bt in ("bulleted_list_item", "numbered_list_item"):
+        prefix = "- "
+    elif bt == "to_do":
+        prefix = "[x] " if payload.get("checked") else "[ ] "
+    elif bt in ("heading_1", "heading_2", "heading_3"):
+        prefix = "#" * int(bt[-1]) + " "
+    return prefix + _rich_text_to_plain(rich)
+
+
+def fetch_page_plain_text(page_id: str, max_pages: int = 8, max_depth: int = 3) -> str:
+    """Flatten a Notion page's blocks to plain text in reading order, recursing into child
+    blocks (toggles/callouts/lists) up to max_depth. Generic 'read a Notion doc as grounding
+    text' helper (used for the walk-in Follow-Up Script). Returns '' on any failure so callers
+    can degrade to a local cache/fallback."""
+    if not available():
+        return ""
+
+    def walk(pid: str, depth: int) -> list:
+        try:
+            blocks = _fetch_page_blocks(pid, max_pages=max_pages)
+        except Exception:
+            return []
+        lines = []
+        for b in blocks:
+            txt = _block_plain_text(b)
+            if txt.strip():
+                lines.append(txt)
+            if b.get("has_children") and depth < max_depth and b.get("id"):
+                lines.extend("  " + c for c in walk(b["id"], depth + 1))
+        return lines
+
+    try:
+        return "\n".join(walk(page_id, 0)).strip()
+    except Exception:
+        return ""
 
 
 def _is_synthesis_block(block: dict) -> bool:

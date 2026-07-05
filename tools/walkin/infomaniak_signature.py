@@ -94,21 +94,35 @@ def fetch_default_signature(token, hosting_id, mailbox_name, timeout=20):
     return {"html": html, "text": html_to_text(html), "name": chosen.get("name") or ""}
 
 
-def _write_cache(sig):
+def _cache_paths(cfg=None):
+    """Per-mailbox cache file paths. joaquin (and empty/default) keep the original filenames
+    for backward compat; every other mailbox gets signature.<name>.html/.txt so fetching
+    tej@ then joaquin@ in one process can't cross-contaminate the committed joaquin cache."""
+    name = ((cfg or {}).get("mailbox_name") or "joaquin").strip().lower()
+    if name in ("joaquin", "", "default"):
+        return CACHE_HTML, CACHE_TEXT
+    safe = re.sub(r"[^a-z0-9]", "", name) or "default"
+    return (os.path.join(_SCRIPT_DIR, f"signature.{safe}.html"),
+            os.path.join(_SCRIPT_DIR, f"signature.{safe}.txt"))
+
+
+def _write_cache(sig, cfg=None):
+    html_path, text_path = _cache_paths(cfg)
     try:
-        with open(CACHE_HTML, "w") as f:
+        with open(html_path, "w") as f:
             f.write(sig["html"])
-        with open(CACHE_TEXT, "w") as f:
+        with open(text_path, "w") as f:
             f.write(sig["text"].rstrip("\n") + "\n")
     except OSError:
         pass
 
 
-def _read_cache():
+def _read_cache(cfg=None):
+    html_path, text_path = _cache_paths(cfg)
     try:
-        with open(CACHE_HTML) as f:
+        with open(html_path) as f:
             html = f.read().strip()
-        with open(CACHE_TEXT) as f:
+        with open(text_path) as f:
             text = f.read().strip()
         if html or text:
             return {"html": html, "text": text or html_to_text(html), "name": "cache"}
@@ -119,19 +133,22 @@ def _read_cache():
 
 def get_signature(cfg=None, *, refresh=True):
     """Resolve the signature dict {html, text, name, source}. Never raises.
-    Live API first (refresh cache on success), else committed cache, else None."""
+    Live API first (refresh the per-mailbox cache on success), else committed cache, else None.
+    Token: a per-mailbox {PREFIX}_MAIL_TOKEN (via cfg['mail_token_env']) if set, else the
+    hosting-scoped INFOMANIAK_MAIL_TOKEN."""
     cfg = cfg or load_config()
-    token = env("INFOMANIAK_MAIL_TOKEN")
+    token = env(cfg.get("mail_token_env")) if cfg.get("mail_token_env") else None
+    token = token or env("INFOMANIAK_MAIL_TOKEN")
     if refresh and token:
         try:
             sig = fetch_default_signature(token, cfg.get("mail_hosting_id"),
                                           cfg.get("mailbox_name"))
-            _write_cache(sig)
+            _write_cache(sig, cfg)
             sig["source"] = "api"
             return sig
         except Exception as e:
             print(f"[signature] live fetch failed ({e}); using cache", file=sys.stderr)
-    cached = _read_cache()
+    cached = _read_cache(cfg)
     if cached:
         cached["source"] = "cache"
         return cached
@@ -143,15 +160,19 @@ def main():
     ap = argparse.ArgumentParser(description="Inspect / refresh the Infomaniak signature.")
     ap.add_argument("--show", action="store_true", help="Print the resolved signature + source")
     ap.add_argument("--refresh", action="store_true", help="Force live fetch + rewrite cache")
+    ap.add_argument("--mailbox", help="Override mailbox_name (verify another person's signature)")
     args = ap.parse_args()
     cfg = load_config()
+    if args.mailbox:
+        cfg["mailbox_name"] = args.mailbox
 
     if args.refresh:
-        token = env("INFOMANIAK_MAIL_TOKEN")
+        token = env(cfg.get("mail_token_env")) if cfg.get("mail_token_env") else None
+        token = token or env("INFOMANIAK_MAIL_TOKEN")
         sig = fetch_default_signature(token, cfg.get("mail_hosting_id"), cfg.get("mailbox_name"))
-        _write_cache(sig)
+        _write_cache(sig, cfg)
         print(f"[refresh] cached signature '{sig['name']}' "
-              f"({len(sig['html'])} chars html) -> {CACHE_HTML}")
+              f"({len(sig['html'])} chars html) -> {_cache_paths(cfg)[0]}")
         print("---- text ----")
         print(sig["text"])
         return 0

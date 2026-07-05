@@ -193,7 +193,32 @@
 
         <label>Notizen <span class="req">*</span></label>
         <textarea id="f-notes" placeholder="Alles, was du weisst: was gesprochen wurde, was sie brauchen, nächster Schritt, wer entscheidet …"></textarea>
-        <div class="hint">Wird als Lead gespeichert (HOT: Walk-In) und landet im 💡-Callout für die Follow-up-Mail.</div>
+
+        <label>Nächster Schritt</label>
+        <select id="f-next">
+          <option value="E-Mail-Entwurf erstellen">E-Mail-Entwurf erstellen</option>
+          <option value="Wir melden uns">Wir melden uns bei ihnen</option>
+          <option value="Follow-up bis Datum">Follow-up bis Datum</option>
+          <option value="Kein Interesse / keine Zeit">Kein Interesse / keine Zeit gerade</option>
+          <option value="Sonstiges">Sonstiges</option>
+        </select>
+        <input id="f-next-detail" class="hidden" autocomplete="off" placeholder="Kurz konkretisieren …" style="margin-top:8px">
+        <input id="f-next-date" type="date" class="hidden" style="margin-top:8px">
+        <div class="hint" id="next-hint">Es wird automatisch ein Mail-Entwurf in deiner Mailbox erstellt (gleiche Qualität wie bisher).</div>
+
+        <div id="cc-wrap">
+          <label>Cc im Entwurf</label>
+          <div id="cc-row" style="display:flex;flex-wrap:wrap;gap:10px 16px">
+            <label class="cc" style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" class="cc-box" value="joaquin@automatisierbar.ch"> Joaquin</label>
+            <label class="cc" style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" class="cc-box" value="nicolas@automatisierbar.ch"> Nico</label>
+            <label class="cc" style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" class="cc-box" value="tej@automatisierbar.ch"> Tej</label>
+            <label class="cc" style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" class="cc-box" value="patrik@automatisierbar.ch"> Patrik</label>
+            <label class="cc" style="display:flex;align-items:center;gap:6px;font-weight:400"><input type="checkbox" class="cc-box" value="info@automatisierbar.ch"> info@</label>
+          </div>
+          <div class="hint">Wer soll im Entwurf auf Cc? Nichts ausgewählt = kein Cc.</div>
+        </div>
+
+        <div class="hint">Wird als Lead gespeichert (HOT: Walk-In). Bei „E-Mail-Entwurf" landet der Entwurf automatisch in deiner Mailbox.</div>
 
         <button class="btn primary" id="lead-save">Lead speichern</button>
       </div>
@@ -271,6 +296,8 @@ async function saveLead(){
   const notes = $('f-notes').value.trim();
   if(!company){ toast('Firma fehlt', true); $('f-company').focus(); return; }
   if(!notes){ toast('Notizen fehlen', true); $('f-notes').focus(); return; }
+  const nextAction = $('f-next').value;
+  const ccBoxes = Array.from(document.querySelectorAll('.cc-box')).filter(b=>b.checked).map(b=>b.value);
   const payload = {
     company, notes,
     contact: $('f-contact').value.trim(),
@@ -280,21 +307,41 @@ async function saveLead(){
     phone: $('f-phone').value.trim(),
     city: $('f-city').value.trim(),
     walkin_date: $('f-date').value || todayISO(),
+    next_action: nextAction,
+    next_action_detail: $('f-next-detail').value.trim(),
+    follow_up_date: $('f-next-date').value || '',
+    cc: nextAction==='E-Mail-Entwurf erstellen' ? ccBoxes : [],
   };
   const btn = $('lead-save'); btn.disabled = true; btn.textContent = 'Speichere …';
   try{
     const r = await api('/api/walkin/lead', {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-    const msg = r.expanded ? 'Lead aktualisiert ✓' : 'Lead gespeichert ✓';
+    let msg = r.expanded ? 'Lead aktualisiert ✓' : 'Lead gespeichert ✓';
+    if(r.draft_queued) msg += ' · Entwurf folgt';
     toast(r.warnings && r.warnings.length ? msg+' (teilweise)' : msg);
-    ['f-company','f-contact','f-email','f-website','f-phone','f-city','f-notes'].forEach(id=>$(id).value='');
-    $('f-role').value=''; $('f-company').focus();
+    ['f-company','f-contact','f-email','f-website','f-phone','f-city','f-notes','f-next-detail','f-next-date'].forEach(id=>$(id).value='');
+    $('f-role').value=''; $('f-next').value='E-Mail-Entwurf erstellen';
+    document.querySelectorAll('.cc-box').forEach(b=>b.checked=false);
+    onNextChange(); $('f-company').focus();
     hide($('card-thumb')); hide($('card-ocrbar'));  // reset the Visitenkarte scan UI
   }catch(e){
     if(e && e.auth){ gate(); return; }
     toast((e && e.body && (e.body.error || (e.body.fields&&('Fehlt: '+e.body.fields.join(', '))))) || 'Fehler – erneut versuchen', true);
   }finally{ btn.disabled=false; btn.textContent='Lead speichern'; }
 }
+function onNextChange(){
+  const v = $('f-next').value;
+  const isDraft = v === 'E-Mail-Entwurf erstellen';
+  const detail = $('f-next-detail'), date = $('f-next-date');
+  detail.classList.toggle('hidden', !(v==='Wir melden uns' || v==='Sonstiges'));
+  detail.placeholder = v==='Sonstiges' ? 'Was ist der nächste Schritt?' : 'Wann / wie melden wir uns?';
+  date.classList.toggle('hidden', v!=='Follow-up bis Datum');
+  $('cc-wrap').classList.toggle('hidden', !isDraft);
+  $('next-hint').textContent = isDraft
+    ? 'Es wird automatisch ein Mail-Entwurf in deiner Mailbox erstellt (gleiche Qualität wie bisher).'
+    : 'Kein Entwurf. Der nächste Schritt wird beim Lead vermerkt (Follow-up-Verwaltung folgt mit dem CRM).';
+}
+$('f-next').addEventListener('change', onNextChange);
 $('lead-save').addEventListener('click', saveLead);
 
 /* ---- Visitenkarte OCR: photo -> prefill the lead form, operator reviews before save ---- */
@@ -435,6 +482,7 @@ async function loadStats(){
 function gate(){ hide($('main')); show($('gate')); }
 async function boot(){
   $('f-date').value = todayISO();
+  onNextChange();   // set the Nächster-Schritt conditional fields + Cc visibility
   try{
     const r = await api('/api/walkin/whoami');
     $('who').textContent = r.name; show($('who'));

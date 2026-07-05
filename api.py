@@ -44,6 +44,7 @@ MAX_CONTEXT_CHARS = 8000  # Notion rich_text safe upper bound for State JSON
 MAX_ANSWER_CHARS = 4000   # per-answer cap; 8 answers × 4000 = 32k headroom
 MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB hard cap per uploaded file
 MAX_EXTRAS_CHARS = 8000   # sidebar notes pad cap
+MAX_ADDITIONAL_AUTOMATIONS = 20  # "other automation ideas" captured mid-interview
 MAX_PROCESS_STEPS = 30    # sane upper bound for the A→Z walkthrough
 
 
@@ -74,6 +75,29 @@ def _valid_session_id(sid: str) -> bool:
     return bool(sid and SESSION_ID_RE.match(sid))
 
 
+def _validate_answer_list(answers):
+    """Shared validation for a round's answers (submit + back-nav edit).
+    Returns an error string if invalid, else None."""
+    if not isinstance(answers, list) or len(answers) > 20:
+        return "answers must be a list of ≤20 items"
+    for a in answers:
+        if not isinstance(a, dict):
+            return "each answer must be an object"
+        if len(str(a.get("answer", ""))) > MAX_ANSWER_CHARS:
+            return f"answer too long (max {MAX_ANSWER_CHARS} chars)"
+    if not answers:
+        return "answers required"
+    if not any(str(a.get("answer", "")).strip() for a in answers):
+        return "at least one non-empty answer required"
+    # Defense in depth — reject the literal "Andere…" placeholder. Frontend already
+    # validates, but a third-party API client could post it directly.
+    for a in answers:
+        ans = str(a.get("answer", "")).strip()
+        if ans in ("Andere…", "Andere...", "Andere"):
+            return "Bitte deine Antwort eingeben — 'Andere…' braucht Freitext."
+    return None
+
+
 def _auth_ok() -> bool:
     """Fail-closed: if PDF_API_KEY isn't configured, deny all auth-required routes
     (was previously fail-open, exposing /generate-pdf and /api/linkedin/* to the
@@ -97,6 +121,24 @@ def _cockpit_home() -> bool:
     /interview. On Render this is unset, so the root keeps serving the interview bot.
     Read per-request so it stays unit-testable (monkeypatch the env var)."""
     return bool(os.environ.get("COCKPIT_HOME"))
+
+
+# The interview bot now has a single canonical home: cockpit.automatisierbar.ch/interview
+# (served from the feat/cockpit-booking branch on the VPS). Render is retained only for its
+# OTHER routes (/generate-pdf, /api/linkedin/*, the voice cold-call cockpit). So on the Render
+# deployment the two interview PAGE routes 302-redirect to cockpit — old/shared Render links
+# keep working — while everything else on Render is untouched. 302 (not 301) keeps this
+# revertible: browsers cache 301s aggressively.
+COCKPIT_INTERVIEW_URL = os.environ.get(
+    "COCKPIT_INTERVIEW_URL", "https://cockpit.automatisierbar.ch/interview"
+)
+
+
+def _redirect_to_cockpit_interview():
+    """302 to the cockpit interview home, preserving ?s=<uuid> so resume links survive."""
+    qs = request.query_string.decode()
+    target = COCKPIT_INTERVIEW_URL + (("?" + qs) if qs else "")
+    return redirect(target, code=302)
 
 
 # ---------------------------------------------------------------------------
@@ -151,18 +193,26 @@ def index():
     # KnowSpesen client app: knowspesen.automatisierbar.ch (also spesen.*) -> /spesen.
     if host.startswith("knowspesen") or host.startswith("spesen"):
         return redirect("/spesen")
+    # Internal expense tracker: ausgaben.automatisierbar.ch -> /ausgaben (Blueprint).
+    if host.startswith("ausgaben"):
+        return redirect("/ausgaben")
     # On the cockpit VPS deployment the bare domain is the public booking front door,
     # so it serves a small landing page; the interview bot moves to /interview (below).
     # On Render (COCKPIT_HOME unset) the root keeps serving the interview bot.
     if _cockpit_home():
         return send_from_directory("static", "cockpit-home.html")
+    # Render (no COCKPIT_HOME): the interview lives on cockpit now — bounce there.
+    if os.environ.get("RENDER"):
+        return _redirect_to_cockpit_interview()
     return send_from_directory("static", "index.html")
 
 
 @app.route("/interview")
 def interview_page():
-    # Stable, unlisted URL for the interview bot. On the cockpit domain this is the
-    # only way in (not linked from the landing); on Render it's a harmless alias of /.
+    # Stable URL for the interview bot. On the cockpit domain this is the canonical
+    # home. On Render the interview has moved to cockpit, so redirect (preserving ?s=).
+    if os.environ.get("RENDER") and not _cockpit_home():
+        return _redirect_to_cockpit_interview()
     return send_from_directory("static", "index.html")
 
 
@@ -184,6 +234,26 @@ def search_leads():
     except Exception as e:
         app.logger.error("search_leads error: %s", e)
         return jsonify([])
+
+
+# ---------------------------------------------------------------------------
+# Feature B: operator overview of recently-conducted interviews.
+# Lists ALL prospect data, so it's gated behind the cockpit operator login
+# (cookie via /api/cockpit/login, or X-API-Key for scripts/n8n).
+# ---------------------------------------------------------------------------
+
+@app.route("/api/interviews", methods=["GET"])
+def list_interviews_route():
+    if not _cockpit_auth_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        from notion_session import list_interviews, available as notion_available
+        if not notion_available():
+            return jsonify({"interviews": [], "truncated": False, "note": "notion not configured"})
+        return jsonify(list_interviews(100))
+    except Exception as e:
+        app.logger.error("list_interviews error: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +344,10 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
     def _worker():
         try:
             from claude_client import generate_claude_code_prompt, classify_process_map_automatability
-            from notion_session import write_payoff_to_page, get_lead_by_page_id, update_session
+            from notion_session import (
+                write_payoff_to_page, get_lead_by_page_id, update_session,
+                write_additional_automations_to_page, get_session as _get_state,
+            )
 
             lead_info = None
             try:
@@ -319,6 +392,16 @@ def _write_payoff_safely(lead_page_id, session_id, *, context, all_qa, roi,
             app.logger.info("payoff written for session %s (lead %s): %s",
                             session_id, lead_page_id, wrote)
 
+            # OTHER automation ideas captured mid-interview → actionable follow-up
+            # section on the lead page (idempotent, separate from the build spec).
+            try:
+                fresh = _get_state(session_id) or {}
+                write_additional_automations_to_page(
+                    lead_page_id, fresh.get("additional_automations") or []
+                )
+            except Exception as e:
+                app.logger.warning("payoff: additional_automations page write failed: %s", e)
+
             # Build-Pipeline dispatch is now MANUAL via POST /api/session/<id>/dispatch_build —
             # users hit a button on the completion screen to send the brief to the agent team.
             # No auto-fire from the payoff thread anymore. Confirmation-before-dispatch was an
@@ -339,25 +422,9 @@ def submit_answers(session_id):
     round_num = data.get("round", 1)
     answers = data.get("answers", [])
 
-    if not isinstance(answers, list) or len(answers) > 20:
-        return jsonify({"error": "answers must be a list of ≤20 items"}), 400
-    for a in answers:
-        if not isinstance(a, dict):
-            return jsonify({"error": "each answer must be an object"}), 400
-        if len(str(a.get("answer", ""))) > MAX_ANSWER_CHARS:
-            return jsonify({"error": f"answer too long (max {MAX_ANSWER_CHARS} chars)"}), 400
-
-    if not answers:
-        return jsonify({"error": "answers required"}), 400
-    if not any(str(a.get("answer", "")).strip() for a in answers):
-        return jsonify({"error": "at least one non-empty answer required"}), 400
-    # Defense in depth — reject the literal "Andere…" placeholder. Frontend already
-    # validates, but if a third-party API client posts it directly we'd otherwise
-    # feed a useless answer to the LLM.
-    for a in answers:
-        ans = str(a.get("answer", "")).strip()
-        if ans in ("Andere…", "Andere...", "Andere"):
-            return jsonify({"error": "Bitte deine Antwort eingeben — 'Andere…' braucht Freitext."}), 400
+    _answer_err = _validate_answer_list(answers)
+    if _answer_err:
+        return jsonify({"error": _answer_err}), 400
 
     try:
         from claude_client import evaluate_answers
@@ -375,6 +442,10 @@ def submit_answers(session_id):
         process_map_skipped = False
         extra_context = ""
         attachments = []
+        # Question definitions shown for THIS round — stored alongside the answers so
+        # the frontend can re-render a past round as an editable form (Feature C:
+        # forward/back navigation with editing).
+        round_questions = []
 
         if notion_available():
             state = _get(session_id)
@@ -387,9 +458,10 @@ def submit_answers(session_id):
                 process_map_skipped = bool(state.get("process_map_skipped", False))
                 extra_context = state.get("extra_context", "") or ""
                 attachments = state.get("attachments", []) or []
+                round_questions = state.get("current_questions", []) or []
 
         context = context or data.get("context", "")
-        all_qa.append({"round": round_num, "qa": answers})
+        all_qa.append({"round": round_num, "qa": answers, "questions": round_questions})
 
         # Write this round's Q&A to the lead's Notion page
         if lead_page_id:
@@ -988,6 +1060,75 @@ def patch_extras(session_id):
         return jsonify({"ok": True, "length": len(extras)})
     except Exception as e:
         app.logger.error("patch_extras error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Sidebar: "Weitere Automatisierungs-Ideen" — OTHER automations the interviewee
+# mentions in passing. Captured as separate opportunities; NOT part of the current
+# build spec (generate_claude_code_prompt never reads State). Autosaved by frontend.
+# ---------------------------------------------------------------------------
+
+@app.route("/api/session/<session_id>/additional_automations", methods=["PATCH"])
+def patch_additional_automations(session_id):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    data = request.get_json(silent=True) or {}
+    items = data.get("additional_automations", [])
+    if not isinstance(items, list) or len(items) > MAX_ADDITIONAL_AUTOMATIONS:
+        return jsonify({"error": f"expected a list of ≤{MAX_ADDITIONAL_AUTOMATIONS} items"}), 400
+    try:
+        from notion_session import (
+            update_additional_automations,
+            write_additional_automations_to_page,
+            get_session as _get,
+            available as notion_available,
+        )
+        if not notion_available():
+            return jsonify({"error": "notion not configured"}), 503
+        if not update_additional_automations(session_id, items):
+            return jsonify({"error": "session not found"}), 404
+        # If the interview already completed, the payoff worker has run — write the
+        # ideas section now so late additions still land on the lead page (idempotent).
+        try:
+            state = _get(session_id) or {}
+            if state.get("status") == "complete" and state.get("lead_page_id"):
+                write_additional_automations_to_page(
+                    state["lead_page_id"], state.get("additional_automations") or []
+                )
+        except Exception as e:
+            app.logger.warning("late additional_automations page write failed: %s", e)
+        return jsonify({"ok": True, "count": len(items)})
+    except Exception as e:
+        app.logger.error("patch_additional_automations error: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Feature C: edit an already-submitted round's answers (back-navigation).
+# Replaces that round's answers in-place; does NOT re-run the LLM, re-branch later
+# questions, or re-append page blocks. Edits flow into the build spec via all_qa
+# when the interview completes.
+# ---------------------------------------------------------------------------
+
+@app.route("/api/session/<session_id>/round/<int:round_num>", methods=["PATCH"])
+def patch_round(session_id, round_num):
+    if not _valid_session_id(session_id):
+        return jsonify({"error": "invalid session id"}), 400
+    data = request.get_json(silent=True) or {}
+    answers = data.get("answers", [])
+    err = _validate_answer_list(answers)
+    if err:
+        return jsonify({"error": err}), 400
+    try:
+        from notion_session import update_round_answers, available as notion_available
+        if not notion_available():
+            return jsonify({"error": "notion not configured"}), 503
+        if not update_round_answers(session_id, round_num, answers):
+            return jsonify({"error": "session or round not found"}), 404
+        return jsonify({"ok": True, "round": round_num})
+    except Exception as e:
+        app.logger.error("patch_round error: %s", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -3950,9 +4091,11 @@ def walkin_whoami():
 
 @app.route("/api/walkin/lead", methods=["POST"])
 def walkin_create_lead():
-    """Capture a walk-in: create/expand a Leads-DB row (tagged WALK IN BUT NO
-    BAMFAM) AND append an unmarked line to the 💡-callout so /walkinmail and
-    /walkinleadsconvert keep working. Each write is best-effort + isolated."""
+    """Capture a walk-in: create/expand a Leads-DB row (tagged WALK IN BUT NO BAMFAM), paste
+    the verbatim notes onto the lead page, and — when the chosen next step is the default
+    E-Mail-Entwurf — enqueue an auto-draft job so the walk-in follow-up lands in the ENTERING
+    person's mailbox (drafted server-side at /walkinmail quality by the walk-in-draft cron).
+    Each write is best-effort + isolated."""
     who = _team_member()
     if not who:
         return jsonify({"error": "Unauthorized"}), 401
@@ -3963,12 +4106,25 @@ def walkin_create_lead():
     if bad:
         return jsonify({"error": "Pflichtfelder fehlen oder ungültig", "fields": bad}), 400
     walkin_date = (p.get("walkin_date") or "").strip() or _now_local().date().isoformat()
+    next_action = (p.get("next_action") or "E-Mail-Entwurf erstellen").strip()
+    next_detail = (p.get("next_action_detail") or "").strip()
+    follow_up_date = (p.get("follow_up_date") or "").strip()
+    # Cc addresses chosen at entry (the 5 mailboxes + none). Keep only @automatisierbar.ch, cap 5.
+    cc = [a.strip() for a in (p.get("cc") or []) if isinstance(a, str)
+          and a.strip().lower().endswith("@automatisierbar.ch")][:5]
+    # Phase B interim storage: the next-step choice + specifics live in the lead note (no live
+    # Leads-DB schema change yet). Migrates to real Nächster-Schritt / Follow-up-Datum props later.
+    next_line = f"Nächster Schritt: {next_action}"
+    if next_detail:
+        next_line += f" — {next_detail}"
+    if follow_up_date:
+        next_line += f" (bis {follow_up_date})"
 
     import notion_session as _ns
     if not _ns.available():
         return jsonify({"error": "notion not configured"}), 503
 
-    result = {"ok": True, "lead_id": None, "expanded": False, "callout": False, "warnings": []}
+    result = {"ok": True, "lead_id": None, "expanded": False, "draft_queued": False, "warnings": []}
 
     # (a) Leads DB — dedup by email/phone, then expand (empty-only) or create.
     try:
@@ -3983,22 +4139,36 @@ def walkin_create_lead():
         # Paste the verbatim notes onto the lead page body (1:1 traceability).
         _ns.append_booking_note(
             result["lead_id"], f"Walk-In Notiz ({walkin_date})",
-            [(p.get("notes") or "").strip(), f"Erfasst von {who} · Walk-in mode"])
+            [(p.get("notes") or "").strip(), f"Erfasst von {who} · Walk-in mode", next_line])
     except Exception as e:
         app.logger.error("walkin lead write failed: %s", e)
         result["warnings"].append("lead_write_failed")
 
-    # (b) 💡-callout line — drives the existing mail/convert skills.
-    try:
-        result["callout"] = _ns.append_walkin_callout_line(_wc.build_callout_line(p))
-        if not result["callout"]:
-            result["warnings"].append("callout_append_failed")
-    except Exception as e:
-        app.logger.error("walkin callout append failed: %s", e)
-        result["warnings"].append("callout_append_failed")
-
-    if result["lead_id"] is None and not result["callout"]:
+    if result["lead_id"] is None:
         return jsonify({"error": "Speichern fehlgeschlagen", **result}), 500
+
+    # (b) Enqueue the auto-draft — only when the operator picked the default E-Mail-Entwurf.
+    #     Other next-step choices record intent on the lead (above) and draft nothing (Phase B).
+    if next_action == "E-Mail-Entwurf erstellen":
+        try:
+            import walkin_draft_queue as _wq
+            _wq.enqueue_job({
+                "entering_person": who, "cc": cc, "next_action": next_action,
+                "lead_page_id": result["lead_id"], "walkin_date": walkin_date,
+                "company": (p.get("company") or "").strip(),
+                "contact": (p.get("contact") or "").strip(),
+                "role": (p.get("role") or "").strip(),
+                "email": (p.get("email") or "").strip(),
+                "website": (p.get("website") or "").strip(),
+                "phone": (p.get("phone") or "").strip(),
+                "city": (p.get("city") or "").strip(),
+                "notes": (p.get("notes") or "").strip(),
+            })
+            result["draft_queued"] = True
+        except Exception as e:
+            app.logger.error("walkin draft enqueue failed: %s", e)
+            result["warnings"].append("draft_enqueue_failed")
+
     return jsonify(result)
 
 
@@ -4596,6 +4766,32 @@ if os.environ.get("KNOWSPESEN_HOME"):
         app.logger.info("KnowSpesen schema ensured on startup")
     except Exception as _e:  # never let a DB hiccup crash the whole app import
         app.logger.warning("KnowSpesen init_db on startup failed: %s", _e)
+
+
+# ---------------------------------------------------------------------------
+# Ausgaben — internal expense + reimbursement tracker (ausgaben.automatisierbar.ch).
+# Separate sibling service (AUSGABEN_HOME=1), own SQLite (AUSGABEN_DB_PATH), own
+# password + secret. A FORK of KnowSpesen that reuses ONLY the two pure helpers
+# (spesen.ocr / spesen.currency); it touches no spesen file and no /srv/knowspesen
+# path. The routes live in a Blueprint so a bug there can't crash the shared app —
+# the registration is guarded (a broken import logs + is skipped, app still boots).
+# ---------------------------------------------------------------------------
+try:
+    from ausgaben.routes import bp as _ausgaben_bp
+    app.register_blueprint(_ausgaben_bp)
+except Exception as _e:
+    app.logger.warning("ausgaben blueprint registration failed: %s", _e)
+
+# On the Ausgaben deployment only (AUSGABEN_HOME=1): ensure schema + founders on every
+# startup (idempotent). The guard keeps Render/cockpit/knowspesen from ever touching
+# /srv/ausgaben, and this process never sets KNOWSPESEN_HOME → the client DB is safe.
+if os.environ.get("AUSGABEN_HOME"):
+    try:
+        from ausgaben import db as _adb_boot
+        _adb_boot.init_db()
+        app.logger.info("Ausgaben schema ensured on startup")
+    except Exception as _e:
+        app.logger.warning("Ausgaben init_db on startup failed: %s", _e)
 
 
 # ---------------------------------------------------------------------------

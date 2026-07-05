@@ -96,6 +96,29 @@ def _body_to_html(body):
             + esc + "</div><br />\n")
 
 
+# The removable "who is this lead again" context block that sits ABOVE the salutation.
+# The operator deletes it before sending. Uses "=" bars only (never — / –), so it can't trip
+# the no-Gedankenstriche guard and reads the same in plain + HTML clients.
+_CTX_BAR = "=" * 52
+
+
+def _render_context_block_plain(text):
+    """Plain-text removable context block: loud delimiters + a 'starts here' marker."""
+    return (f"{_CTX_BAR}\nINTERN, VOR DEM SENDEN LÖSCHEN\n{_CTX_BAR}\n"
+            f"{(text or '').rstrip()}\n{_CTX_BAR}\nAB HIER BEGINNT DIE E-MAIL\n{_CTX_BAR}\n\n")
+
+
+def _render_context_block_html(text):
+    """HTML removable context block: an amber dashed box + a centered 'starts here' rule."""
+    esc = _htmlmod.escape(text or "").replace("\n", "<br />\n")
+    return ('<div style="background:#FFF4D6;border:2px dashed #C77700;border-radius:8px;'
+            'padding:12px 14px;margin:0 0 14px;font-family:Helvetica,Arial,sans-serif;'
+            'font-size:12.5px;line-height:1.55;color:#6B4200">'
+            '<strong>INTERN, VOR DEM SENDEN LÖSCHEN</strong><br />\n' + esc + '</div>'
+            '<div style="text-align:center;color:#9AA0A6;font-size:11px;font-weight:600;'
+            'letter-spacing:.5px;margin:0 0 16px">AB HIER BEGINNT DIE E-MAIL</div>\n')
+
+
 def build_message(draft, from_addr, signature=None, msgid=None, cc=None,
                   in_reply_to=None, references=None, quote_text=None, quote_html=None):
     """Build a UTF-8 EmailMessage. Empty/absent `to` => no To header (An: leer).
@@ -137,19 +160,25 @@ def build_message(draft, from_addr, signature=None, msgid=None, cc=None,
     if company:
         msg["X-Walkin-Company"] = company
     body = draft.get("body", "")
+    # Removable internal context block, rendered ABOVE the salutation in both parts. The
+    # operator deletes it before sending; it never reaches the recipient (when they don't forget).
+    ctx = (draft.get("context_block") or "").strip()
+    ctx_plain = _render_context_block_plain(ctx) if ctx else ""
+    ctx_html = _render_context_block_html(ctx) if ctx else ""
     qt = (draft.get("quote_text") if draft.get("quote_text") is not None else quote_text) or ""
     qh = (draft.get("quote_html") if draft.get("quote_html") is not None else quote_html) or ""
     sig_html = (signature or {}).get("html") if signature else None
     sig_text = (signature or {}).get("text") if signature else None
     if sig_html or sig_text:
-        plain = body + "\n\n" + (sig_text or "")
+        plain = ctx_plain + body + "\n\n" + (sig_text or "")
         if qt:
             plain += "\n\n" + qt
         msg.set_content(plain, subtype="plain", charset="utf-8")
-        msg.add_alternative(_body_to_html(body) + (sig_html or "") + qh,
+        msg.add_alternative(ctx_html + _body_to_html(body) + (sig_html or "") + qh,
                             subtype="html", charset="utf-8")
     else:
-        msg.set_content(body + (("\n\n" + qt) if qt else ""), subtype="plain", charset="utf-8")
+        msg.set_content(ctx_plain + body + (("\n\n" + qt) if qt else ""),
+                        subtype="plain", charset="utf-8")
     return msg
 
 
@@ -282,10 +311,15 @@ def _existing_companies(imap, target):
 
 
 def _connect(cfg, args):
-    user = args.user or env("INFOMANIAK_IMAP_USER") or cfg.get("from")
-    pw = env("INFOMANIAK_IMAP_PASSWORD")
+    # Per-mailbox routing: --user-env / --password-env point at DISTINCT env names per mailbox
+    # (e.g. NICO_IMAP_PASSWORD), so the walk-in worker can draft into anyone's box without a
+    # shared-key runtime override. Both default to the legacy INFOMANIAK_* names => unchanged.
+    user_env = getattr(args, "user_env", None) or "INFOMANIAK_IMAP_USER"
+    pw_env = getattr(args, "password_env", None) or "INFOMANIAK_IMAP_PASSWORD"
+    user = args.user or env(user_env) or cfg.get("from")
+    pw = env(pw_env)
     if not user or not pw:
-        print("[FAIL] Infomaniak-Creds fehlen (INFOMANIAK_IMAP_USER / INFOMANIAK_IMAP_PASSWORD in .env)")
+        print(f"[FAIL] Infomaniak-Creds fehlen ({user_env} / {pw_env} in .env/env)")
         return None
     host = args.host or env("INFOMANIAK_IMAP_HOST") or cfg["imap_host"]
     port = int(args.port or env("INFOMANIAK_IMAP_PORT") or cfg["imap_port"])
@@ -588,6 +622,24 @@ def cmd_selftest():
     check("kein Gedankenstrich im HTML", "—" not in htmlp and "–" not in htmlp)
     check("multipart CRLF", b"\r\n" in message_bytes(m3))
 
+    # Removable context block: rendered ABOVE the body, in both parts, no dash chars
+    d_ctx = {"company": "Ctx AG", "to": "a@b.ch", "subject": "S",
+             "body": "Guten Tag,\n\nFreundliche Grüsse aus Baden,",
+             "context_block": "Firma: Ctx AG\nErfasst von: Nico\nNotiz: sehr interessiert"}
+    m_ctx = build_message(d_ctx, "joaquin@automatisierbar.ch", signature=SIG,
+                          msgid="<tc@automatisierbar.ch>")
+    pc = next(p for p in m_ctx.iter_parts() if p.get_content_type() == "text/plain").get_content()
+    hc = next(p for p in m_ctx.iter_parts() if p.get_content_type() == "text/html").get_content()
+    check("Kontextblock im Plain oberhalb des Bodys",
+          "VOR DEM SENDEN LÖSCHEN" in pc and pc.index("Erfasst von: Nico") < pc.index("Guten Tag,"))
+    check("Kontextblock im HTML oberhalb des Bodys",
+          "VOR DEM SENDEN LÖSCHEN" in hc and hc.index("Erfasst von: Nico") < hc.index("Guten Tag,"))
+    check("Kontext vor Signatur (plain)", pc.index("Erfasst von: Nico") < pc.index("Joaquin Gamonal"))
+    check("kein Gedankenstrich im Kontextblock", "—" not in pc and "–" not in pc and "—" not in hc and "–" not in hc)
+    d_noctx = {"company": "NoCtx AG", "to": "a@b.ch", "subject": "S", "body": "x"}
+    m_noctx = build_message(d_noctx, "joaquin@automatisierbar.ch")
+    check("kein Kontextblock ohne Angabe", "VOR DEM SENDEN LÖSCHEN" not in m_noctx.get_content())
+
     # Cc header (team copy on every walk-in draft)
     m_cc = build_message(d1, "joaquin@automatisierbar.ch", cc="tej@automatisierbar.ch",
                          msgid="<t4@automatisierbar.ch>")
@@ -711,7 +763,11 @@ def main():
     ap.add_argument("--no-verify", action="store_true", help="Skip post-append verification")
     ap.add_argument("--host", help="Override IMAP host")
     ap.add_argument("--port", help="Override IMAP port")
-    ap.add_argument("--user", help="Override IMAP user")
+    ap.add_argument("--user", help="Override IMAP user (full address)")
+    ap.add_argument("--user-env", dest="user_env",
+                    help="Env var NAME holding the IMAP user (per-mailbox; default INFOMANIAK_IMAP_USER)")
+    ap.add_argument("--password-env", dest="password_env",
+                    help="Env var NAME holding the IMAP password (per-mailbox; default INFOMANIAK_IMAP_PASSWORD)")
     ap.add_argument("--folder", help="Subfolder under Drafts; empty/unset = main Drafts folder")
     args = ap.parse_args()
 
