@@ -37,6 +37,8 @@
   .wrap{max-width:560px;margin:0 auto}
 
   header{display:flex;align-items:center;gap:11px;padding:8px 2px 20px}
+  .brand-link{display:inline-flex;align-items:center;gap:11px;text-decoration:none;color:inherit;transition:var(--ease)}
+  .brand-link:hover .brand b{color:var(--green-soft)}
   .logo{width:38px;height:38px;border-radius:10px;overflow:hidden;flex:none;
     box-shadow:0 0 0 1px rgba(255,255,255,.06),0 6px 18px var(--green-glow);display:block}
   .logo svg{width:100%;height:100%;display:block}
@@ -148,8 +150,10 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-    <div class="brand"><b>Automatisierbar</b><span class="sub">Automatisierung, die Zeit spart</span></div>
+    <a class="brand-link" href="https://automatisierbar.ch" rel="noopener">
+      <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <div class="brand"><b>Automatisierbar</b><span class="sub">Automatisierung, die Zeit spart</span></div>
+    </a>
   </header>
 
   <div class="hero">
