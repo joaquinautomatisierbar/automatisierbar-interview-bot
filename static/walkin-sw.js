@@ -2,7 +2,7 @@
    Shell: cache-first (instant launch, offline shell).
    Never touches non-GET (lead-create + memo-upload POSTs pass straight through —
    Phase 1 is online-only; a failed upload surfaces a retry toast). */
-const CACHE = 'ab-walkin-v2';
+const CACHE = 'ab-walkin-v3';
 const SHELL = [
   '/walkin',
   '/walkin.webmanifest',
