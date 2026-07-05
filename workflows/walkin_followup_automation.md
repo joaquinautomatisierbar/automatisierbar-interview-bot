@@ -21,25 +21,32 @@ and `/walkinleadsconvert` skills and the 💡-callout. To improve the drafts, us
 ## The five process elements
 
 - **Trigger** — `POST /api/walkin/lead` (field PWA `static/walkin.html`) fires on each captured
-  lead when the chosen **Nächster Schritt** is `E-Mail-Entwurf erstellen` (the default). It writes
-  the Notion lead and enqueues one job file. A cron (`tools/scheduled/walkin-draft-worker.sh`, every
-  ~3 min) claims and processes the queue. Quality over speed: no per-run latency budget rushes the LLM.
+  lead when the chosen **Nächster Schritt** is one of the three email-warranting options
+  (`E-Mail-Entwurf erstellen` [default] · `Wir melden uns` · `Follow-up bis Datum`; the canonical
+  set is `walkin_capture.DRAFTING_NEXT_ACTIONS`). It writes the Notion lead and enqueues one job
+  file. A cron (`tools/scheduled/walkin-draft-worker.sh`, every ~3 min) claims and processes the
+  queue. Quality over speed: no per-run latency budget rushes the LLM.
 - **Data sources** — the queued job (entering person, Cc choice, lead fields, notes); the live
   **Follow-Up Email Script + Pitch-Bibliothek** from Notion (`388bebb0…`, cached fallback); the
   entering person's **Infomaniak signature** (Mail API, per-mailbox cache); the web (server-side
   `web_search`) to find/verify the contact email when the form has none.
 - **Transformations** — resolve the recipient email (form value, else web search → confident /
   best-guess); classify the sector + pick the pain-hypothesis; draft the Hormozi-framed German
-  email (`claude_client.draft_walkin_followup`); build the removable context block
+  email (`claude_client.draft_walkin_followup`), whose CTA + tone are shaped by the chosen next
+  step (standard = A/B-time + booking link; `Wir melden uns` = we initiate, no self-book ask;
+  `Follow-up bis Datum` = time-anchored around the date); build the removable context block
   (`walkin_capture.build_context_block`); assemble the MIME with the person's signature + chosen Cc.
 - **Decision points** — **ICP filter**: clearly non-back-office (Coiffeur/Restaurant/trades) →
   skip, no draft. **Confident email** → An-field pre-filled; **best-guess** → An-field left empty
-  (never a guessed recipient). **Next step ≠ E-Mail-Entwurf** → record the intent on the lead, draft
-  nothing (the follow-up engine is deferred to the CRM). **No mailbox creds** → retry, then `failed`
-  + one operator Telegram ping.
+  (never a guessed recipient). **Next step in the draft set** (E-Mail-Entwurf / Wir melden uns /
+  Follow-up bis Datum) → draft, shaped by that choice; **Kein Interesse / keine Zeit** or
+  **Sonstiges** → record the intent on the lead, draft nothing. **No mailbox creds** → retry, then
+  `failed` + one operator Telegram ping.
 - **Destination** — an IMAP `\Draft` in the entering person's `Drafts` folder (never SMTP → cannot
-  send), plus a `✉️ Walk-in Entwurf erstellt` note on the lead page. The lead itself was created at
-  entry and syncs to the Hub via the Hub's Notion sync.
+  send), plus a `✉️ Walk-in Entwurf erstellt` note on the lead page. The chosen next step +
+  follow-up date are also written to the real Leads-DB props `Nächster Schritt` (select) /
+  `Follow-up Datum` (date). The lead itself was created at entry and syncs to the Hub via the Hub's
+  Notion sync.
 
 ## Components
 
@@ -56,19 +63,18 @@ and `/walkinleadsconvert` skills and the 💡-callout. To improve the drafts, us
 
 ## Operator blockers (credential UIs — the build degrades gracefully until these exist)
 
-1. **IMAP application passwords** for `nicolas@`, `tej@`, `patrik@` (Infomaniak Manager → Mail →
-   Security) → set in `/etc/cockpit/env`:
-   `NICO_IMAP_USER` / `NICO_IMAP_PASSWORD`, `TEJ_IMAP_USER` / `TEJ_IMAP_PASSWORD`,
-   `PATRIK_IMAP_USER` / `PATRIK_IMAP_PASSWORD`. `joaquin@` (`JOAQUIN_IMAP_*`) and `info@`
-   (`INFOMANIAK_IMAP_*`) already have creds. A mailbox with no creds → the job goes to `failed`
-   after retries + one Telegram ping; nothing crashes.
-2. **Signatures** configured in Infomaniak for each mailbox (nicolas/tej/patrik currently have
-   none → their drafts ship without a signature until set). The existing hosting-scoped
+1. ✅ **DONE (2026-07-05)** — **IMAP application passwords** for all five mailboxes are set in
+   `/etc/cockpit/env` (`JOAQUIN_IMAP_*`, `INFOMANIAK_IMAP_*`, `NICO_IMAP_*`, `TEJ_IMAP_*`,
+   `PATRIK_IMAP_*`). A mailbox with no creds → the job goes to `failed` after retries + one Telegram
+   ping; nothing crashes.
+2. **Signatures** configured in Infomaniak for each mailbox (verify nicolas/tej/patrik are set —
+   otherwise their drafts ship without a signature). The existing hosting-scoped
    `INFOMANIAK_MAIL_TOKEN` should read them all; if scope is narrower, add per-mailbox
    `{PREFIX}_MAIL_TOKEN`. Verify with `python3 tools/walkin/infomaniak_signature.py --show --mailbox tej`.
-3. **Install the cron:** `crontab -u paperclip -e` → `*/3 * * * * /srv/cockpit/app/tools/scheduled/walkin-draft-worker.sh`.
-4. **(Phase B) approval** before adding real `Nächster Schritt` / `Follow-up Datum` properties to
-   the live Leads DB — until then those values live in the lead's note block.
+3. ✅ **DONE (2026-07-05)** — cron installed: `*/3 * * * * /srv/cockpit/app/tools/scheduled/walkin-draft-worker.sh`.
+4. ✅ **DONE (2026-07-05, Phase B)** — the real `Nächster Schritt` (select) / `Follow-up Datum` (date)
+   properties now exist on the live Leads DB and are written on entry via `build_lead_fields`. The
+   note-block line is kept as a redundant human-readable trail.
 
 ## Verification / rollout (Bike Method Phase 1)
 
@@ -76,6 +82,11 @@ and `/walkinleadsconvert` skills and the 💡-callout. To improve the drafts, us
   (fixtures: Muster / Alpina Immobilien / Coiffeur Belle [ICP-skip] / Codes SA / Kanzlei Steiner).
 - **Supervised go-live:** one real walk-in per team member → confirm the draft lands in the RIGHT
   mailbox with the RIGHT signature + the removable context block, before trusting the cron.
-- **Learnings:** on the dev Mac, `nicolas@`/`tej@`/`patrik@` have no creds yet, so the worker draws
-  the draft but the IMAP push reports `no_credentials:<addr>` and the job goes to `failed` — expected
-  until the operator provisions the app-passwords above.
+- **Learnings:** on the dev Mac, mailbox creds may be absent, so the worker draws the draft but the
+  IMAP push reports `no_credentials:<addr>` and the job goes to `failed` — expected locally; on the
+  prod VPS all five mailboxes have creds (blocker 1).
+- **Next step shapes the draft (2026-07-05):** the `Nächster Schritt` choice is no longer just a
+  draft/no-draft gate. Three options draft (`DRAFTING_NEXT_ACTIONS`) and steer CTA + tone via
+  `_SYSTEM_WALKIN_DRAFT`; `Kein Interesse` / `Sonstiges` still draft nothing. Verified live: default
+  asks two slots + booking link; `Wir melden uns` announces we initiate (no slot ask); `Follow-up
+  bis Datum` anchors the slots around the target date. To tune wording, use `/walkinmail-improvement`.
