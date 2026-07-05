@@ -1376,6 +1376,18 @@ INHALTLICHE REGELN (hart):
 - Betreff kurz + Wiedererkennung, kein Spam-Trigger. Z.B. „Unser Besuch bei Ihnen, kurzer
   nächster Schritt". Kein „Angebot"/„Lösung"/„Automatisierung" im Betreff.
 
+NÄCHSTER SCHRITT (der erfassende Kollege hat einen Fall gewählt, richte CTA + Tonfall danach aus;
+ändere NUR CTA, Tonfall und Timing, alle übrigen Regeln oben gelten unverändert):
+- „E-Mail-Entwurf erstellen" (Standard): Der Interessent erwartet unser Mail. Nutze den kombinierten
+  CTA von oben (A/B-Zeitwahl + Buchungslink), 60-Minuten-Termin bei ihnen im Büro.
+- „Wir melden uns": WIR ergreifen die Initiative. Kündige kurz und verbindlich an, dass wir uns in
+  den nächsten Tagen bei ihnen melden (kurzer Anruf oder Besuch). KEIN Selbst-Buchen als Haupt-CTA,
+  frag nicht nach zwei Terminslots. Nimm ein mitgegebenes Detail (wann/wie) auf. Den Buchungslink
+  nur als optionale Abkürzung anbieten („falls es Ihnen lieber ist, wählen Sie direkt einen Termin:
+  {Buchungslink}"). Halte den Entwurf etwas kürzer.
+- „Follow-up bis Datum": Verankere den nächsten Schritt zeitlich rund um das mitgegebene Zieldatum.
+  Schlage zwei plausible Slots nahe an diesem Datum vor (nicht in ferner Zukunft), sonst wie Standard.
+
 STILREGELN (hart):
 - KEINE Gedankenstriche (— oder –). Nutze Komma, Doppelpunkt oder Punkt. Bindestriche in
   zusammengesetzten Wörtern sind erlaubt (z.B. 30-Minuten-Termin, Lizenz- und Vertragsverlängerung).
@@ -1389,9 +1401,23 @@ Wenn ICP-Filter greift: {"subject":"","body":"","sector":"<Branche>","skip_reaso
 """
 
 
+def _walkin_next_step_line(next_action: str = "", detail: str = "", follow_up_date: str = "") -> str:
+    """One-line summary of the operator's chosen Nächster Schritt for the draft prompt."""
+    line = (next_action or "").strip() or "E-Mail-Entwurf erstellen"
+    d = (detail or "").strip()
+    if d:
+        line += f", Detail: {d}"
+    fd = (follow_up_date or "").strip()
+    if fd:
+        line += f", Zieldatum: {fd}"
+    return line
+
+
 def draft_walkin_followup(*, lead: dict, final_script: str, author_name: str = "",
                           booking_url: str = "https://cockpit.automatisierbar.ch/book",
-                          ort: str = "Baden", model: str = MODEL_FAST) -> dict:
+                          ort: str = "Baden", model: str = MODEL_FAST,
+                          next_action: str = "", next_action_detail: str = "",
+                          follow_up_date: str = "") -> dict:
     """Draft the walk-in follow-up email at the /walkinmail quality bar. Returns
     {"subject", "body", "sector", "skip_reason"}. `skip_reason` set (e.g. 'non_icp') => empty
     subject/body, caller skips drafting. Fails SAFE -> skip_reason='generation_failed' on any
@@ -1418,6 +1444,9 @@ def draft_walkin_followup(*, lead: dict, final_script: str, author_name: str = "
             "",
             "Notiz vom Besuch (wörtlich, nutze sie für Anrede/Anker/Hypothese):",
             (lead.get("notes", "") or "")[:2000],
+            "",
+            "GEWÄHLTER NÄCHSTER SCHRITT (steuert CTA + Tonfall, siehe Systemregeln):",
+            _walkin_next_step_line(next_action, next_action_detail, follow_up_date),
             "",
             "FOLLOW-UP-SKRIPT + BRANCHEN-PITCH-BIBLIOTHEK (Quelle der Wahrheit):",
             (final_script or "")[:12000],

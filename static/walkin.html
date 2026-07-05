@@ -287,6 +287,8 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>{
 }));
 
 /* ---- lead form ---- */
+// Next-step choices that produce an auto-draft (mirror of walkin_capture.DRAFTING_NEXT_ACTIONS).
+const DRAFT_ACTIONS = ['E-Mail-Entwurf erstellen', 'Wir melden uns', 'Follow-up bis Datum'];
 function todayISO(){
   const d = new Date();
   return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -310,7 +312,7 @@ async function saveLead(){
     next_action: nextAction,
     next_action_detail: $('f-next-detail').value.trim(),
     follow_up_date: $('f-next-date').value || '',
-    cc: nextAction==='E-Mail-Entwurf erstellen' ? ccBoxes : [],
+    cc: DRAFT_ACTIONS.includes(nextAction) ? ccBoxes : [],
   };
   const btn = $('lead-save'); btn.disabled = true; btn.textContent = 'Speichere …';
   try{
@@ -331,14 +333,14 @@ async function saveLead(){
 }
 function onNextChange(){
   const v = $('f-next').value;
-  const isDraft = v === 'E-Mail-Entwurf erstellen';
+  const isDraft = DRAFT_ACTIONS.includes(v);
   const detail = $('f-next-detail'), date = $('f-next-date');
   detail.classList.toggle('hidden', !(v==='Wir melden uns' || v==='Sonstiges'));
   detail.placeholder = v==='Sonstiges' ? 'Was ist der nächste Schritt?' : 'Wann / wie melden wir uns?';
   date.classList.toggle('hidden', v!=='Follow-up bis Datum');
   $('cc-wrap').classList.toggle('hidden', !isDraft);
   $('next-hint').textContent = isDraft
-    ? 'Es wird automatisch ein Mail-Entwurf in deiner Mailbox erstellt (gleiche Qualität wie bisher).'
+    ? 'Es wird automatisch ein Mail-Entwurf in deiner Mailbox erstellt, zugeschnitten auf den gewählten nächsten Schritt.'
     : 'Kein Entwurf. Der nächste Schritt wird beim Lead vermerkt (Follow-up-Verwaltung folgt mit dem CRM).';
 }
 $('f-next').addEventListener('change', onNextChange);

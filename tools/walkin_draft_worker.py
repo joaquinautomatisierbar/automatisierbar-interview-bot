@@ -78,7 +78,7 @@ def _notify(text: str):
 def _lead_fields(job: dict) -> dict:
     """The form fields a job carries (job stores them flat)."""
     keys = ("company", "contact", "role", "email", "website", "phone", "city",
-            "walkin_date", "notes")
+            "walkin_date", "notes", "next_action", "next_action_detail", "follow_up_date")
     return {k: (job.get(k) or "") for k in keys}
 
 
@@ -112,7 +112,10 @@ def build_draft_for_job(job: dict, cfg: dict):
     drafted = cc.draft_walkin_followup(
         lead=lead, final_script=script["text"], author_name=person,
         booking_url=cfg.get("booking", "https://cockpit.automatisierbar.ch/book"),
-        ort=cfg.get("ort", "Baden"))
+        ort=cfg.get("ort", "Baden"),
+        next_action=fields.get("next_action", ""),
+        next_action_detail=fields.get("next_action_detail", ""),
+        follow_up_date=fields.get("follow_up_date", ""))
 
     if drafted.get("skip_reason"):
         return None, {"status": "skipped", "skip_reason": drafted["skip_reason"],

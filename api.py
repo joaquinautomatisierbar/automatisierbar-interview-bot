@@ -4147,13 +4147,15 @@ def walkin_create_lead():
     if result["lead_id"] is None:
         return jsonify({"error": "Speichern fehlgeschlagen", **result}), 500
 
-    # (b) Enqueue the auto-draft — only when the operator picked the default E-Mail-Entwurf.
-    #     Other next-step choices record intent on the lead (above) and draft nothing (Phase B).
-    if next_action == "E-Mail-Entwurf erstellen":
+    # (b) Enqueue the auto-draft — for the next-step choices that warrant an email
+    #     (E-Mail-Entwurf / Wir melden uns / Follow-up bis Datum). The chosen step shapes the
+    #     draft's CTA + tone downstream. "Kein Interesse" / "Sonstiges" record intent + draft nothing.
+    if next_action in _wc.DRAFTING_NEXT_ACTIONS:
         try:
             import walkin_draft_queue as _wq
             _wq.enqueue_job({
                 "entering_person": who, "cc": cc, "next_action": next_action,
+                "next_action_detail": next_detail, "follow_up_date": follow_up_date,
                 "lead_page_id": result["lead_id"], "walkin_date": walkin_date,
                 "company": (p.get("company") or "").strip(),
                 "contact": (p.get("contact") or "").strip(),

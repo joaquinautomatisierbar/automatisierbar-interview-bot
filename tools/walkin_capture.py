@@ -227,6 +227,15 @@ def list_memos_compact() -> list:
 
 # --- Lead capture: Leads-DB fields + the matching 💡-callout line ----------------
 
+# Next-step choices that trigger an auto-draft (the other options only record intent on
+# the lead). Kept here so the route (enqueue gate) and tests share one canonical set.
+DRAFTING_NEXT_ACTIONS = {
+    "E-Mail-Entwurf erstellen",  # default: the interested party asked us to email them
+    "Wir melden uns",            # we take the initiative; draft a short "wir melden uns" note
+    "Follow-up bis Datum",       # time-anchored follow-up around follow_up_date
+}
+
+
 def validate_lead_payload(p: dict) -> list:
     """Return a list of invalid/missing field names ([] = ok)."""
     bad = []
@@ -267,6 +276,15 @@ def build_lead_fields(p: dict, walkin_date: str) -> dict:
     role = (p.get("role") or "").strip()
     if role in ROLE_OPTIONS:
         fields["Rolle"] = role
+    # Real Leads-DB props for the chosen next step (Phase B). Inert until the DB defines
+    # "Nächster Schritt" (select) / "Follow-up Datum" (date): build_props silently drops
+    # any property the schema doesn't declare, so shipping this ahead of the schema is safe.
+    next_action = (p.get("next_action") or "").strip()
+    if next_action:
+        fields["Nächster Schritt"] = next_action
+    follow_up_date = (p.get("follow_up_date") or "").strip()
+    if follow_up_date:
+        fields["Follow-up Datum"] = follow_up_date
     return fields
 
 
@@ -296,6 +314,15 @@ def build_context_block(p: dict, *, sector: str = "", author: str = "", email: s
     email_line = email or (p.get("email") or "").strip()
     if email_line and not email_confident:
         email_line += "  (unsicher, bitte prüfen)"
+    # chosen next step (from the form) — internal reminder so the operator sees the intent
+    na = (p.get("next_action") or "").strip()
+    na_detail = (p.get("next_action_detail") or "").strip()
+    na_date = (p.get("follow_up_date") or "").strip()
+    na_line = na
+    if na_detail:
+        na_line += f" — {na_detail}"
+    if na_date:
+        na_line += f" (bis {na_date})"
     rows = [
         ("Firma", company),
         ("Kontakt", kontakt),
@@ -306,6 +333,7 @@ def build_context_block(p: dict, *, sector: str = "", author: str = "", email: s
         ("Besuchsdatum", (walkin_date or p.get("walkin_date") or "").strip()),
         ("Erfasst von", (author or "").strip()),
         ("Branche/Hypothese", (sector or "").strip()),
+        ("Nächster Schritt", na_line),
     ]
     lines = [f"{label}: {value}" for label, value in rows if value]
     notes = (p.get("notes") or "").strip()
