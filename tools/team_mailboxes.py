@@ -28,15 +28,17 @@ DOMAIN = "automatisierbar.ch"
 # `fallback_prefix` (optional) is tried second so joaquin/info reuse the legacy creds.
 ROSTER = {
     "Joaquin": {"email": "joaquin@automatisierbar.ch", "prefix": "JOAQUIN",
-                "mailbox_name": "joaquin", "fallback_prefix": "INFOMANIAK"},
+                "mailbox_name": "joaquin", "fallback_prefix": "INFOMANIAK",
+                "full_name": "Joaquin Gamonal"},
     "Tej":     {"email": "tej@automatisierbar.ch",     "prefix": "TEJ",
-                "mailbox_name": "tej"},
+                "mailbox_name": "tej", "full_name": "Tej Kasarkod"},
     "Nico":    {"email": "nicolas@automatisierbar.ch", "prefix": "NICO",
-                "mailbox_name": "nicolas"},
+                "mailbox_name": "nicolas", "full_name": "Nicolas Widmer"},
     "Patrik":  {"email": "patrik@automatisierbar.ch",  "prefix": "PATRIK",
-                "mailbox_name": "patrik"},
+                "mailbox_name": "patrik", "full_name": "Patrik Landolt"},
     "info":    {"email": "info@automatisierbar.ch",    "prefix": "INFO",
-                "mailbox_name": "info", "fallback_prefix": "INFOMANIAK"},
+                "mailbox_name": "info", "fallback_prefix": "INFOMANIAK",
+                "full_name": "automatisierbar"},
 }
 
 # resolve by display name, localpart, or the email localpart (all lowercased)
@@ -73,6 +75,12 @@ def resolve(person):
 
 def address(person):
     return resolve(person)["email"]
+
+
+def full_name(person):
+    """The person's full name for authoring (e.g. 'Tej Kasarkod'); falls back to display name."""
+    p = resolve(person)
+    return p.get("full_name") or p["person"]
 
 
 def _cred_prefixes(profile):

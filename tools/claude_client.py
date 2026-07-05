@@ -1205,10 +1205,11 @@ def classify_inbox_email(subject: str, body: str, *, from_name: str = "",
 
 
 _SYSTEM_INBOX_DRAFT = """\
-Du schreibst im Namen von Joaquin Gamonal (Mitgründer automatisierbar.ch) einen ANTWORT-ENTWURF
-auf eine eingehende E-Mail. Der Entwurf wird NICHT automatisch gesendet: Joaquin liest ihn,
-passt ihn bei Bedarf an und sendet selbst. Schreibe so, dass er ihn im Idealfall unverändert
-abschicken kann.
+Du schreibst im Namen der Person, die unten unter "DU BIST" steht (Teil von automatisierbar.ch),
+einen ANTWORT-ENTWURF auf eine eingehende E-Mail. Der Entwurf wird NICHT automatisch gesendet:
+die Person liest ihn, passt ihn bei Bedarf an und sendet selbst. Schreibe so, dass sie ihn im
+Idealfall unverändert abschicken kann. Schreibe aus IHRER Perspektive (nicht aus der von jemand
+anderem im Team).
 
 SPRACHE: Antworte in der Sprache, die unten unter "Sprache der Antwort" steht.
 - de: Hochdeutsch, durchgehend Sie-Form.
@@ -1249,18 +1250,22 @@ Der Betreff spiegelt den Original-Betreff mit vorangestelltem 'Re: ' (kein doppe
 def draft_inbox_reply(*, incoming: dict, lead: dict = None, appointment: dict = None,
                       slots: list = None, language: str = "de", category: str = "other",
                       booking_url: str = "https://cockpit.automatisierbar.ch/book",
+                      author_name: str = "Joaquin Gamonal", author_email: str = "joaquin@automatisierbar.ch",
                       model: str = MODEL_FAST) -> dict:
     """Draft a reply to one incoming email. Returns {"subject": str, "body": str}, or {}
     on failure (caller then skips the append — never deposits an empty/broken draft).
 
     `incoming`: {from_name, from_email, subject, body_text}. `lead`: extracted CRM dict or
     None. `appointment`: a Termine-DB row dict or None. `slots`: [{iso, label}, ...] free
-    slots to propose (appointment categories only)."""
+    slots to propose (appointment categories only). `author_name`/`author_email`: whose mailbox
+    this reply is drafted for — the reply is written in THEIR voice (default Joaquin)."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return {}
     try:
         client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
         blocks = [
+            f"DU BIST: {author_name} <{author_email}>, Teil von automatisierbar.ch. Antworte in DEINEM Namen.",
+            "",
             "EINGEHENDE E-MAIL:",
             f"Von: {incoming.get('from_name', '')} <{incoming.get('from_email', '')}>",
             f"Betreff: {incoming.get('subject', '')}",

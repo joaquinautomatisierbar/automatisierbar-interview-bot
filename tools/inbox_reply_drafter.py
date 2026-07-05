@@ -429,9 +429,11 @@ def run(*, dry_run=False, max_per_run=DEFAULT_MAX_PER_RUN, max_scan=DEFAULT_MAX_
     cfg = load_config()
     try:
         from_addr = tm.address(mailbox)
+        author_name = tm.full_name(mailbox)   # reply is written in THIS person's voice
         cfg = tm.draft_cfg(mailbox, cfg)   # per-mailbox From + signature (mailbox_name/token)
     except KeyError:
         from_addr = env("JOAQUIN_FROM") or cfg.get("from") or "joaquin@automatisierbar.ch"
+        author_name = "Joaquin Gamonal"
     booking_url = cfg.get("booking") or "https://cockpit.automatisierbar.ch/book"
     slots_url = env("BOOKING_SLOTS_URL") or "http://127.0.0.1:8082/api/book/slots"
     appointments_db = env("COCKPIT_APPOINTMENTS_DB_ID") or ""
@@ -519,7 +521,7 @@ def run(*, dry_run=False, max_per_run=DEFAULT_MAX_PER_RUN, max_scan=DEFAULT_MAX_
             reply = cc.draft_inbox_reply(
                 incoming=p, lead=lead, appointment=appointment, slots=slots,
                 language=cls["reply_language"], category=cls["category"],
-                booking_url=booking_url)
+                booking_url=booking_url, author_name=author_name, author_email=from_addr)
             if not reply or not reply.get("body"):
                 counts["failed"] += 1
                 print(f"[FAIL] empty draft for: {p['subject'][:60]}")
