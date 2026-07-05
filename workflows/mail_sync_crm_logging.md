@@ -122,3 +122,12 @@ python3 tools/mail_sync/sync.py --mailbox all
   address, and unmatched mail is parked (never dropped). Domain-fallback + email-backfill = a later enhancement.
 - Liveness: the thread polls every 30s (socket.io realtime = a later enhancement).
 - The old free-text "📧 Mail" quick-capture on the lead page stays as a manual fallback.
+- **VPS mailbox routing:** `INFOMANIAK_IMAP_*` on the cockpit VPS points at joaquin@, so the `info`
+  mailbox falls back to joaquin's box (re-scans it, deduped harmlessly at the Hub) and info@ is not
+  scanned separately. To cover info@, set `INFO_IMAP_USER`/`INFO_IMAP_PASSWORD` in /etc/cockpit/env.
+- **Do NOT `chmod 600 /etc/cockpit/env`** — it must be 640 root:paperclip so the paperclip cron can read it.
+- Manual runs: `sudo -u paperclip bash tools/scheduled/mail-sync-run.sh <sync.py args>` (parses env correctly).
+
+## Status
+LIVE in prod 2026-07-05: Hub 36316b0 on os.automatisierbar.ch; cockpit cron `*/5` on the VPS; 2-week
+backfill = 56 mails (30 matched / 26 parked), 0 dups, 0 failures.
