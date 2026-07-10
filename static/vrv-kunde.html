@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vorbereitung Termin 5. August · Automatisierbar</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+:root{
+  --bg:#0A0F0D; --surface-1:#111815; --surface-2:#18211D;
+  --text:#ECF3EF; --muted:#8A9892; --dim:#5A655F;
+  --green:#15C97A; --green-soft:#5EE0A6; --green-glow:rgba(21,201,122,.16);
+  --border:rgba(255,255,255,.08); --radius:15px;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16.5px;line-height:1.6;min-height:100vh}
+.wrap{max-width:640px;margin:0 auto;padding:28px 18px 80px}
+.brand{font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:34px}
+.brand b{color:var(--green)}
+h1{font-size:26px;font-weight:720;letter-spacing:-.015em;line-height:1.25}
+.lead{color:var(--muted);margin:12px 0 8px}
+.lead b{color:var(--text);font-weight:600}
+.meta{font-family:var(--mono);font-size:12.5px;color:var(--dim);margin-bottom:28px}
+.q{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+.q .n{font-family:var(--mono);font-size:12px;color:var(--green);margin-bottom:6px}
+.q .t{font-weight:600}
+.q textarea,.q input[type=text]{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:13px;margin-top:12px;color:var(--text);font-family:inherit;font-size:16px;min-height:56px;resize:vertical}
+.q textarea:focus,.q input:focus{outline:none;border-color:var(--green)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chips button{border:1px solid var(--border);border-radius:999px;padding:10px 16px;font-size:15px;color:var(--muted);background:none;cursor:pointer;font-family:inherit}
+.chips button.on{background:var(--green-glow);border-color:var(--green);color:var(--green-soft)}
+.saved{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:8px;min-height:15px}
+.done-banner{display:none;background:var(--green-glow);border:1px solid var(--green);border-radius:var(--radius);padding:16px;margin:20px 0;color:var(--green-soft)}
+.footer{color:var(--dim);font-size:14px;margin-top:26px}
+.gate{max-width:460px;margin:16vh auto 0;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:28px;display:none}
+.gate h2{font-size:20px;margin-bottom:8px}
+.gate p{color:var(--muted);font-size:15px}
+#form{display:none}
+</style>
+</head>
+<body data-page="vrv-kunde">
+<div class="wrap">
+  <div class="brand"><b>▮</b> automatisierbar</div>
+
+  <div class="gate" id="gate">
+    <h2>Dieser Link ist nicht mehr gültig</h2>
+    <p>Bitte melden Sie sich bei Ihrem Ansprechpartner bei Automatisierbar, wir senden Ihnen gerne einen neuen Zugang. Vielen Dank.</p>
+  </div>
+
+  <div id="form">
+    <h1>Kurze Vorbereitung auf unseren Termin</h1>
+    <p class="lead">Guten Tag. Damit wir den Termin am <b>Mittwoch, 5. August 2026</b> optimal für Sie nutzen können, finden Sie hier zehn kurze Fragen. Was Sie bereits beantworten, müssen wir vor Ort nicht mehr abfragen, so bleibt mehr Zeit für das Wesentliche.</p>
+    <p class="meta">Dauer: ca. 10 Minuten · Antworten werden automatisch gespeichert · ungefähre Angaben genügen völlig</p>
+    <div id="qs"></div>
+    <div class="done-banner" id="doneBanner">Vielen Dank, alle Fragen sind beantwortet. Wir freuen uns auf den Termin am 5. August.</div>
+    <p class="footer">Fragen vorab? Schreiben Sie uns an info@automatisierbar.ch. Ihre Angaben werden vertraulich behandelt und ausschliesslich für die Vorbereitung unseres Angebots verwendet.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+
+async function save(qid, value, savedEl) {
+  savedEl.textContent = "speichert…";
+  try {
+    const r = await fetch("/api/vrv/client/answer/" + qid, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    });
+    savedEl.textContent = r.ok ? "gespeichert ✓" : "konnte nicht speichern, bitte später erneut versuchen";
+  } catch {
+    savedEl.textContent = "offline, bitte später erneut versuchen";
+  }
+  updateBanner();
+}
+
+let QS = [];
+function updateBanner() {
+  const filled = QS.every(q => (q._current || "").trim());
+  $("#doneBanner").style.display = filled ? "block" : "none";
+}
+
+function render(questions) {
+  QS = questions;
+  const box = $("#qs");
+  questions.forEach((q, i) => {
+    const card = document.createElement("div");
+    card.className = "q";
+    card.innerHTML = `<div class="n">Frage ${i + 1} von ${questions.length}</div><div class="t"></div>`;
+    card.querySelector(".t").textContent = q.text;
+    const saved = document.createElement("div");
+    saved.className = "saved";
+    q._current = q.value || "";
+
+    if (q.type === "choice") {
+      const chips = document.createElement("div"); chips.className = "chips";
+      const other = document.createElement("input");
+      other.type = "text"; other.placeholder = "Bitte präzisieren…"; other.style.display = "none";
+      const fixed = q.options.slice(0, -1);
+      q.options.forEach(opt => {
+        const b = document.createElement("button");
+        b.type = "button"; b.textContent = opt;
+        const isOther = opt === "Andere…";
+        if (isOther ? (q._current && !fixed.includes(q._current)) : q._current === opt) b.classList.add("on");
+        b.onclick = () => {
+          chips.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+          b.classList.add("on");
+          if (isOther) { other.style.display = "block"; other.focus(); }
+          else { other.style.display = "none"; q._current = opt; save(q.id, opt, saved); }
+        };
+        chips.appendChild(b);
+      });
+      if (q._current && !fixed.includes(q._current)) { other.style.display = "block"; other.value = q._current; }
+      other.addEventListener("input", debounce(() => {
+        if (other.value.trim()) { q._current = other.value.trim(); save(q.id, q._current, saved); }
+      }, 700));
+      card.appendChild(chips); card.appendChild(other);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = q._current;
+      ta.addEventListener("input", debounce(() => {
+        q._current = ta.value; save(q.id, ta.value, saved);
+      }, 700));
+      card.appendChild(ta);
+    }
+    card.appendChild(saved);
+    box.appendChild(card);
+  });
+  updateBanner();
+}
+
+(async function boot() {
+  try {
+    const r = await fetch("/api/vrv/client/questions");
+    if (!r.ok) { $("#gate").style.display = "block"; return; }
+    const j = await r.json();
+    $("#form").style.display = "block";
+    render(j.questions);
+  } catch {
+    $("#gate").style.display = "block";
+  }
+})();
+</script>
+</body>
+</html>

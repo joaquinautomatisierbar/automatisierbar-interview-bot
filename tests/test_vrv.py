@@ -290,6 +290,75 @@ def test_vrv_page_served_without_auth_but_data_gated(client, monkeypatch):
     assert client.get("/api/vrv/state").status_code == 401
 
 
+# ---------------------------------------------------------------------------
+# Client pre-send surface (v2) — isolation is the whole point
+# ---------------------------------------------------------------------------
+
+CLIENT_TOKEN = "kunde-token-xyz"
+
+
+def _client_session(client, monkeypatch):
+    monkeypatch.setenv("VRV_CLIENT_TOKEN", CLIENT_TOKEN)
+    r = client.get(f"/vrv/kunde?k={CLIENT_TOKEN}")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/vrv/kunde")
+    return client
+
+
+def test_client_token_flow_and_revocation(client, monkeypatch):
+    _client_session(client, monkeypatch)
+    assert client.get("/api/vrv/client/questions").status_code == 200
+    # revocation: unsetting the env var kills access despite the live session
+    monkeypatch.delenv("VRV_CLIENT_TOKEN", raising=False)
+    assert client.get("/api/vrv/client/questions").status_code == 401
+
+
+def test_client_wrong_token_gets_no_session(client, monkeypatch):
+    monkeypatch.setenv("VRV_CLIENT_TOKEN", CLIENT_TOKEN)
+    client.get("/vrv/kunde?k=falsch")
+    assert client.get("/api/vrv/client/questions").status_code == 401
+    # page itself is always served (gate renders client-side)
+    assert b'data-page="vrv-kunde"' in client.get("/vrv/kunde").data
+
+
+def test_client_serialization_whitelist(client, monkeypatch):
+    _client_session(client, monkeypatch)
+    # plant internal data that must never leak
+    from vrv import store
+    store.upsert_answer("a1", value="INTERNE-TEAM-ANTWORT", note="INTERNE-NOTIZ")
+    raw = client.get("/api/vrv/client/questions").get_data(as_text=True)
+    body = client.get("/api/vrv/client/questions").get_json()
+    assert "why_it_matters" not in raw
+    assert "INTERNE-TEAM-ANTWORT" not in raw
+    assert "INTERNE-NOTIZ" not in raw
+    assert "client_visible" not in raw
+    ids = {q["id"] for q in body["questions"]}
+    assert "b5" not in ids and "g5" not in ids     # internal-only questions absent
+    assert 8 <= len(ids) <= 12
+    for q in body["questions"]:
+        assert set(q.keys()) <= {"id", "text", "type", "options", "value"}
+
+
+def test_client_patch_scope(client, monkeypatch):
+    _client_session(client, monkeypatch)
+    from vrv import store
+    store.upsert_answer("a1", value="Team-Wert")
+    assert client.patch("/api/vrv/client/answer/a1",
+                        json={"value": "ca. 200 Objekte"}).status_code == 200
+    assert client.patch("/api/vrv/client/answer/b5",
+                        json={"value": "x"}).status_code == 403
+    row = store.load_state()["answers"]["a1"]
+    assert row["value"] == "Team-Wert"              # team value untouched
+    assert row["client_value"] == "ca. 200 Objekte"
+
+
+def test_client_session_cannot_reach_internal_routes(client, monkeypatch):
+    _client_session(client, monkeypatch)
+    monkeypatch.setenv("VRV_PASSWORD", "teampw")    # internal auth configured but not logged in
+    assert client.get("/api/vrv/state").status_code == 401
+    assert client.get("/api/vrv/catalog").status_code == 401
+    assert client.post("/api/vrv/synthesize/brief").status_code == 401
+
+
 def test_health_public_and_app_boots_without_vrv_env(client, monkeypatch):
     monkeypatch.delenv("VRV_PASSWORD", raising=False)
     r = client.get("/api/vrv/health")

@@ -248,6 +248,83 @@ def vrv_export(kind):
 
 
 # ---------------------------------------------------------------------------
+# Client pre-send page (v2) — magic-token link, strictly isolated from the
+# internal surface. Env check comes FIRST so unsetting VRV_CLIENT_TOKEN after
+# the tender revokes access even for live 365-day session cookies.
+# ---------------------------------------------------------------------------
+
+def _client_token():
+    return (os.environ.get("VRV_CLIENT_TOKEN") or "").strip()
+
+
+def _client_authed():
+    return bool(_client_token()) and session.get("vrv_client") is True
+
+
+@bp.route("/vrv/kunde", methods=["GET"])
+def vrv_client_page():
+    token = _client_token()
+    given = (request.args.get("k") or "").strip()
+    if token and given:
+        if given == token:
+            session["vrv_client"] = True
+            session.permanent = True
+        # redirect-clean either way: the token must not linger in the URL bar
+        from flask import redirect
+        return redirect("/vrv/kunde")
+    return send_from_directory(current_app.static_folder, "vrv-kunde.html")
+
+
+def _require_client():
+    if not _client_authed():
+        return jsonify({"ok": False, "error": "Link ungültig oder abgelaufen"}), 401
+    return None
+
+
+_CLIENT_FIELDS = ("id", "text", "type", "options", "value")
+
+
+@bp.route("/api/vrv/client/questions", methods=["GET"])
+def vrv_client_questions():
+    guard = _require_client()
+    if guard:
+        return guard
+    from vrv import catalog, store
+    answers = store.load_state().get("answers", {})
+    out = []
+    for q in catalog.client_visible_questions():
+        item = {
+            "id": q["id"],
+            "text": q.get("client_text") or q["text"],
+            "type": q["type"],
+            "value": (answers.get(q["id"]) or {}).get("client_value", ""),
+        }
+        if q["type"] == "choice":
+            item["options"] = q.get("options", [])
+        # hard whitelist: never let internal fields leak through refactors
+        assert set(item.keys()) <= set(_CLIENT_FIELDS)
+        out.append(item)
+    return jsonify({"questions": out})
+
+
+@bp.route("/api/vrv/client/answer/<qid>", methods=["PATCH"])
+def vrv_client_answer(qid):
+    guard = _require_client()
+    if guard:
+        return guard
+    from vrv import catalog, store
+    q = catalog.question_by_id(qid)
+    if q is None or not q.get("client_visible"):
+        return jsonify({"ok": False, "error": "Nicht verfügbar"}), 403
+    body = request.get_json(silent=True) or {}
+    try:
+        store.upsert_client_answer(qid, (body.get("value") or "").strip())
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # Health (public, no data)
 # ---------------------------------------------------------------------------
 
