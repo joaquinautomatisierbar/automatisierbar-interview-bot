@@ -12,15 +12,15 @@
 - [x] 0.6 Dossier C: Variante Microsoft (C, 10.7.) — Planner-Grenzen verifiziert (20 Checklistenpunkte, kein GPS); Power Apps/Field Service als Preisanker; CH-Preise drin
 - [x] 0.7 Dossier D: Security/Compliance-Katalog (C, 10.7.) — BVSA/OAK-BV-statt-FINMA präzis belegt + sprechfähige Bausteine; Hosting-Empfehlung Exoscale/Infomaniak
 - [ ] 0.8 vRv-Deep-Recon: LinkedIn Schmid/Böni/Guldimann/Kunz, Facts-Seite, Handelsregister, Stiftungs-Mandate (N+C, bis 15.7.) — "mibo" = Mirjam Böni bereits identifiziert
-- [ ] 0.9 **Dossier E: Teilbereichs-Machbarkeitsanalyse** (C, bis 18.7.) — Kernstück, blockiert 0.10
-- [ ] 0.10 **Scope-Entscheidungs-Session** 45 min an S3 (alle 4, 21.7.) — je Teilbereich: selbst / Partner / nicht anbieten
+- [x] 0.9 **Dossier E: Teilbereichs-Machbarkeitsanalyse** (C, fertig 10.7., 8 Tage vor Soll) — 17 Teilbereiche bewertet; die EINE echte Debatte ist E4 Endpoints (selbst = 150-250 Lernstunden MD-102 + Helpdesk-Bindung vs. ~CHF 2'500/Mt wiederkehrend); Partner-Longlist Region drin (Ansprache erst NACH 5.8., Doppelrollen-Risiko)
+- [ ] 0.10 **Scope-Entscheidungs-Session** 45 min an S3 (alle 4, 21.7.) — Vorbereitung: Executive Summary + E4 in research/dossier-e-machbarkeit.md lesen; Entscheid-Spalte der Matrix füllen
 
 ## Lane WS1: Discovery-Tool
 
-- [~] 1.0 Phase 0: Fragenkatalog v1 (~55 Fragen, 8 Kapitel) in tools/vrv/catalog.py (C, 10.-11.7.)
-- [ ] 1.1 v1: store.py + routes.py + Auth + Registrierung + Tests (C, bis 16.7.)
-- [ ] 1.2 v1: static/vrv.html (Login, Kapitel-Übersicht, Detail, Autosave, Meeting-Modus, localStorage-Queue) (C, bis 18.7.)
-- [ ] 1.3 v1: Offerten-Brief-Synthese + Export + VPS-Deploy + Smoke (C, bis 19.7.)
+- [x] 1.0 Phase 0: Fragenkatalog v1 (61 Fragen, 8 Kapitel) in tools/vrv/catalog.py (C, 10.7.)
+- [x] 1.1 v1: store.py + synthesis.py + routes.py + Auth + Registrierung + 25 Tests grün (C, 10.7.)
+- [x] 1.2 v1: static/vrv.html komplett, Browser-Smoke bestanden (Login → Antwort → Disk → Zähler 45/46 → Meeting-Modus) (C, 10.7.)
+- [ ] 1.3 v1: VPS-Deploy + Live-Smoke + VRV_PASSWORD in /etc/cockpit/env setzen (C+J, bis 14.7.) — Synthese-Code steht, erster echter Brief-Lauf nach Deploy
 - [ ] 1.4 Joaquin-Review + Team-Walkthrough des Tools (J, bis 22.7.)
 - [ ] 1.5 v2: Client-Vorab-Seite /vrv/kunde live (C, bis 24.7.) — damit vRv 1-2 Wochen Vorlauf hat
 - [ ] 1.6 v2: Prototyp-Spec-Export (C, bis 28.7., darf nach dem 5.8. rutschen)
