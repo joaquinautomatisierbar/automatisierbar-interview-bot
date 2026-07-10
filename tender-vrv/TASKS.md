@@ -33,7 +33,7 @@
 - [x] 2.1 Primer + Quiz Modul 4 Immobilien-Domäne/Order2Cash/pebe FERTIG (C, 10.7.) → upskilling/modul-4-primer.md + modul-4-quiz.md; S1-Owner Nico, Termin folgt aus 2.0
 - [x] 2.2 Primer + Quiz Modul 1 O365/Power Platform FERTIG (C, 10.7., 6 Tage vor Soll) → upskilling/modul-1-primer.md + modul-1-quiz.md; S2-Owner Tej, Termin folgt aus 2.0
 - [x] 2.3 Primer + Quiz Modul 2 Cybersecurity/IT-Infra FERTIG (C, 10.7., 10 Tage vor Soll) → upskilling/modul-2-primer.md + modul-2-quiz.md; enthält die E4-Zahlen für die Scope-Session; S3-Owner Joaquin, Termin folgt aus 2.0
-- [ ] 2.4 Primer + Quiz Modul 3 Schweizer Compliance (C bis 23.7.) → S4 Fr 24.7. (Owner P)
+- [x] 2.4 Primer + Quiz Modul 3 Schweizer Compliance FERTIG (C, 10.7., 13 Tage vor Soll) → upskilling/modul-3-primer.md + modul-3-quiz.md (Rechtslandkarte in 12 Begriffen, B-O-F-Eselsbrücke, KI-Regeln); S4-Owner Patrik, Termin folgt aus 2.0
 - [ ] 2.5 Primer + Quiz Modul 6 Integrations-Architektur (C bis 27.7.) → S5 Di 28.7. (Owner T)
 - [ ] 2.6 Primer + Quiz Modul 5 Projektleitung/Offerten (C bis 30.7.) → S6 Fr 31.7. (Owner J)
 - [x] 2.7 Fragen-Bank "Was Schmid fragen wird" FERTIG (C, 10.7., 15 Tage vor Soll) → upskilling/fragen-bank-schmid.md: 50 Fragen in 8 Blöcken mit Musterantworten + Drill-Anleitung S7; [Stand prüfen]-Marker (Versicherung/Hosting/Rechtsform/SLA/Referenzen) vor 4.8. auflösen
@@ -53,7 +53,7 @@
 
 - [~] 4.1 Vorab-Mail an Rolf Schmid — **Review-Fassung FERTIG 10.7.** (templates/vorab-mail-schmid.md, mit echtem Vorab-Fragen-Link + Versand-Checkliste); **JETZT dran: Review Nico + Joaquin**, Versand bis 22.7. NUR nach Halt-Gate; Teilnehmer-Satz braucht Rollen-Vorentscheid oder die "zu dritt"-Vereinfachung
 - [ ] 4.2 Rollenverteilung entscheiden (Team in S6, 31.7.) — Vorschlag: N Gespräch, J Technik+Tool, T Demo+Notizen, P optional
-- [ ] 4.3 Ablauf-Drehbuch 10/15/60/10 mit BAMFAM-Abschluss (C, bis 25.7.)
+- [x] 4.3 Ablauf-Drehbuch 10/15/60/10 mit BAMFAM-Abschluss FERTIG (C, 10.7., 15 Tage vor Soll) → meeting/ablauf-drehbuch.md (Rollen je Block, Kapitel-Zeitbudgets, Kürzungsplan 60 min, Notfall-Szenarien, verbotene Sätze, Debrief); Rollen = Vorschlag bis Entscheid 4.2; wird in S7/S8 geprobt
 - [ ] 4.4 Red-Team-Drill mit Fragen-Bank (alle, in S7)
 - [ ] 4.5 Tech-Kit: Laptop+iPad, Hotspot, Offline-Fallbacks, Adapter, Visitenkarten (P, bis 3.8.)
 
@@ -63,13 +63,13 @@
 - [~] 5.2 Architektur-Varianten-Papier A/B/C — **Entwurf FERTIG 10.7.**: offer/architektur-varianten.md (gemeinsame Grundsätze, Bausteine je Variante, Entscheidungsraster, offene Punkte→Tool-Fragen); **JETZT dran: Joaquin-Review**; Scope-Entscheid 21.7. + Termin-Antworten einarbeiten, final bis 27.7.
 - [ ] 5.3 Preismodell-Optionen: bezahlte Phasen, kein Gratis-Prototyp (J+C, bis 31.7.)
 - [ ] 5.4 Demo-Asset "Muster-Slice" Go/No-Go nach 0.10, dann Build (J, Entscheid 21.7.)
-- [ ] 5.5 SLA-Baukasten Bronze/Silber/Gold (C, bis 27.7.)
+- [x] 5.5 SLA-Baukasten Bronze/Silber/Gold FERTIG (C, 10.7., 17 Tage vor Soll) → offer/sla-baukasten.md (Prio-Definitionen, 3 Stufen mit Reaktions-/Lösungszeiten + Verfügbarkeit, moderate Pönalen-Mechanik, Abgrenzung, Sprechfassung); Zahlen in S6 gegen Kapazität + E4 validieren; Preise je Stufe folgen in 5.3
 
 ## Lane WS6: Firmen-Gaps
 
 - [ ] 6.1 Versicherung: Anfragen an AXA/Mobiliar/Zurich/Helvetia/Broker raus (P mit C-Template, bis 14.7.; Offerten in Hand bis 1.8.; Entscheid J)
 - [ ] 6.2 Rechtsform-Story festlegen + GmbH-Fahrplan (J, bis 31.7.)
-- [ ] 6.3 CH-Hosting-Standard definieren: Infomaniak/Exoscale/Azure CH + Kostenblatt (J+C, bis 27.7.)
+- [~] 6.3 CH-Hosting-Standard definieren — **Entscheidungsvorlage FERTIG 10.7.**: offer/hosting-kostenblatt.md (Referenz-Setup, Anbieter-Vergleich mit Exoscale-Zahlen Stand 2/2026, Empfehlung Exoscale-Betrieb + Infomaniak-Offsite, 10-min-Entscheid-Checkliste); **JETZT dran: Joaquin entscheidet + zieht CHF-Preise im Portal** (bis 27.7.); danach Baustein 8.1 + AVV-Liste + SLA-Kopplung durch C
 - [ ] 6.4 Referenz-Freigaben einholen (N koordiniert, bis 28.7.)
 - [ ] 6.5 Datenschutz-Statement + AVV-Template (C, Review J, bis 1.8.)
 
