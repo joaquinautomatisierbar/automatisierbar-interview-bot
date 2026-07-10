@@ -24,7 +24,7 @@
 - [ ] 1.4 Joaquin-Review + Team-Walkthrough des Tools (J, bis 22.7.) — einfach cockpit.automatisierbar.ch/vrv am Handy öffnen
 - [x] 1.5 v2: **Client-Vorab-Seite LIVE** /vrv/kunde (C, 10.7., 14 Tage vor Soll) — Link für vRv: `https://cockpit.automatisierbar.ch/vrv/kunde?k=Y-nEjyA6pcjrL-Qo9DqvZ-it` (Token in /etc/cockpit/env; Token löschen = Zugriff widerrufen). Versand an Schmid erst mit Vorab-Mail 4.1 nach Halt-Gate
 - [ ] 1.6 v2: Prototyp-Spec-Export (C, bis 28.7., darf nach dem 5.8. rutschen)
-- [ ] 1.7 Ernstfall-Test im Mock-Meeting S7 (alle, 1./2.8.)
+- [ ] 1.7 Ernstfall-Test im Mock-Meeting S7 (alle, 1./2.8.) — Ablauf inkl. lokaler Instanz (VRV_DATA_DIR=.tmp/vrv-mock, nie Live-Store) in meeting/mock-meeting-s7.md
 - [x] 1.8 SOP [workflows/tender_vrv_discovery.md](../workflows/tender_vrv_discovery.md) (C, 10.7.) — Betrieb, Zugänge, Widerruf, Meeting-Ablauf, Edge Cases; L2 / Bike-Phase 1
 
 ## Lane WS2: Upskilling (Sessions Di/Fr, 18:00 vorgeschlagen)
@@ -37,7 +37,7 @@
 - [x] 2.5 Primer + Quiz Modul 6 Integrations-Architektur FERTIG (C, 10.7., 17 Tage vor Soll) → upskilling/modul-6-primer.md + modul-6-quiz.md (Integrations-Hierarchie, pebe-Brücke Station für Station, Graph-Berechtigungen, Migration, Archiv-Technik); S5-Owner Tej
 - [x] 2.6 Primer + Quiz Modul 5 Projektleitung/Offerten FERTIG (C, 10.7., 20 Tage vor Soll) → upskilling/modul-5-primer.md + modul-5-quiz.md (Phasenmodell als Vertragslogik, 6 PL-Artefakte, RACI, CR-Prozess, S6-Entscheid-Agenda: Rollen 4.2 + SLA-Validierung + Preismodell-Eckwerte); S6-Owner Joaquin. **ALLE 6 Modul-Primer + Quizzes damit fertig; Sessions können starten, sobald 2.0 Termine stehen**
 - [x] 2.7 Fragen-Bank "Was Schmid fragen wird" FERTIG (C, 10.7., 15 Tage vor Soll) → upskilling/fragen-bank-schmid.md: 50 Fragen in 8 Blöcken mit Musterantworten + Drill-Anleitung S7; [Stand prüfen]-Marker (Versicherung/Hosting/Rechtsform/SLA/Referenzen) vor 4.8. auflösen
-- [ ] 2.8 Mock-Meeting S7: Claude spielt Schmid/Guldimann/Kunz (alle, Sa 1.8. oder So 2.8.)
+- [ ] 2.8 Mock-Meeting S7: Claude spielt Schmid/Böni/Guldimann/Kunz (alle, Sa 1.8. oder So 2.8.) — **Drehbuch + Personas + Szenario-Kanon FERTIG 10.7.**: meeting/mock-meeting-s7.md (150-min-Programm + 90-min-Kurzvariante, 4 eingebaute Fallen, Bewertungsbogen, Erfolgskriterien); Drill läuft auf LOKALER Tool-Instanz (Startbefehl im Drehbuch), nie auf den Live-Daten
 - [ ] 2.9 Generalprobe S8: Deck, Demo, Tech-Check (alle, Mo 3.8. oder Di 4.8.)
 
 ## Lane WS3: Präsentation + Unterlagen
@@ -45,7 +45,7 @@
 - [~] 3.1 Company-Deck ~15 Slides, Brand-Look Website (C baut, T owned Inhalt) — **Gerüst FERTIG 10.7.** (8 Tage vor Soll): deck/deck.html, 15 Folien, Browser-QA bestanden; Platzhalter-Chips (Fotos/Bios 3.5, Rechtsform 6.2, Referenz-Freigaben, Hosting 6.3, Kontakt) müssen vor S8 auf null; Referentennotizen mit Taste N; v1 nach Team-Feedback bis 24.7., final bis 31.7.
 - [ ] 3.2 Live-Demo-Dreh: Hub + Walk-in PWA + Ausgaben-PWA, Skript + Fallback-Screenshots (T+J, bis 27.7.)
 - [~] 3.3 Referenzblätter Juglans/Bieri/KnowGravity/Gränacher — **Entwürfe FERTIG 10.7.** (10 Tage vor Soll): offer/referenzblaetter.md (4 Ein-Seiter, ehrliche Status-Chips, je "Was das für vRv heisst"); **JETZT dran: Freigaben einholen mit templates/referenz-freigabe.md** (T=Juglans, N=Bieri, J=KnowGravity+Gränacher, bis 28.7.); Status-Chips vor Druck 3.8. aktualisieren
-- [ ] 3.4 Security-Antwortpaket 2-3 Seiten (C+J, bis 28.7., braucht Hosting-Entscheid 6.3)
+- [~] 3.4 Security-Antwortpaket — **Entwurf FERTIG 10.7.** (18 Tage vor Soll): offer/security-antwortpaket.md (10 Kapitel exakt entlang der "Gewünschten Informationen": Verantwortungsmodell, RZ, Organisation, Notfall, Firewalls, RBAC, Standards inkl. BVSA/OAK-statt-FINMA + BVG-Archiv, AOVPN, nDSG, KI-Strategie); **JETZT dran: [6.3]-Marker nach Hosting-Entscheid definitiv setzen + [6.1]-Versicherungssatz + Joaquin-Review** (Checkliste im Dokument)
 - [ ] 3.5 Über-uns-Material: Fotos, Bios, Rollen (P sammelt bis 20.7., C setzt bis 24.7.)
 - [ ] 3.6 Print-Set 4x (P, bis 3.8.)
 
@@ -54,7 +54,7 @@
 - [~] 4.1 Vorab-Mail an Rolf Schmid — **Review-Fassung FERTIG 10.7.** (templates/vorab-mail-schmid.md, mit echtem Vorab-Fragen-Link + Versand-Checkliste); **JETZT dran: Review Nico + Joaquin**, Versand bis 22.7. NUR nach Halt-Gate; Teilnehmer-Satz braucht Rollen-Vorentscheid oder die "zu dritt"-Vereinfachung
 - [ ] 4.2 Rollenverteilung entscheiden (Team in S6, 31.7.) — Vorschlag: N Gespräch, J Technik+Tool, T Demo+Notizen, P optional
 - [x] 4.3 Ablauf-Drehbuch 10/15/60/10 mit BAMFAM-Abschluss FERTIG (C, 10.7., 15 Tage vor Soll) → meeting/ablauf-drehbuch.md (Rollen je Block, Kapitel-Zeitbudgets, Kürzungsplan 60 min, Notfall-Szenarien, verbotene Sätze, Debrief); Rollen = Vorschlag bis Entscheid 4.2; wird in S7/S8 geprobt
-- [ ] 4.4 Red-Team-Drill mit Fragen-Bank (alle, in S7)
+- [ ] 4.4 Red-Team-Drill mit Fragen-Bank (alle, in S7) — Material komplett: Fragen-Bank 2.7 + Drill-Teil 2 in meeting/mock-meeting-s7.md
 - [ ] 4.5 Tech-Kit: Laptop+iPad, Hotspot, Offline-Fallbacks, Adapter, Visitenkarten (P, bis 3.8.)
 
 ## Lane WS5: Offerte + Prototyp
@@ -64,6 +64,7 @@
 - [ ] 5.3 Preismodell-Optionen: bezahlte Phasen, kein Gratis-Prototyp (J+C, bis 31.7.)
 - [ ] 5.4 Demo-Asset "Muster-Slice" Go/No-Go nach 0.10, dann Build (J, Entscheid 21.7.)
 - [x] 5.5 SLA-Baukasten Bronze/Silber/Gold FERTIG (C, 10.7., 17 Tage vor Soll) → offer/sla-baukasten.md (Prio-Definitionen, 3 Stufen mit Reaktions-/Lösungszeiten + Verfügbarkeit, moderate Pönalen-Mechanik, Abgrenzung, Sprechfassung); Zahlen in S6 gegen Kapazität + E4 validieren; Preise je Stufe folgen in 5.3
+- [x] 5.6 PL-Vorlagen (Projekthandbuch) FERTIG (C, 10.7., neu aus Modul 5) → templates/projekthandbuch-vorlagen.md: alle 6 Artefakte einsatzfertig (Projektplan-Gerüst, 1-Seiten-Statusreport, Entscheidungs-Log, RACI für vRv vorbefüllt, CR-Formular, Abnahmeprotokoll mit Mängelklassen + Review-Frist-Klausel); Team-Durchsicht in S6, Offerten-Anhang-Empfehlung: Statusreport + CR + RACI
 
 ## Lane WS6: Firmen-Gaps
 
