@@ -37,3 +37,7 @@ linkedin_images/
 # Juglans Offerten-Generator bundle — deployed via rsync, never git'd (client PII,
 # real .env, ~1GB .venv + local GGUF model). Deploy docs live in deploy/juglans-*.md.
 offerten-generator/
+
+# vRv discovery tool runtime state (client answers — never commit; survives
+# git-pull deploys precisely BECAUSE it is ignored)
+data/vrv/

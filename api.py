@@ -4931,6 +4931,20 @@ if os.environ.get("AUSGABEN_HOME"):
 
 
 # ---------------------------------------------------------------------------
+# vRv discovery tool — tender-specific discovery companion (/vrv, cockpit VPS
+# only; on Render the VRV_* env vars are unset so every gated route is 401/503).
+# Blueprint + JSON disk store, fully isolated from the production interview bot.
+# Spec: tender-vrv/MASTERPLAN.md (WS1 Detail-Spec). Guarded registration: a
+# broken import logs + is skipped, the shared app still boots.
+# ---------------------------------------------------------------------------
+try:
+    from vrv.routes import bp as _vrv_bp
+    app.register_blueprint(_vrv_bp)
+except Exception as _e:
+    app.logger.warning("vrv blueprint registration failed: %s", _e)
+
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 
