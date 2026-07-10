@@ -21,11 +21,12 @@
 - [x] 1.1 v1: store.py + synthesis.py + routes.py + Auth + Registrierung + 25 Tests grün (C, 10.7.)
 - [x] 1.2 v1: static/vrv.html komplett, Browser-Smoke bestanden (Login → Antwort → Disk → Zähler 45/46 → Meeting-Modus) (C, 10.7.)
 - [x] 1.3 v1: **LIVE auf cockpit.automatisierbar.ch/vrv** (C, 10.7.) — sichere Datei-Deploy-Methode (kein git reset, VPS-Prod-Änderungen unangetastet, Backup api.py.bak-vrv-*); Passwort `vRv-Discovery-2026$672e` + VRV_DATA_DIR=/srv/cockpit/vrv_data in /etc/cockpit/env; Live-Smoke ok, /book + /interview unverändert 200. Erster echter Brief-Lauf sobald Antworten drin sind
-- [ ] 1.4 Joaquin-Review + Team-Walkthrough des Tools (J, bis 22.7.) — einfach cockpit.automatisierbar.ch/vrv am Handy öffnen
+- [ ] 1.4 Joaquin-Review + Team-Walkthrough des Tools (J, bis 22.7.) — einfach cockpit.automatisierbar.ch/vrv am Handy öffnen (Hub; der Fragebogen liegt unter /vrv/fragebogen bzw. hinter dem grünen Button)
 - [x] 1.5 v2: **Client-Vorab-Seite LIVE** /vrv/kunde (C, 10.7., 14 Tage vor Soll) — Link für vRv: `https://cockpit.automatisierbar.ch/vrv/kunde?k=Y-nEjyA6pcjrL-Qo9DqvZ-it` (Token in /etc/cockpit/env; Token löschen = Zugriff widerrufen). Versand an Schmid erst mit Vorab-Mail 4.1 nach Halt-Gate
 - [ ] 1.6 v2: Prototyp-Spec-Export (C, bis 28.7., darf nach dem 5.8. rutschen)
 - [ ] 1.7 Ernstfall-Test im Mock-Meeting S7 (alle, 1./2.8.) — Ablauf inkl. lokaler Instanz (VRV_DATA_DIR=.tmp/vrv-mock, nie Live-Store) in meeting/mock-meeting-s7.md
 - [x] 1.8 SOP [workflows/tender_vrv_discovery.md](../workflows/tender_vrv_discovery.md) (C, 10.7.) — Betrieb, Zugänge, Widerruf, Meeting-Ablauf, Edge Cases; L2 / Bike-Phase 1
+- [x] 1.9 **vRv Hub LIVE auf /vrv** (C, 10.7. abends) — zentrale Projekt-Website: Dashboard (Countdown, Nächste-Schritte-pro-Person aus naechste-schritte.md, Lane-Fortschritt + Meilensteine live aus TASKS.md geparst), Lernen (alle 6 Module + Fragen-Bank im Browser), Unterlagen (alle ~40 Dokumente gerendert, Deck + PDF/PPTX); Fragebogen umgezogen auf **/vrv/fragebogen** (APIs unverändert, Offline-Queue überlebt); tools/vrv/docs.py (Manifest-exaktes Serving, traversal-immun) + static/vrv-hub.html; 43 Tests grün; Deploy per Datei-Kopie + rsync tender-vrv/ nach /srv/cockpit/app/tender-vrv (Docs-Aktualisierung = rsync erneut); Live-Smoke komplett (40/40 Docs, Gates 401, /book /interview /vrv/kunde unverändert). **Achtung Render: VRV_* dort NIE setzen (fail-closed)**
 
 ## Lane WS2: Upskilling (Sessions Di/Fr, 18:00 vorgeschlagen)
 

@@ -14,7 +14,8 @@ Vorbereitung auf die Ausschreibung der **vR verwaltungen ag** (Solothurn): Order
 
 ## Live-Zugänge
 
-- **Discovery-Tool (Team):** cockpit.automatisierbar.ch/vrv · Passwort siehe [TASKS.md](TASKS.md) Task 1.3
+- **vRv Hub (Team):** cockpit.automatisierbar.ch/vrv · Dashboard, Lernmodule, alle Unterlagen im Browser · Passwort siehe [TASKS.md](TASKS.md) Task 1.3
+- **Fragebogen (Discovery-Tool):** cockpit.automatisierbar.ch/vrv/fragebogen · gleiches Passwort, gleiche Session
 - **Kunden-Vorab-Seite:** Link mit Token siehe Task 1.5; Versand erst mit Vorab-Mail nach Halt-Gate. Token löschen (auf dem VPS in /etc/cockpit/env) = Zugriff widerrufen
 - **Betriebs-SOP zum Tool:** [../workflows/tender_vrv_discovery.md](../workflows/tender_vrv_discovery.md)
 

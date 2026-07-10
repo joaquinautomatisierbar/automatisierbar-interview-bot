@@ -13,7 +13,7 @@
    VRV_PASSWORD=mock VRV_DATA_DIR=.tmp/vrv-mock PORT=5001 python3 api.py
    ```
 
-   Laptop: `http://localhost:5001/vrv`, Login `mock`. iPad/Handy im gleichen WLAN: `http://<Laptop-IP>:5001/vrv` (die App lauscht auf allen Interfaces). Nach dem Drill ist `.tmp/vrv-mock` wegwerfbar.
+   Laptop: `http://localhost:5001/vrv/fragebogen`, Login `mock`. iPad/Handy im gleichen WLAN: `http://<Laptop-IP>:5001/vrv/fragebogen` (die App lauscht auf allen Interfaces; unter /vrv liegt das Hub). Nach dem Drill ist `.tmp/vrv-mock` wegwerfbar.
 2. **Geräte wie am 5.8.:** Laptop mit Deck (lokal geöffnet, ohne Netz getestet), iPad/Handy mit Tool im Meeting-Modus. Genau das Setup aus dem Ablauf-Drehbuch "Vorbereitung".
 3. **Ausdrucken bzw. bereitlegen:** verbotene Sätze (ablauf-drehbuch.md, letzter Abschnitt) + Bewertungsbogen (unten) für jeden.
 4. **Claude-Session starten:** Claude Code im Repo öffnen und sagen: *"Lies tender-vrv/meeting/mock-meeting-s7.md, die Fragen-Bank und das Ablauf-Drehbuch. Spiele Teil 1 des Mock-Meetings. Bleib in den Personas bis CUT."* Claude antwortet dann nur noch als Kundenseite.

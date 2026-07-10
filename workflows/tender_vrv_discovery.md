@@ -23,7 +23,7 @@ Alle Informationen strukturiert erfassen, die (a) die Offerte nach der Kapitelst
 
 ## Zugänge
 
-- **Intern:** https://cockpit.automatisierbar.ch/vrv · Passwort `VRV_PASSWORD` in /etc/cockpit/env (aktuell in TASKS.md 1.3 dokumentiert)
+- **Intern:** https://cockpit.automatisierbar.ch/vrv = **vRv Hub** (Dashboard + Lernmodule + Unterlagen, seit 10.7. abends); der Fragebogen liegt unter https://cockpit.automatisierbar.ch/vrv/fragebogen · Passwort `VRV_PASSWORD` in /etc/cockpit/env (aktuell in TASKS.md 1.3 dokumentiert) · Hub-Inhalte = /srv/cockpit/app/tender-vrv auf dem VPS; Aktualisierung: `rsync -a --exclude '.DS_Store' tender-vrv/ cockpit-vps:/srv/cockpit/app/tender-vrv/` (kein Neustart nötig, Dateien werden pro Request gelesen)
 - **Kunde:** https://cockpit.automatisierbar.ch/vrv/kunde?k=<VRV_CLIENT_TOKEN> · Token in /etc/cockpit/env; **Token-Zeile löschen + Neustart = Zugriff sofort widerrufen** (Session-Cookies sind damit wertlos, Env-Check kommt zuerst)
 - Ohne gesetzte Env-Vars antwortet alles 401/503 (fail-closed); auf Render sind die Vars absichtlich nicht gesetzt
 

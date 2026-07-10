@@ -286,8 +286,14 @@ def test_vrv_page_served_without_auth_but_data_gated(client, monkeypatch):
     monkeypatch.delenv("VRV_PASSWORD", raising=False)
     page = client.get("/vrv")
     assert page.status_code == 200
-    assert b'data-page="vrv"' in page.data
+    assert b'data-page="vrv-hub"' in page.data
     assert client.get("/api/vrv/state").status_code == 401
+
+
+def test_fragebogen_page_serves_questionnaire(client):
+    page = client.get("/vrv/fragebogen")
+    assert page.status_code == 200
+    assert b'data-page="vrv"' in page.data
 
 
 # ---------------------------------------------------------------------------
@@ -368,3 +374,191 @@ def test_health_public_and_app_boots_without_vrv_env(client, monkeypatch):
     monkeypatch.delenv("COCKPIT_HOME", raising=False)
     monkeypatch.delenv("RENDER", raising=False)
     assert b"Workflow Interview" in client.get("/interview").data
+
+
+# ---------------------------------------------------------------------------
+# Hub: docs serving (manifest-exact) + dashboard (TASKS.md parser)
+# ---------------------------------------------------------------------------
+
+from vrv import docs  # noqa: E402
+
+_FIXTURE_TASKS = """# Test-Board
+
+> Status: `[ ]` offen · `[~]` läuft · `[x]` erledigt. Stand: 10.7.2026.
+
+## Lane WS0: Recherche (Kern)
+
+- [x] 0.1 Dossier fertig
+- [~] 0.2 Hub-Projekt läuft
+- [ ] 0.3 Recon offen
+
+## Lane WS1: Tool
+
+- [x] 1.1 gebaut
+
+```text
+- [x] fake task inside fence
+```
+
+## Meilensteine
+
+| Datum | Meilenstein |
+|---|---|
+| 21.7. | Scope-Entscheid |
+| 3./4.8. | Generalprobe |
+| **5.8.** | **Termin** |
+"""
+
+
+@pytest.fixture
+def docs_fixture_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("VRV_DOCS_DIR", str(tmp_path))
+    (tmp_path / "TASKS.md").write_text(_FIXTURE_TASKS, encoding="utf-8")
+    (tmp_path / "naechste-schritte.md").write_text(
+        "# Nächste Schritte\n\n## Joaquin\n\n- [ ] Termine festlegen\n",
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+def test_docs_manifest_requires_auth(client):
+    assert client.get("/api/vrv/docs").status_code == 401
+
+
+def test_dashboard_requires_auth(client):
+    assert client.get("/api/vrv/dashboard").status_code == 401
+
+
+def test_docs_and_dashboard_reject_client_session(client, monkeypatch):
+    _client_session(client, monkeypatch)
+    assert client.get("/api/vrv/docs").status_code == 401
+    assert client.get("/api/vrv/docs/TASKS.md").status_code == 401
+    assert client.get("/api/vrv/dashboard").status_code == 401
+
+
+def test_docs_manifest_shape_and_all_files_exist(client, monkeypatch):
+    monkeypatch.delenv("VRV_DOCS_DIR", raising=False)  # default: repo tender-vrv/
+    _login(client, monkeypatch)
+    sections = client.get("/api/vrv/docs").get_json()["sections"]
+    assert [s["id"] for s in sections] == [
+        "lernen", "termin", "praesentation", "offerte", "vertraege", "wissen", "plan"]
+    items = [item for s in sections for item in s["items"]]
+    assert len(items) == 40
+    paths = [item["path"] for item in items]
+    assert len(set(paths)) == 40
+    for item in items:
+        assert item["title"] and item["desc"]
+        assert item["kind"] in ("md", "pdf", "pptx", "html")
+        # deploy-completeness drift guard: every manifest file exists on disk
+        assert item["exists"] is True, item["path"]
+
+
+def test_docs_fetch_md_ok_utf8(client, monkeypatch):
+    monkeypatch.delenv("VRV_DOCS_DIR", raising=False)
+    _login(client, monkeypatch)
+    r = client.get("/api/vrv/docs/TASKS.md")
+    assert r.status_code == 200
+    assert r.mimetype == "text/markdown"
+    text = r.get_data(as_text=True)
+    assert "Aufgaben-Board" in text and "für" in text  # umlaut chain intact
+    assert client.get("/api/vrv/docs/upskilling/modul-1-primer.md").status_code == 200
+
+
+def test_docs_kind_dispositions(client, monkeypatch):
+    monkeypatch.delenv("VRV_DOCS_DIR", raising=False)
+    _login(client, monkeypatch)
+    deck = client.get("/api/vrv/docs/deck/deck.html")
+    assert deck.status_code == 200 and deck.mimetype == "text/html"
+    assert "attachment" not in (deck.headers.get("Content-Disposition") or "")
+    pdf = client.get("/api/vrv/docs/ausschreibung-anfrage-2026-07-02.pdf")
+    assert pdf.status_code == 200 and pdf.mimetype == "application/pdf"
+    assert "attachment" not in (pdf.headers.get("Content-Disposition") or "")
+    pptx = client.get("/api/vrv/docs/entscheidungsgrundlage-team-2026-07.pptx")
+    assert pptx.status_code == 200
+    assert "attachment" in pptx.headers.get("Content-Disposition", "")
+    assert pptx.mimetype == docs.MIME_BY_KIND["pptx"]
+
+
+def test_docs_reject_non_manifest_paths(client, monkeypatch):
+    _login(client, monkeypatch)
+    for path in [
+        "/api/vrv/docs/../../api.py",
+        "/api/vrv/docs/..%2f..%2fapi.py",
+        "/api/vrv/docs//etc/passwd",
+        "/api/vrv/docs/tools/vrv/store.py",
+        "/api/vrv/docs/.DS_Store",
+    ]:
+        # follow_redirects: werkzeug 308-normalizes '//' before routing
+        assert client.get(path, follow_redirects=True).status_code == 404, path
+    # dot-segments that survive HTTP normalization are rejected server-side
+    assert docs.resolve("TASKS.md/../README.md") is None
+    assert docs.resolve("./TASKS.md") is None
+
+
+def test_resolve_manifest_only():
+    resolved = docs.resolve("research/dossier-a-pebe-integration.md")
+    assert resolved is not None
+    path, item = resolved
+    assert item["kind"] == "md"
+    assert str(path).endswith("research/dossier-a-pebe-integration.md")
+    assert docs.resolve("../api.py") is None
+    assert docs.resolve("MASTERPLAN.MD") is None  # case-sensitive: dev-macOS vs prod-Linux
+    assert docs.resolve("") is None
+
+
+def test_dashboard_parses_fixture_tasks(client, monkeypatch, docs_fixture_dir):
+    _login(client, monkeypatch)
+    body = client.get("/api/vrv/dashboard").get_json()
+    assert body["ok"] is True
+    assert body["countdown_target"] == "2026-08-05"
+    lanes = body["tasks"]["lanes"]
+    assert [lane["id"] for lane in lanes] == ["WS0", "WS1"]
+    ws0 = lanes[0]
+    assert ws0["title"] == "Recherche (Kern)"
+    assert (ws0["done"], ws0["doing"], ws0["open"], ws0["total"]) == (1, 1, 1, 3)
+    assert [item["state"] for item in ws0["items"]] == ["done", "doing", "open"]
+    assert lanes[1]["total"] == 1  # fenced fake task not counted
+    milestones = body["tasks"]["milestones"]
+    assert len(milestones) == 3
+    assert milestones[0] == {"date": "21.7.", "label": "Scope-Entscheid", "emph": False}
+    assert milestones[2] == {"date": "5.8.", "label": "Termin", "emph": True}
+    assert body["tasks"]["stand"] == "10.7.2026"
+    assert "Termine festlegen" in body["naechste_schritte_md"]
+
+
+def test_dashboard_survives_missing_files(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("VRV_DOCS_DIR", str(tmp_path))
+    _login(client, monkeypatch)
+    r = client.get("/api/vrv/dashboard")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["tasks"] is None
+    assert body["tasks_error"]
+    assert body["naechste_schritte_md"] is None
+
+
+def test_parse_tasks_ignores_legend_and_fences():
+    text = (
+        "> Status: `[ ]` offen · `[x]` erledigt.\n\n"
+        "## Lane WS9: Test\n\n"
+        "```text\n- [x] fake\n- [ ] fake2\n```\n\n"
+        "- [ ] real\n"
+    )
+    parsed = docs.parse_tasks(text)
+    assert len(parsed["lanes"]) == 1
+    assert parsed["lanes"][0]["total"] == 1
+    assert parsed["lanes"][0]["items"][0]["text"] == "real"
+
+
+def test_parse_tasks_real_tasks_file(monkeypatch):
+    monkeypatch.delenv("VRV_DOCS_DIR", raising=False)
+    parsed = docs.parse_tasks(docs.read_doc_text("TASKS.md"))
+    assert [lane["id"] for lane in parsed["lanes"]] == [
+        "WS0", "WS1", "WS2", "WS3", "WS4", "WS5", "WS6"]
+    for lane in parsed["lanes"]:
+        assert lane["total"] >= 1
+        for item in lane["items"]:
+            assert item["state"] in ("done", "doing", "open")
+    assert len(parsed["milestones"]) >= 8
+    assert any(m["emph"] and m["date"] == "5.8." for m in parsed["milestones"])
+    assert parsed["stand"]

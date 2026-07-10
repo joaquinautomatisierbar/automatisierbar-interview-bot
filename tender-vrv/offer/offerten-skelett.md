@@ -3,7 +3,7 @@
 > Task WS5.1. Zweck: Nach dem Termin am 5.8. wird die Offerte GEFÜLLT, nicht mehr strukturiert. Der Offerten-Sprint dauert dann Tage statt Wochen (Ziel: Rohfassung 8.8.).
 >
 > **Quellen-Legende** (steht bei jedem Kapitel):
-> `[TOOL]` = kommt aus dem Brief-Export des Discovery-Tools (cockpit.automatisierbar.ch/vrv, Kapitel-Verweis wie "TOOL b" = Fragenkapitel B) · `[D-A..E]` = Dossier A-E in research/ · `[S3]` = Scope-Entscheid vom 21.7. (Dossier E Matrix) · `[6.x / 3.x / 5.x]` = offener Task aus TASKS.md · `[NEU]` = wird nach dem 5.8. frisch geschrieben.
+> `[TOOL]` = kommt aus dem Brief-Export des Discovery-Tools (cockpit.automatisierbar.ch/vrv/fragebogen, Kapitel-Verweis wie "TOOL b" = Fragenkapitel B) · `[D-A..E]` = Dossier A-E in research/ · `[S3]` = Scope-Entscheid vom 21.7. (Dossier E Matrix) · `[6.x / 3.x / 5.x]` = offener Task aus TASKS.md · `[NEU]` = wird nach dem 5.8. frisch geschrieben.
 >
 > **Stilregeln für die fertige Offerte:** Sie-Form, keine Gedankenstriche, jede Zahl mit Herkunft, Piloten als Piloten gelabelt, keine Superlative ohne Beleg. Ehrlichkeit ist Positionierung (Evaluationskriterium "Transparenz").
 

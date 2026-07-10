@@ -46,6 +46,14 @@ def _require_internal():
 
 @bp.route("/vrv", methods=["GET"])
 def vrv_page():
+    """The hub (dashboard + Lernen + Unterlagen). The questionnaire moved to
+    /vrv/fragebogen — its API endpoints are unchanged, so open tabs and the
+    localStorage queue survive the move."""
+    return send_from_directory(current_app.static_folder, "vrv-hub.html")
+
+
+@bp.route("/vrv/fragebogen", methods=["GET"])
+def vrv_fragebogen_page():
     return send_from_directory(current_app.static_folder, "vrv.html")
 
 
@@ -72,6 +80,55 @@ def vrv_logout():
 @bp.route("/api/vrv/whoami", methods=["GET"])
 def vrv_whoami():
     return jsonify({"authed": _internal_authed()})
+
+
+# ---------------------------------------------------------------------------
+# Hub: docs (manifest-exact serving) + dashboard
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/vrv/docs", methods=["GET"])
+def vrv_docs_manifest():
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import docs
+    return jsonify({"sections": docs.manifest()})
+
+
+@bp.route("/api/vrv/docs/<path:relpath>", methods=["GET"])
+def vrv_docs_file(relpath):
+    guard = _require_internal()
+    if guard:
+        return guard
+    from flask import send_file
+    from vrv import docs
+    resolved = docs.resolve(relpath)
+    if resolved is None:
+        return jsonify({"ok": False, "error": "Unbekanntes Dokument"}), 404
+    path, item = resolved
+    if not path.is_file():
+        return jsonify({"ok": False, "error": "Datei fehlt auf dem Server"}), 404
+    if item["kind"] == "md":
+        return Response(
+            path.read_text(encoding="utf-8", errors="replace"),
+            mimetype="text/markdown",
+        )
+    return send_file(
+        path,
+        mimetype=docs.MIME_BY_KIND[item["kind"]],
+        as_attachment=item["kind"] in docs.ATTACHMENT_KINDS,
+        download_name=path.name,
+        conditional=True,
+    )
+
+
+@bp.route("/api/vrv/dashboard", methods=["GET"])
+def vrv_dashboard():
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import docs
+    return jsonify(docs.dashboard_payload())
 
 
 # ---------------------------------------------------------------------------
