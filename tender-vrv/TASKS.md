@@ -20,16 +20,16 @@
 - [x] 1.0 Phase 0: Fragenkatalog v1 (61 Fragen, 8 Kapitel) in tools/vrv/catalog.py (C, 10.7.)
 - [x] 1.1 v1: store.py + synthesis.py + routes.py + Auth + Registrierung + 25 Tests grün (C, 10.7.)
 - [x] 1.2 v1: static/vrv.html komplett, Browser-Smoke bestanden (Login → Antwort → Disk → Zähler 45/46 → Meeting-Modus) (C, 10.7.)
-- [ ] 1.3 v1: VPS-Deploy + Live-Smoke + VRV_PASSWORD in /etc/cockpit/env setzen (C+J, bis 14.7.) — Synthese-Code steht, erster echter Brief-Lauf nach Deploy
-- [ ] 1.4 Joaquin-Review + Team-Walkthrough des Tools (J, bis 22.7.)
-- [ ] 1.5 v2: Client-Vorab-Seite /vrv/kunde live (C, bis 24.7.) — damit vRv 1-2 Wochen Vorlauf hat
+- [x] 1.3 v1: **LIVE auf cockpit.automatisierbar.ch/vrv** (C, 10.7.) — sichere Datei-Deploy-Methode (kein git reset, VPS-Prod-Änderungen unangetastet, Backup api.py.bak-vrv-*); Passwort `vRv-Discovery-2026$672e` + VRV_DATA_DIR=/srv/cockpit/vrv_data in /etc/cockpit/env; Live-Smoke ok, /book + /interview unverändert 200. Erster echter Brief-Lauf sobald Antworten drin sind
+- [ ] 1.4 Joaquin-Review + Team-Walkthrough des Tools (J, bis 22.7.) — einfach cockpit.automatisierbar.ch/vrv am Handy öffnen
+- [x] 1.5 v2: **Client-Vorab-Seite LIVE** /vrv/kunde (C, 10.7., 14 Tage vor Soll) — Link für vRv: `https://cockpit.automatisierbar.ch/vrv/kunde?k=Y-nEjyA6pcjrL-Qo9DqvZ-it` (Token in /etc/cockpit/env; Token löschen = Zugriff widerrufen). Versand an Schmid erst mit Vorab-Mail 4.1 nach Halt-Gate
 - [ ] 1.6 v2: Prototyp-Spec-Export (C, bis 28.7., darf nach dem 5.8. rutschen)
 - [ ] 1.7 Ernstfall-Test im Mock-Meeting S7 (alle, 1./2.8.)
 
 ## Lane WS2: Upskilling (Sessions Di/Fr, 18:00 vorgeschlagen)
 
-- [ ] 2.0 Session-Termine im Team fixieren (J, bis 12.7.)
-- [ ] 2.1 Primer + Quiz Modul 4 Immobilien-Domäne/Order2Cash/pebe (C bis 13.7.) → S1 Di 14.7. (Owner N)
+- [ ] 2.0 Session-Termine im Team fixieren (J, "legen wir später fest" 10.7.) — Vorschlag bleibt Di/Fr 18:00
+- [x] 2.1 Primer + Quiz Modul 4 Immobilien-Domäne/Order2Cash/pebe FERTIG (C, 10.7.) → upskilling/modul-4-primer.md + modul-4-quiz.md; S1-Owner Nico, Termin folgt aus 2.0
 - [ ] 2.2 Primer + Quiz Modul 1 O365/Power Platform (C bis 16.7.) → S2 Fr 17.7. (Owner T)
 - [ ] 2.3 Primer + Quiz Modul 2 Cybersecurity/IT-Infra (C bis 20.7.) → S3 Di 21.7. (Owner J) + Scope-Session
 - [ ] 2.4 Primer + Quiz Modul 3 Schweizer Compliance (C bis 23.7.) → S4 Fr 24.7. (Owner P)
