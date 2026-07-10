@@ -282,6 +282,14 @@ def test_synthesis_error_path_persisted(client, monkeypatch):
     assert "kaputt" in row["error"]
 
 
+def test_vrv_page_served_without_auth_but_data_gated(client, monkeypatch):
+    monkeypatch.delenv("VRV_PASSWORD", raising=False)
+    page = client.get("/vrv")
+    assert page.status_code == 200
+    assert b'data-page="vrv"' in page.data
+    assert client.get("/api/vrv/state").status_code == 401
+
+
 def test_health_public_and_app_boots_without_vrv_env(client, monkeypatch):
     monkeypatch.delenv("VRV_PASSWORD", raising=False)
     r = client.get("/api/vrv/health")

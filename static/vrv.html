@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>vRv Discovery · Automatisierbar</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+:root{
+  --bg:#0A0F0D; --surface-1:#111815; --surface-2:#18211D; --surface-3:#1F2A25;
+  --text:#ECF3EF; --muted:#8A9892; --dim:#5A655F;
+  --green:#15C97A; --green-dark:#0A8F54; --green-soft:#5EE0A6;
+  --green-glow:rgba(21,201,122,.16); --border:rgba(255,255,255,.08);
+  --amber:#E8B23D; --red:#E2604C; --radius:15px;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.55;min-height:100vh}
+button{font-family:inherit;font-size:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,textarea{font-family:inherit;font-size:16px;color:var(--text)}
+a{color:var(--green-soft)}
+
+/* ---------- shell ---------- */
+.wrap{max-width:880px;margin:0 auto;padding:16px 16px 96px}
+header.top{display:flex;align-items:center;gap:12px;padding:14px 0 18px;position:sticky;top:0;background:linear-gradient(var(--bg) 82%,transparent);z-index:30}
+.brand{font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:.04em}
+.brand b{color:var(--green)}
+.spacer{flex:1}
+.badge-sync{font-family:var(--mono);font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--border);color:var(--muted);display:none}
+.badge-sync.pending{display:inline-block;color:var(--amber);border-color:rgba(232,178,61,.4)}
+.badge-sync.err{display:inline-block;color:var(--red);border-color:rgba(226,96,76,.45)}
+.mode-toggle{display:flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.mode-toggle button{padding:6px 13px;font-size:13px;color:var(--muted)}
+.mode-toggle button.on{background:var(--green-glow);color:var(--green-soft)}
+section.view{display:none}
+section.view.on{display:block}
+h1{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:14px;margin-top:4px}
+.mono-label{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+
+/* ---------- login ---------- */
+.login-card{max-width:380px;margin:14vh auto 0;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:28px}
+.login-card h1{margin-bottom:6px}
+.login-card p{color:var(--muted);font-size:14px;margin-bottom:18px}
+.login-card input{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:13px 14px;margin-bottom:12px}
+.login-card input:focus{outline:none;border-color:var(--green-dark)}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--green);color:#06281A;font-weight:600;border-radius:10px;padding:12px 18px;transition:transform .06s}
+.btn:active{transform:scale(.98)}
+.btn.secondary{background:var(--surface-3);color:var(--text);border:1px solid var(--border);font-weight:500}
+.btn.ghost{background:none;color:var(--green-soft);padding:8px 10px}
+.btn[disabled]{opacity:.5;cursor:default}
+.btn.small{padding:8px 12px;font-size:14px;border-radius:8px}
+
+/* ---------- overview ---------- */
+.hero{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin:6px 0 16px}
+.hero .big{font-size:34px;font-weight:750;letter-spacing:-.02em;font-family:var(--mono)}
+.hero .big em{font-style:normal;color:var(--amber)}
+.hero .big.all-done em{color:var(--green)}
+.hero .bar{height:8px;border-radius:99px;background:var(--surface-3);margin:14px 0 6px;overflow:hidden}
+.hero .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--green-dark),var(--green));border-radius:99px;transition:width .4s}
+.hero .legend{font-size:13px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:640px){.grid{grid-template-columns:1fr 1fr}}
+.chap{display:block;width:100%;text-align:left;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:border-color .15s}
+.chap:hover{border-color:var(--green-dark)}
+.chap .row1{display:flex;align-items:baseline;gap:10px}
+.chap .id{font-family:var(--mono);color:var(--green);font-size:13px}
+.chap .t{font-weight:600;flex:1}
+.chap .count{font-family:var(--mono);font-size:12px;color:var(--amber);white-space:nowrap}
+.chap .count.done{color:var(--green)}
+.chap .mini{height:5px;border-radius:99px;background:var(--surface-3);margin-top:10px;overflow:hidden}
+.chap .mini i{display:block;height:100%;background:var(--green-dark)}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 8px}
+.notes{width:100%;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:14px;min-height:74px;resize:vertical;margin-top:8px}
+.notes:focus{outline:none;border-color:var(--green-dark)}
+
+/* ---------- chapter detail ---------- */
+.pills{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px;position:sticky;top:52px;background:var(--bg);z-index:25;-webkit-overflow-scrolling:touch}
+.pills button{font-family:var(--mono);font-size:13px;padding:7px 12px;border-radius:999px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+.pills button.on{color:var(--green-soft);border-color:var(--green-dark);background:var(--green-glow)}
+.pills button b{color:var(--amber);font-weight:600}
+.pills button b.done{color:var(--green)}
+.q{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.q.done{border-color:rgba(21,201,122,.25)}
+.q .head{display:flex;gap:10px;align-items:baseline}
+.q .qid{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.q .must{font-family:var(--mono);font-size:11px;color:var(--amber);border:1px solid rgba(232,178,61,.4);border-radius:5px;padding:1px 6px}
+.q .must.nice{color:var(--dim);border-color:var(--border)}
+.q .text{font-weight:600;margin-top:6px}
+.q .why{margin-top:8px}
+.q .why summary{font-size:13px;color:var(--dim);cursor:pointer;list-style:none}
+.q .why summary::before{content:'» '}
+.q .why p{font-size:13.5px;color:var(--muted);padding:8px 10px;border-left:2px solid var(--green-dark);margin-top:6px}
+.q .client-pre{font-size:13.5px;color:var(--green-soft);background:var(--green-glow);border-radius:8px;padding:8px 10px;margin-top:10px}
+.q textarea{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:12px;min-height:64px;resize:vertical}
+.q textarea:focus{outline:none;border-color:var(--green-dark)}
+.q input.other{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;margin-top:8px;display:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chips button{border:1px solid var(--border);border-radius:999px;padding:8px 14px;font-size:14px;color:var(--muted)}
+.chips button.on{background:var(--green-glow);border-color:var(--green-dark);color:var(--green-soft)}
+.statusrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.statusrow button{font-family:var(--mono);font-size:12px;padding:6px 11px;border-radius:7px;border:1px solid var(--border);color:var(--dim)}
+.statusrow button.on-answered{color:var(--green);border-color:var(--green-dark)}
+.statusrow button.on-skipped{color:var(--muted);border-color:var(--muted)}
+.statusrow button.on-unclear{color:var(--amber);border-color:rgba(232,178,61,.5)}
+.statusrow .saved{font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:auto}
+.suggest{background:var(--surface-2);border:1px dashed var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.suggest .s-item{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)}
+.suggest .s-item:last-child{border-bottom:none}
+.suggest .s-item .tx{flex:1;font-size:14.5px}
+.suggest .s-item .wy{font-size:12.5px;color:var(--dim)}
+.addq{display:flex;gap:8px;margin:6px 0 40px}
+.addq input{flex:1;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:11px 12px}
+.addq input:focus{outline:none;border-color:var(--green-dark)}
+
+/* ---------- synthesis ---------- */
+.syn{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+.syn h3{font-size:16px}
+.syn .d{color:var(--muted);font-size:14px;margin:4px 0 12px}
+.syn pre{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:var(--mono);font-size:12.5px;white-space:pre-wrap;max-height:340px;overflow:auto;margin-top:12px}
+.syn .warn{color:var(--amber);font-size:13.5px;margin-top:8px}
+.syn .err{color:var(--red);font-size:13.5px;margin-top:8px}
+
+/* ---------- meeting mode ---------- */
+body.meeting .q textarea{min-height:88px;font-size:17px}
+body.meeting .chips button{padding:12px 18px;font-size:16px;min-height:48px}
+body.meeting .statusrow button{padding:10px 15px;font-size:14px;min-height:44px}
+body.meeting .q .why{display:none}
+body.meeting .btn{min-height:48px}
+.jump{position:fixed;right:16px;bottom:16px;z-index:40;box-shadow:0 6px 24px rgba(0,0,0,.45);display:none}
+body.meeting .jump{display:inline-flex}
+.filter-open{display:none}
+body.meeting .filter-open{display:inline-flex}
+body.meeting.only-open .q.done,body.meeting.only-open .q.nice-q{display:none}
+
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--surface-3);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 16px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:60}
+.toast.on{opacity:1}
+</style>
+</head>
+<body data-page="vrv">
+<div class="wrap">
+  <header class="top">
+    <span class="brand"><b>▮</b> automatisierbar · <span style="color:var(--text)">vRv Discovery</span></span>
+    <span class="spacer"></span>
+    <span id="syncBadge" class="badge-sync"></span>
+    <div class="mode-toggle" id="modeToggle" style="display:none">
+      <button data-mode="prep">Vorbereitung</button>
+      <button data-mode="meeting">Meeting</button>
+    </div>
+  </header>
+
+  <!-- LOGIN -->
+  <section class="view" id="view-login">
+    <div class="login-card">
+      <h1>vRv Discovery</h1>
+      <p>Internes Werkzeug für die Ausschreibung vR verwaltungen ag. Termin: Mittwoch, 5. August 2026.</p>
+      <input type="password" id="pw" placeholder="Team-Passwort" autocomplete="current-password">
+      <button class="btn" style="width:100%" id="loginBtn">Anmelden</button>
+      <p id="loginErr" style="color:var(--red);margin-top:10px;display:none"></p>
+    </div>
+  </section>
+
+  <!-- OVERVIEW -->
+  <section class="view" id="view-overview">
+    <h1>Wo stehen wir?</h1>
+    <p class="sub">Ziel: alle Muss-Fragen beantwortet, bevor die Offerte geschrieben wird.</p>
+    <div class="hero">
+      <div class="mono-label">Muss-Fragen offen</div>
+      <div class="big" id="heroCount"><em>…</em></div>
+      <div class="bar"><i id="heroBar" style="width:0%"></i></div>
+      <div class="legend" id="heroLegend"></div>
+    </div>
+    <div class="grid" id="chapterGrid"></div>
+    <div class="toolbar">
+      <button class="btn secondary small" id="toSynthese">Exporte / Synthese</button>
+      <button class="btn ghost small" id="copyJson">Antworten als JSON kopieren</button>
+      <button class="btn ghost small" id="logoutBtn">Abmelden</button>
+    </div>
+    <div class="mono-label" style="margin-top:14px">Freie Notizen (fliessen in die Synthese ein)</div>
+    <textarea class="notes" id="extraNotes" placeholder="Beobachtungen, Zitate, Stimmung im Raum…"></textarea>
+  </section>
+
+  <!-- CHAPTER DETAIL -->
+  <section class="view" id="view-chapter">
+    <div class="pills" id="pills"></div>
+    <h1 id="chapTitle"></h1>
+    <p class="sub" id="chapSub"></p>
+    <div id="suggestBox"></div>
+    <div id="qList" style="margin-top:14px"></div>
+    <div class="addq">
+      <input id="newQ" placeholder="Eigene Frage ergänzen…">
+      <button class="btn secondary small" id="addQBtn">Hinzufügen</button>
+    </div>
+    <div class="toolbar" style="margin-top:0">
+      <button class="btn secondary small" id="aiSuggestBtn">KI-Folgefragen vorschlagen</button>
+      <button class="btn secondary small filter-open" id="filterOpenBtn">Nur offene Muss</button>
+      <button class="btn ghost small" id="backBtn">← Übersicht</button>
+    </div>
+  </section>
+
+  <!-- SYNTHESIS -->
+  <section class="view" id="view-synthese">
+    <h1>Exporte</h1>
+    <p class="sub">Aus den erfassten Antworten. Offene Muss-Fragen landen automatisch im Kapitel "Offene Punkte".</p>
+    <div class="syn" id="syn-brief">
+      <h3>Offerten-Brief.md</h3>
+      <div class="d">Deutsch, nach der Kapitelstruktur der Ausschreibung. Grundlage für den Offerten-Sprint nach dem 5.8.</div>
+      <button class="btn small" data-kind="brief" data-act="gen">Generieren</button>
+      <a class="btn secondary small" data-kind="brief" data-act="dl" style="display:none" href="/api/vrv/export/brief.md">Download .md</a>
+      <button class="btn ghost small" data-kind="brief" data-act="copy" style="display:none">Kopieren</button>
+      <div class="warn" data-kind="brief" data-el="warn" style="display:none"></div>
+      <div class="err" data-kind="brief" data-el="err" style="display:none"></div>
+      <pre data-kind="brief" data-el="pre" style="display:none"></pre>
+    </div>
+    <div class="syn" id="syn-spec">
+      <h3>Prototyp-Spec.md</h3>
+      <div class="d">Englischer Build-Spec im Stil unserer Produktions-Prompts. Kann nach dem Termin generiert werden.</div>
+      <button class="btn small" data-kind="spec" data-act="gen">Generieren</button>
+      <a class="btn secondary small" data-kind="spec" data-act="dl" style="display:none" href="/api/vrv/export/spec.md">Download .md</a>
+      <button class="btn ghost small" data-kind="spec" data-act="copy" style="display:none">Kopieren</button>
+      <div class="warn" data-kind="spec" data-el="warn" style="display:none"></div>
+      <div class="err" data-kind="spec" data-el="err" style="display:none"></div>
+      <pre data-kind="spec" data-el="pre" style="display:none"></pre>
+    </div>
+    <button class="btn ghost small" id="backBtn2">← Übersicht</button>
+  </section>
+</div>
+
+<button class="btn jump" id="jumpBtn">Nächste offene Muss-Frage ↓</button>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* vRv Discovery companion. SPA (never navigates: the localStorage write-behind
+   queue must survive the whole meeting). No service worker by design. */
+
+const $ = (s, el) => (el || document).querySelector(s);
+const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+
+const S = {
+  catalog: null,          // {chapters, questions, custom_questions}
+  state: null,            // {answers, progress, followup_suggestions, extra_notes, synthesis}
+  chapter: "A",
+  mode: localStorage.getItem("vrv_mode") || "prep",
+  onlyOpen: false,
+  pollers: {},
+};
+
+/* ---------- offline write-behind queue ---------- */
+const QKEY = "vrv_queue_v1";
+const loadQ = () => { try { return JSON.parse(localStorage.getItem(QKEY) || "[]"); } catch { return []; } };
+const saveQ = q => localStorage.setItem(QKEY, JSON.stringify(q));
+
+function enqueue(item) {
+  const q = loadQ();
+  // coalesce: one pending write per target
+  const idx = q.findIndex(e => e.key === item.key);
+  if (idx >= 0) q[idx] = item; else q.push(item);
+  saveQ(q);
+  updateSyncBadge();
+  flushQueue();
+}
+
+let flushing = false;
+async function flushQueue() {
+  if (flushing) return;
+  flushing = true;
+  try {
+    let q = loadQ();
+    while (q.length) {
+      const item = q[0];
+      let resp;
+      try {
+        resp = await fetch(item.url, {
+          method: item.method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item.body),
+        });
+      } catch { break; }                    // offline: retry later
+      if (resp.status === 401) { showLogin(); break; }
+      if (!resp.ok && resp.status >= 500) break;   // server down: retry later
+      q.shift(); saveQ(q);                  // 2xx/4xx: dequeue (4xx retrying won't help)
+      q = loadQ();
+    }
+  } finally {
+    flushing = false;
+    updateSyncBadge();
+  }
+}
+window.addEventListener("online", flushQueue);
+setInterval(flushQueue, 8000);
+
+function updateSyncBadge() {
+  const n = loadQ().length;
+  const b = $("#syncBadge");
+  if (!n) { b.className = "badge-sync"; b.textContent = ""; return; }
+  b.className = "badge-sync " + (navigator.onLine ? "pending" : "err");
+  b.textContent = n + (navigator.onLine ? " am Synchronisieren…" : " lokal, offline");
+}
+
+/* ---------- api ---------- */
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (r.status === 401) { showLogin(); throw new Error("401"); }
+  return r;
+}
+
+/* ---------- views ---------- */
+function show(view) {
+  $$("section.view").forEach(v => v.classList.remove("on"));
+  $("#view-" + view).classList.add("on");
+  $("#modeToggle").style.display = view === "login" ? "none" : "flex";
+  window.scrollTo(0, 0);
+}
+function showLogin() { show("login"); }
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("on");
+  setTimeout(() => t.classList.remove("on"), 1800);
+}
+
+/* ---------- data ---------- */
+async function refresh() {
+  const [cat, st] = await Promise.all([
+    api("/api/vrv/catalog").then(r => r.json()),
+    api("/api/vrv/state").then(r => r.json()),
+  ]);
+  S.catalog = cat; S.state = st;
+  $("#extraNotes").value = st.extra_notes || "";
+}
+
+function allQuestions() {
+  const custom = (S.catalog.custom_questions || []).map(q => ({
+    ...q, type: "text", why_it_matters: "Vor Ort ergänzt", client_visible: false,
+    priority: q.priority || "nice",
+  }));
+  return S.catalog.questions.concat(custom);
+}
+const answerOf = qid => (S.state.answers || {})[qid] || {};
+const isDone = qid => ["answered", "skipped"].includes(answerOf(qid).status);
+
+/* ---------- overview render ---------- */
+function renderOverview() {
+  const qs = allQuestions();
+  const musts = qs.filter(q => q.priority === "must");
+  const open = musts.filter(q => !isDone(q.id)).length;
+  const done = musts.length - open;
+  const hero = $("#heroCount");
+  hero.innerHTML = open === 0
+    ? "<em>0</em> · bereit"
+    : `<em>${open}</em> von ${musts.length}`;
+  hero.classList.toggle("all-done", open === 0);
+  $("#heroBar").style.width = Math.round(100 * done / Math.max(1, musts.length)) + "%";
+  const nices = qs.filter(q => q.priority === "nice");
+  const niceOpen = nices.filter(q => !isDone(q.id)).length;
+  $("#heroLegend").textContent =
+    `${done} beantwortet oder bewusst übersprungen · dazu ${nices.length - niceOpen} von ${nices.length} Kann-Fragen erledigt`;
+
+  const grid = $("#chapterGrid");
+  grid.innerHTML = "";
+  S.catalog.chapters.forEach(c => {
+    const cqs = qs.filter(q => q.chapter === c.id);
+    const cm = cqs.filter(q => q.priority === "must");
+    const cOpen = cm.filter(q => !isDone(q.id)).length;
+    const pct = Math.round(100 * (cm.length - cOpen) / Math.max(1, cm.length));
+    const btn = document.createElement("button");
+    btn.className = "chap";
+    btn.innerHTML = `
+      <div class="row1">
+        <span class="id">${c.id}</span>
+        <span class="t">${c.title}</span>
+        <span class="count ${cOpen === 0 ? "done" : ""}">${cOpen === 0 ? "✓ komplett" : cOpen + " Muss offen"}</span>
+      </div>
+      <div class="mini"><i style="width:${pct}%"></i></div>`;
+    btn.onclick = () => { S.chapter = c.id; renderChapter(); show("chapter"); };
+    grid.appendChild(btn);
+  });
+}
+
+/* ---------- chapter render ---------- */
+function chip(label, on, cb) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  if (on) b.classList.add("on");
+  b.onclick = cb;
+  return b;
+}
+
+function renderChapter() {
+  const c = S.catalog.chapters.find(x => x.id === S.chapter);
+  const qs = allQuestions().filter(q => q.chapter === S.chapter);
+
+  const pills = $("#pills"); pills.innerHTML = "";
+  S.catalog.chapters.forEach(ch => {
+    const chMusts = allQuestions().filter(q => q.chapter === ch.id && q.priority === "must");
+    const o = chMusts.filter(q => !isDone(q.id)).length;
+    const b = document.createElement("button");
+    b.innerHTML = `${ch.id} <b class="${o === 0 ? "done" : ""}">${o === 0 ? "✓" : o}</b>`;
+    if (ch.id === S.chapter) b.classList.add("on");
+    b.onclick = () => { S.chapter = ch.id; renderChapter(); };
+    pills.appendChild(b);
+  });
+
+  $("#chapTitle").textContent = `${c.id} · ${c.title}`;
+  $("#chapSub").textContent = `Fliesst in: ${c.offer_section}`;
+
+  const sug = (S.state.followup_suggestions || {})[S.chapter] || [];
+  const sbox = $("#suggestBox"); sbox.innerHTML = "";
+  if (sug.length) {
+    const d = document.createElement("div");
+    d.className = "suggest";
+    d.innerHTML = `<div class="mono-label" style="margin-bottom:6px">KI-Vorschläge</div>`;
+    sug.forEach(s => {
+      const it = document.createElement("div");
+      it.className = "s-item";
+      it.innerHTML = `<div class="tx">${esc(s.text)}<div class="wy">${esc(s.why || "")}</div></div>`;
+      const add = document.createElement("button");
+      add.className = "btn small"; add.textContent = "+ Übernehmen";
+      add.onclick = async () => {
+        await api("/api/vrv/questions", { method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chapter: S.chapter, text: s.text, origin: "ai" }) });
+        await refresh(); renderChapter(); toast("Frage übernommen");
+      };
+      it.appendChild(add);
+      d.appendChild(it);
+    });
+    sbox.appendChild(d);
+  }
+
+  const list = $("#qList"); list.innerHTML = "";
+  qs.forEach(q => list.appendChild(renderQuestion(q)));
+  applyOnlyOpen();
+}
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+
+function renderQuestion(q) {
+  const row = answerOf(q.id);
+  const card = document.createElement("div");
+  card.className = "q" + (isDone(q.id) ? " done" : "") + (q.priority === "nice" ? " nice-q" : "");
+  card.dataset.qid = q.id;
+  card.dataset.must = q.priority;
+
+  card.innerHTML = `
+    <div class="head">
+      <span class="qid">${q.id}</span>
+      <span class="must ${q.priority === "nice" ? "nice" : ""}">${q.priority === "must" ? "MUSS" : "KANN"}</span>
+    </div>
+    <div class="text">${esc(q.text)}</div>
+    ${q.why_it_matters ? `<details class="why"><summary>Warum wichtig</summary><p>${esc(q.why_it_matters)}</p></details>` : ""}
+    ${row.client_value ? `<div class="client-pre">Vorab vom Kunden: ${esc(row.client_value)}</div>` : ""}`;
+
+  let valueInput;
+  if (q.type === "choice") {
+    const chips = document.createElement("div"); chips.className = "chips";
+    const other = document.createElement("input");
+    other.className = "other"; other.placeholder = "Andere: bitte präzisieren…";
+    const current = row.value || "";
+    (q.options || []).forEach(opt => {
+      const isOther = opt === "Andere…";
+      const on = isOther ? (current && !q.options.slice(0, -1).includes(current)) : current === opt;
+      chips.appendChild(chip(opt, on, () => {
+        $$("button", chips).forEach(b => b.classList.remove("on"));
+        chips.querySelectorAll("button").forEach(b => { if (b.textContent === opt) b.classList.add("on"); });
+        if (isOther) { other.style.display = "block"; other.focus(); }
+        else { other.style.display = "none"; saveAnswer(q.id, { value: opt }); markCard(card, "answered"); }
+      }));
+    });
+    if (current && !q.options.slice(0, -1).includes(current)) {
+      other.style.display = "block"; other.value = current;
+    }
+    other.addEventListener("input", debounce(() => {
+      if (other.value.trim()) { saveAnswer(q.id, { value: other.value.trim() }); markCard(card, "answered"); }
+    }, 600));
+    card.appendChild(chips); card.appendChild(other);
+    valueInput = other;
+  } else {
+    const ta = document.createElement("textarea");
+    ta.placeholder = "Antwort erfassen…";
+    ta.value = row.value || "";
+    ta.addEventListener("input", debounce(() => {
+      saveAnswer(q.id, { value: ta.value });
+      if (ta.value.trim()) markCard(card, "answered");
+    }, 600));
+    card.appendChild(ta);
+    valueInput = ta;
+  }
+
+  const sr = document.createElement("div"); sr.className = "statusrow";
+  const states = [["answered", "Beantwortet"], ["skipped", "Übersprungen"], ["unclear", "Unklar"]];
+  states.forEach(([st, label]) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (row.status === st) b.classList.add("on-" + st);
+    b.onclick = () => {
+      saveAnswer(q.id, { status: st });
+      $$("button", sr).forEach(x => x.className = "");
+      b.classList.add("on-" + st);
+      markCard(card, st);
+    };
+    sr.appendChild(b);
+  });
+  const saved = document.createElement("span");
+  saved.className = "saved"; saved.dataset.el = "saved";
+  sr.appendChild(saved);
+  card.appendChild(sr);
+  return card;
+}
+
+function markCard(card, status) {
+  card.classList.toggle("done", ["answered", "skipped"].includes(status));
+  const el = $('[data-el="saved"]', card);
+  if (el) { el.textContent = "gespeichert " + new Date().toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" }); }
+  applyOnlyOpen();
+}
+
+function saveAnswer(qid, fields) {
+  // optimistic local state + queued write
+  const row = (S.state.answers[qid] = S.state.answers[qid] || {});
+  Object.assign(row, fields);
+  if (fields.value && fields.value.trim() && !fields.status && (row.status || "open") === "open") row.status = "answered";
+  enqueue({
+    key: "answer:" + qid,
+    url: "/api/vrv/answer/" + qid,
+    method: "PATCH",
+    body: { ...fields, source: S.mode === "meeting" ? "meeting" : "prep" },
+  });
+}
+
+/* ---------- meeting mode ---------- */
+function setMode(mode) {
+  S.mode = mode;
+  localStorage.setItem("vrv_mode", mode);
+  document.body.classList.toggle("meeting", mode === "meeting");
+  $$("#modeToggle button").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+  if (mode !== "meeting") { S.onlyOpen = false; document.body.classList.remove("only-open"); }
+}
+function applyOnlyOpen() { document.body.classList.toggle("only-open", S.onlyOpen && S.mode === "meeting"); }
+
+function jumpNextOpenMust() {
+  const cards = $$('#qList .q[data-must="must"]').filter(c => !c.classList.contains("done"));
+  if (cards.length) { cards[0].scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+  // next chapter with open musts
+  const qs = allQuestions();
+  const next = S.catalog.chapters.find(c =>
+    qs.some(q => q.chapter === c.id && q.priority === "must" && !isDone(q.id)));
+  if (next) { S.chapter = next.id; renderChapter(); toast("Weiter in Kapitel " + next.id); }
+  else toast("Alle Muss-Fragen erledigt ✓");
+}
+
+/* ---------- synthesis ---------- */
+function synEls(kind) {
+  return {
+    gen: $(`[data-kind="${kind}"][data-act="gen"]`),
+    dl: $(`[data-kind="${kind}"][data-act="dl"]`),
+    copy: $(`[data-kind="${kind}"][data-act="copy"]`),
+    warn: $(`[data-kind="${kind}"][data-el="warn"]`),
+    err: $(`[data-kind="${kind}"][data-el="err"]`),
+    pre: $(`[data-kind="${kind}"][data-el="pre"]`),
+  };
+}
+
+async function pollSynthesis(kind) {
+  clearInterval(S.pollers[kind]);
+  S.pollers[kind] = setInterval(async () => {
+    const row = await api("/api/vrv/synthesis/" + kind).then(r => r.json());
+    renderSynthesis(kind, row);
+    if (["done", "error", "idle"].includes(row.status)) clearInterval(S.pollers[kind]);
+  }, 3000);
+}
+
+function renderSynthesis(kind, row) {
+  const e = synEls(kind);
+  e.gen.disabled = row.status === "pending";
+  e.gen.textContent = row.status === "pending" ? "Generiere…"
+    : (row.status === "done" ? "Neu generieren" : "Generieren");
+  e.err.style.display = row.status === "error" ? "block" : "none";
+  e.err.textContent = row.error ? "Fehler: " + row.error : "";
+  const done = row.status === "done" && (row.markdown || row.has_markdown);
+  e.dl.style.display = done ? "inline-flex" : "none";
+  e.copy.style.display = done ? "inline-flex" : "none";
+  if (row.markdown) { e.pre.style.display = "block"; e.pre.textContent = row.markdown; }
+}
+
+async function initSynthesisPanel() {
+  const qs = allQuestions();
+  const open = qs.filter(q => q.priority === "must" && !isDone(q.id)).length;
+  ["brief", "spec"].forEach(async kind => {
+    const e = synEls(kind);
+    e.warn.style.display = open ? "block" : "none";
+    e.warn.textContent = open ? `${open} Muss-Fragen sind noch offen. Generieren geht trotzdem, die Lücken landen im Kapitel "Offene Punkte".` : "";
+    e.gen.onclick = async () => {
+      await api("/api/vrv/synthesize/" + kind, { method: "POST" });
+      renderSynthesis(kind, { status: "pending" });
+      pollSynthesis(kind);
+    };
+    e.copy.onclick = async () => {
+      const row = await api("/api/vrv/synthesis/" + kind).then(r => r.json());
+      await navigator.clipboard.writeText(row.markdown || "");
+      toast("Kopiert");
+    };
+    const row = await api("/api/vrv/synthesis/" + kind).then(r => r.json());
+    renderSynthesis(kind, row);
+    if (row.status === "pending") pollSynthesis(kind);
+  });
+}
+
+/* ---------- wiring ---------- */
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+async function boot() {
+  setMode(S.mode);
+  updateSyncBadge();
+  const who = await fetch("/api/vrv/whoami").then(r => r.json()).catch(() => ({ authed: false }));
+  if (!who.authed) { showLogin(); return; }
+  await enter();
+}
+
+async function enter() {
+  try {
+    await refresh();
+  } catch { return; }
+  renderOverview();
+  show("overview");
+  flushQueue();
+}
+
+$("#loginBtn").onclick = async () => {
+  const r = await fetch("/api/vrv/login", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password: $("#pw").value }),
+  });
+  if (r.ok) { $("#loginErr").style.display = "none"; await enter(); }
+  else {
+    const j = await r.json().catch(() => ({}));
+    $("#loginErr").textContent = j.error || "Anmeldung fehlgeschlagen";
+    $("#loginErr").style.display = "block";
+  }
+};
+$("#pw").addEventListener("keydown", e => { if (e.key === "Enter") $("#loginBtn").click(); });
+$("#logoutBtn").onclick = async () => { await fetch("/api/vrv/logout", { method: "POST" }); showLogin(); };
+
+$("#backBtn").onclick = async () => { await refresh(); renderOverview(); show("overview"); };
+$("#backBtn2").onclick = async () => { await refresh(); renderOverview(); show("overview"); };
+$("#toSynthese").onclick = async () => { await refresh(); initSynthesisPanel(); show("synthese"); };
+
+$("#copyJson").onclick = async () => {
+  await navigator.clipboard.writeText(JSON.stringify({
+    answers: S.state.answers, extra_notes: $("#extraNotes").value,
+    queued: loadQ(),
+  }, null, 2));
+  toast("Notfall-Export kopiert");
+};
+
+$("#extraNotes").addEventListener("input", debounce(() => {
+  enqueue({ key: "notes", url: "/api/vrv/notes", method: "PATCH",
+            body: { text: $("#extraNotes").value } });
+}, 800));
+
+$$("#modeToggle button").forEach(b => b.onclick = () => { setMode(b.dataset.mode); applyOnlyOpen(); });
+$("#jumpBtn").onclick = jumpNextOpenMust;
+$("#filterOpenBtn").onclick = () => { S.onlyOpen = !S.onlyOpen; $("#filterOpenBtn").textContent = S.onlyOpen ? "Alle zeigen" : "Nur offene Muss"; applyOnlyOpen(); };
+
+$("#addQBtn").onclick = async () => {
+  const text = $("#newQ").value.trim();
+  if (!text) return;
+  await api("/api/vrv/questions", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chapter: S.chapter, text }) });
+  $("#newQ").value = "";
+  await refresh(); renderChapter(); toast("Frage ergänzt");
+};
+
+$("#aiSuggestBtn").onclick = async () => {
+  $("#aiSuggestBtn").disabled = true;
+  $("#aiSuggestBtn").textContent = "Denke nach…";
+  try {
+    await api("/api/vrv/followups/" + S.chapter, { method: "POST" });
+    await refresh(); renderChapter();
+  } finally {
+    $("#aiSuggestBtn").disabled = false;
+    $("#aiSuggestBtn").textContent = "KI-Folgefragen vorschlagen";
+  }
+};
+
+boot();
+</script>
+</body>
+</html>
