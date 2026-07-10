@@ -32,7 +32,7 @@
 - [ ] 2.0 Session-Termine im Team fixieren (J, "legen wir später fest" 10.7.) — Vorschlag bleibt Di/Fr 18:00
 - [x] 2.1 Primer + Quiz Modul 4 Immobilien-Domäne/Order2Cash/pebe FERTIG (C, 10.7.) → upskilling/modul-4-primer.md + modul-4-quiz.md; S1-Owner Nico, Termin folgt aus 2.0
 - [x] 2.2 Primer + Quiz Modul 1 O365/Power Platform FERTIG (C, 10.7., 6 Tage vor Soll) → upskilling/modul-1-primer.md + modul-1-quiz.md; S2-Owner Tej, Termin folgt aus 2.0
-- [ ] 2.3 Primer + Quiz Modul 2 Cybersecurity/IT-Infra (C bis 20.7.) → S3 Di 21.7. (Owner J) + Scope-Session
+- [x] 2.3 Primer + Quiz Modul 2 Cybersecurity/IT-Infra FERTIG (C, 10.7., 10 Tage vor Soll) → upskilling/modul-2-primer.md + modul-2-quiz.md; enthält die E4-Zahlen für die Scope-Session; S3-Owner Joaquin, Termin folgt aus 2.0
 - [ ] 2.4 Primer + Quiz Modul 3 Schweizer Compliance (C bis 23.7.) → S4 Fr 24.7. (Owner P)
 - [ ] 2.5 Primer + Quiz Modul 6 Integrations-Architektur (C bis 27.7.) → S5 Di 28.7. (Owner T)
 - [ ] 2.6 Primer + Quiz Modul 5 Projektleitung/Offerten (C bis 30.7.) → S6 Fr 31.7. (Owner J)
@@ -44,14 +44,14 @@
 
 - [~] 3.1 Company-Deck ~15 Slides, Brand-Look Website (C baut, T owned Inhalt) — **Gerüst FERTIG 10.7.** (8 Tage vor Soll): deck/deck.html, 15 Folien, Browser-QA bestanden; Platzhalter-Chips (Fotos/Bios 3.5, Rechtsform 6.2, Referenz-Freigaben, Hosting 6.3, Kontakt) müssen vor S8 auf null; Referentennotizen mit Taste N; v1 nach Team-Feedback bis 24.7., final bis 31.7.
 - [ ] 3.2 Live-Demo-Dreh: Hub + Walk-in PWA + Ausgaben-PWA, Skript + Fallback-Screenshots (T+J, bis 27.7.)
-- [ ] 3.3 Referenzblätter Juglans/Bieri/KnowGravity/Gränacher (C entwirft bis 20.7.; Freigaben: T=Juglans, N=Bieri, J=KnowGravity+Gränacher, bis 28.7.)
+- [~] 3.3 Referenzblätter Juglans/Bieri/KnowGravity/Gränacher — **Entwürfe FERTIG 10.7.** (10 Tage vor Soll): offer/referenzblaetter.md (4 Ein-Seiter, ehrliche Status-Chips, je "Was das für vRv heisst"); **JETZT dran: Freigaben einholen mit templates/referenz-freigabe.md** (T=Juglans, N=Bieri, J=KnowGravity+Gränacher, bis 28.7.); Status-Chips vor Druck 3.8. aktualisieren
 - [ ] 3.4 Security-Antwortpaket 2-3 Seiten (C+J, bis 28.7., braucht Hosting-Entscheid 6.3)
 - [ ] 3.5 Über-uns-Material: Fotos, Bios, Rollen (P sammelt bis 20.7., C setzt bis 24.7.)
 - [ ] 3.6 Print-Set 4x (P, bis 3.8.)
 
 ## Lane WS4: Meeting-Playbook 5.8.
 
-- [ ] 4.1 Vorab-Mail an Rolf Schmid: Agenda, Teilnehmer, Besichtigung Hauswartung, optional Fragebogen-Link (C entwirft bis 15.7., N+J Review, Versand bis 22.7. nach Halt-Gate)
+- [~] 4.1 Vorab-Mail an Rolf Schmid — **Review-Fassung FERTIG 10.7.** (templates/vorab-mail-schmid.md, mit echtem Vorab-Fragen-Link + Versand-Checkliste); **JETZT dran: Review Nico + Joaquin**, Versand bis 22.7. NUR nach Halt-Gate; Teilnehmer-Satz braucht Rollen-Vorentscheid oder die "zu dritt"-Vereinfachung
 - [ ] 4.2 Rollenverteilung entscheiden (Team in S6, 31.7.) — Vorschlag: N Gespräch, J Technik+Tool, T Demo+Notizen, P optional
 - [ ] 4.3 Ablauf-Drehbuch 10/15/60/10 mit BAMFAM-Abschluss (C, bis 25.7.)
 - [ ] 4.4 Red-Team-Drill mit Fragen-Bank (alle, in S7)
@@ -60,7 +60,7 @@
 ## Lane WS5: Offerte + Prototyp
 
 - [~] 5.1 Offerten-Skelett nach ihrer Kapitelstruktur — **Skelett FERTIG 10.7.**: offer/offerten-skelett.md mit Abdeckungs-Matrix (jede "Gewünschte Information" → Kapitel), Quellen-Legende (TOOL/Dossier/Task) und Arbeitsablauf nach 5.8.; Scope-abhängige Kapitel (10.x) nach Entscheid 21.7. fixieren, füllen ab 6.8.
-- [ ] 5.2 Architektur-Varianten-Papier A/B/C (C+J, bis 27.7.)
+- [~] 5.2 Architektur-Varianten-Papier A/B/C — **Entwurf FERTIG 10.7.**: offer/architektur-varianten.md (gemeinsame Grundsätze, Bausteine je Variante, Entscheidungsraster, offene Punkte→Tool-Fragen); **JETZT dran: Joaquin-Review**; Scope-Entscheid 21.7. + Termin-Antworten einarbeiten, final bis 27.7.
 - [ ] 5.3 Preismodell-Optionen: bezahlte Phasen, kein Gratis-Prototyp (J+C, bis 31.7.)
 - [ ] 5.4 Demo-Asset "Muster-Slice" Go/No-Go nach 0.10, dann Build (J, Entscheid 21.7.)
 - [ ] 5.5 SLA-Baukasten Bronze/Silber/Gold (C, bis 27.7.)
