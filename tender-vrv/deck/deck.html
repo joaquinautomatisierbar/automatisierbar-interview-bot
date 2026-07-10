@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A0F0D">
+<title>vRv · Automatisierbar Deck (Gerüst v0.1)</title>
+<!--
+  GERÜST v0.1 (10.7.2026) · Task WS3.1 · Claude baut, Tej owned Inhalt.
+  Bernsteinfarbene PLATZHALTER-Chips markieren, was noch fehlt (Fotos 3.5, Rechtsform 6.2,
+  Referenz-Freigaben 6.4, Hosting-Entscheid 6.3, Scope-Entscheide 21.7.). Vor der Generalprobe (S8)
+  muss dieses File null Platzhalter-Chips enthalten.
+  Bedienung: Pfeiltasten/Leertaste/Swipe = blättern · N = Referentennotizen · Home/End = Anfang/Ende.
+  Offline-fest: Google Fonts sind nur Verschönerung, System-Fonts tragen das Deck auch ohne Netz.
+-->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Crect width='500' height='500' rx='110' ry='110' fill='%2315C97A'/%3E%3Cpolyline points='100,250 175,250 215,155 285,345 325,250 400,250' fill='none' stroke='white' stroke-width='30' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0F0D; --surface-1:#111815; --surface-2:#18211D; --surface-3:#1F2A25;
+    --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.15);
+    --text:#ECF3EF; --muted:#8A9892; --dim:#5A655F;
+    --green:#15C97A; --green-dark:#0A8F54; --green-soft:#5EE0A6; --green-glow:rgba(21,201,122,.16);
+    --amber:#E8B84B; --amber-soft:rgba(232,184,75,.14);
+    --wire:rgba(21,201,122,.20);
+    --grid:rgba(120,180,150,.045);
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow:hidden}
+  ::selection{background:rgba(21,201,122,.24);color:#fff}
+
+  /* ---------- stage: fixed 1280x720, scaled to fit ---------- */
+  #viewport{position:fixed;inset:0;display:grid;place-items:center;overflow:hidden}
+  #stage{width:1280px;height:720px;position:relative;transform-origin:center center}
+
+  .slide{position:absolute;inset:0;padding:64px 76px;display:none;flex-direction:column;
+    background-color:var(--bg);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:34px 34px}
+  .slide.active{display:flex}
+  .slide::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(700px 380px at 18% -8%,rgba(21,201,122,.10),transparent 65%)}
+  .slide>*{position:relative;z-index:1}
+
+  /* ---------- shared atoms ---------- */
+  .kicker{font-family:var(--mono);font-size:13px;letter-spacing:.5px;font-weight:500;color:var(--muted);margin-bottom:18px}
+  .kicker b{color:var(--green);font-weight:700}
+  h1{font-size:56px;font-weight:800;letter-spacing:-1.6px;line-height:1.04;max-width:20ch}
+  h1 .accent{color:var(--green-soft)}
+  h2{font-size:40px;font-weight:700;letter-spacing:-1px;line-height:1.1;max-width:24ch}
+  .lead{color:var(--muted);font-size:20px;line-height:1.5;margin-top:16px;max-width:56ch}
+  .statement{font-size:24px;font-weight:600;letter-spacing:-.4px;line-height:1.35;max-width:46ch}
+  .statement em{color:var(--green-soft);font-style:normal}
+  .grow{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .footnote{color:var(--dim);font-size:14px;line-height:1.5;margin-top:auto;padding-top:18px;max-width:90ch}
+  .footnote b{color:var(--muted);font-weight:600}
+
+  .card{background:linear-gradient(180deg,rgba(24,33,29,.72),rgba(17,24,21,.72));
+    border:1px solid var(--border);border-radius:16px;padding:22px 24px;position:relative}
+  .cnr{position:absolute;width:12px;height:12px;pointer-events:none;opacity:.65}
+  .cnr.tl{top:-1px;left:-1px;border-top:2px solid var(--green);border-left:2px solid var(--green)}
+  .cnr.br{bottom:-1px;right:-1px;border-bottom:2px solid var(--green);border-right:2px solid var(--green)}
+
+  .chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;font-weight:500;
+    letter-spacing:.3px;color:var(--muted);border:1px solid var(--border-2);border-radius:999px;padding:5px 12px}
+  .chip.green{color:var(--green-soft);border-color:rgba(21,201,122,.4)}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+
+  .todo{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;font-weight:500;
+    color:var(--amber);background:var(--amber-soft);border:1px dashed rgba(232,184,75,.55);
+    border-radius:8px;padding:5px 10px;letter-spacing:.2px}
+  .todo::before{content:"◈";font-size:10px}
+
+  .num{font-family:var(--mono);font-weight:700;color:var(--green);font-size:13px;letter-spacing:.5px}
+
+  /* ---------- cover ---------- */
+  .cover-brand{display:flex;align-items:center;gap:14px}
+  .logo{width:44px;height:44px;border-radius:12px;overflow:hidden;flex:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06),0 6px 22px var(--green-glow)}
+  .logo svg{width:100%;height:100%;display:block}
+  .cover-brand b{font-size:19px;font-weight:700;letter-spacing:-.2px;display:block}
+  .cover-brand .sub{color:var(--dim);font-size:12px;font-family:var(--mono);letter-spacing:.4px;margin-top:2px}
+  .cover-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+
+  /* ---------- agenda ---------- */
+  .agenda{display:flex;flex-direction:column;gap:14px;margin-top:34px}
+  .agenda .row{display:flex;align-items:center;gap:22px;padding:18px 24px}
+  .agenda .t{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--green);width:92px;flex:none}
+  .agenda .row h3{font-size:20px;font-weight:600;letter-spacing:-.3px}
+  .agenda .row p{color:var(--muted);font-size:15px;margin-top:3px}
+  .agenda .row.hl{border-color:rgba(21,201,122,.4)}
+
+  /* ---------- grids ---------- */
+  .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:32px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:28px}
+  .grid-6{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:28px}
+
+  .person{min-height:220px;display:flex;flex-direction:column}
+  .avatar{width:74px;height:74px;border-radius:50%;background:var(--surface-3);border:1px dashed var(--border-2);
+    display:grid;place-items:center;font-family:var(--mono);font-size:22px;color:var(--dim);margin-bottom:14px}
+  .person h3{font-size:19px;font-weight:700;letter-spacing:-.2px}
+  .person .role{color:var(--muted);font-size:14px;margin-top:4px;line-height:1.4}
+  .person .todo{margin-top:auto;align-self:flex-start}
+
+  .principle h3{font-size:20px;font-weight:700;letter-spacing:-.3px;margin:10px 0 8px}
+  .principle p{color:var(--muted);font-size:15px;line-height:1.55}
+
+  .sys{display:flex;flex-direction:column;min-height:210px}
+  .sys .live{font-family:var(--mono);font-size:11px;color:var(--green-soft);letter-spacing:.6px;display:inline-flex;align-items:center;gap:7px}
+  .sys .live .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+  .sys h3{font-size:20px;font-weight:700;margin:12px 0 6px;letter-spacing:-.3px}
+  .sys p{color:var(--muted);font-size:14.5px;line-height:1.55}
+  .sys .proof{margin-top:auto;padding-top:12px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+
+  .ref{min-height:190px;display:flex;flex-direction:column}
+  .ref .status{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.8px;padding:4px 9px;border-radius:6px;align-self:flex-start}
+  .ref .status.live{color:#04130c;background:var(--green)}
+  .ref .status.done{color:var(--green-soft);border:1px solid rgba(21,201,122,.45)}
+  .ref .status.pilot{color:var(--amber);border:1px solid rgba(232,184,75,.5)}
+  .ref h3{font-size:17px;font-weight:700;margin:12px 0 5px;letter-spacing:-.2px}
+  .ref p{color:var(--muted);font-size:13.5px;line-height:1.5}
+
+  /* ---------- pipeline (Order2Cash) ---------- */
+  .pipe{margin-top:44px;position:relative}
+  .pipe .track{position:absolute;top:26px;left:26px;right:26px;height:2px;background:var(--wire)}
+  .pipe .track .hot{position:absolute;top:0;bottom:0;left:29.5%;width:39.5%;background:linear-gradient(90deg,var(--amber),rgba(232,184,75,.35));box-shadow:0 0 12px rgba(232,184,75,.35)}
+  .pipe ol{list-style:none;display:flex;justify-content:space-between;gap:8px;position:relative;z-index:1}
+  .pipe li{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}
+  .pipe .st{width:52px;height:52px;border-radius:14px;background:var(--surface-1);border:1px solid var(--border-2);
+    display:grid;place-items:center;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--muted)}
+  .pipe li.hot .st{border-color:rgba(232,184,75,.65);color:var(--amber);box-shadow:0 0 16px rgba(232,184,75,.18)}
+  .pipe .lbl{font-size:13.5px;font-weight:600;letter-spacing:-.1px;line-height:1.25}
+  .pipe li.hot .lbl{color:var(--amber)}
+  .leak{margin-top:30px;border:1px dashed rgba(232,184,75,.5);background:var(--amber-soft);border-radius:14px;padding:18px 22px;
+    font-size:16.5px;line-height:1.5;max-width:100%}
+  .leak b{color:var(--amber)}
+
+  /* ---------- variants ---------- */
+  .variant{display:flex;flex-direction:column;min-height:320px}
+  .variant .tag{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green);letter-spacing:.6px}
+  .variant h3{font-size:20px;font-weight:700;letter-spacing:-.3px;margin:8px 0 14px}
+  .variant dl{display:flex;flex-direction:column;gap:12px;font-size:14px}
+  .variant dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.8px;color:var(--dim);text-transform:uppercase}
+  .variant dd{color:var(--muted);line-height:1.5;margin-top:2px}
+  .variant dd b{color:var(--text);font-weight:600}
+  .variant.rec{border-color:rgba(21,201,122,.45)}
+  .variant .recchip{position:absolute;top:-11px;right:14px;font-family:var(--mono);font-size:10px;font-weight:700;
+    letter-spacing:.7px;background:var(--green);color:#04130c;border-radius:6px;padding:4px 8px}
+
+  /* ---------- microsoft slide ---------- */
+  .ms-cols{display:grid;grid-template-columns:1fr 1.2fr;gap:20px;margin-top:30px}
+  .ms-cols h3{font-size:18px;font-weight:700;letter-spacing:-.2px;margin-bottom:14px}
+  .tools{display:flex;flex-wrap:wrap;gap:8px}
+  .plus-list{display:flex;flex-direction:column;gap:12px}
+  .plus-list .row{display:flex;gap:12px;align-items:baseline}
+  .plus-list .row b{font-size:15.5px;font-weight:700;white-space:nowrap}
+  .plus-list .row span{color:var(--muted);font-size:14px;line-height:1.45}
+  .anchor{margin-top:26px;display:flex;align-items:center;gap:16px;border:1px solid var(--border);border-radius:14px;
+    padding:16px 20px;background:var(--surface-1)}
+  .anchor .big{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--green-soft);white-space:nowrap}
+  .anchor p{color:var(--muted);font-size:14.5px;line-height:1.5}
+
+  /* ---------- pebe flow ---------- */
+  .flow{display:flex;align-items:stretch;gap:0;margin-top:36px}
+  .fbox{flex:1;border:1px solid var(--border-2);border-radius:14px;background:var(--surface-1);padding:18px;text-align:center}
+  .fbox h4{font-size:16px;font-weight:700;letter-spacing:-.2px}
+  .fbox p{color:var(--muted);font-size:12.5px;margin-top:6px;line-height:1.45}
+  .farrow{width:100px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0 6px}
+  .farrow .line{width:100%;height:2px;background:var(--wire);position:relative}
+  .farrow .line::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--green)}
+  .farrow small{font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.2px;text-align:center;line-height:1.35;max-width:100%;overflow-wrap:break-word}
+  .fbox.hl{border-color:rgba(21,201,122,.5);box-shadow:0 0 18px var(--green-glow)}
+  .ctrl{margin-top:24px;display:flex;gap:10px;flex-wrap:wrap}
+
+  /* ---------- security grid ---------- */
+  .sec-card h4{font-size:15.5px;font-weight:700;letter-spacing:-.2px;display:flex;align-items:center;gap:8px}
+  .sec-card h4 .num{font-size:11px}
+  .sec-card p{color:var(--muted);font-size:13px;line-height:1.5;margin-top:6px}
+
+  /* ---------- phases ---------- */
+  .phases{display:flex;align-items:stretch;gap:0;margin-top:36px}
+  .phase{flex:1;border:1px solid var(--border);border-radius:16px;background:linear-gradient(180deg,rgba(24,33,29,.72),rgba(17,24,21,.72));padding:22px}
+  .phase .p-num{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green);letter-spacing:.6px}
+  .phase h3{font-size:19px;font-weight:700;margin:8px 0 10px;letter-spacing:-.3px}
+  .phase p{color:var(--muted);font-size:14px;line-height:1.55}
+  .phase .price{margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--green-soft);letter-spacing:.3px}
+  .gate{width:84px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+  .gate .diamond{width:14px;height:14px;background:var(--bg);border:2px solid var(--green);transform:rotate(45deg)}
+  .gate small{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.4px;text-align:center;line-height:1.3}
+
+  /* ---------- next steps ---------- */
+  .steps{display:flex;flex-direction:column;gap:14px;margin-top:34px}
+  .steps .row{display:flex;gap:20px;align-items:center;padding:18px 24px}
+  .steps .n{width:40px;height:40px;flex:none;border-radius:12px;background:var(--surface-3);border:1px solid var(--border-2);
+    display:grid;place-items:center;font-family:var(--mono);font-weight:700;color:var(--green)}
+  .steps h3{font-size:18.5px;font-weight:600;letter-spacing:-.2px}
+  .steps p{color:var(--muted);font-size:14.5px;margin-top:3px}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;left:0;right:0;bottom:0;z-index:10;pointer-events:none}
+  #bar{height:3px;background:linear-gradient(90deg,var(--green),var(--green-soft));width:0%;transition:width .25s ease;box-shadow:0 0 8px var(--green-glow)}
+  #counter{position:fixed;right:18px;bottom:14px;font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.5px}
+  #navhint{position:fixed;left:18px;bottom:12px;font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.4px;opacity:.8;transition:opacity .3s ease}
+  #navhint.hidden{opacity:0}
+  .navbtn{position:fixed;bottom:34px;z-index:11;width:40px;height:40px;border-radius:50%;border:1px solid var(--border-2);
+    background:rgba(17,24,21,.8);color:var(--muted);font-size:17px;cursor:pointer;display:grid;place-items:center}
+  .navbtn:hover{border-color:var(--green);color:var(--green-soft)}
+  #prev{right:110px} #next{right:60px}
+
+  /* ---------- notes ---------- */
+  #notes{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(10,15,13,.96);border-top:1px solid var(--border-2);
+    backdrop-filter:blur(10px);padding:16px 26px 22px;display:none;max-height:38vh;overflow:auto}
+  #notes.open{display:block}
+  #notes .nt{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:.6px;margin-bottom:8px}
+  #notes p{color:var(--muted);font-size:14.5px;line-height:1.6;max-width:110ch}
+  .slide .sr-notes{display:none}
+
+  /* ---------- print ---------- */
+  @media print{
+    html,body{overflow:visible;background:#0A0F0D}
+    #viewport{position:static;display:block}
+    #stage{width:1280px;height:auto;transform:none !important}
+    .slide{display:flex;position:relative;width:1280px;height:720px;page-break-after:always;margin:0 auto}
+    #hud,#counter,#navhint,.navbtn,#notes{display:none !important}
+  }
+</style>
+</head>
+<body>
+
+<div id="viewport"><div id="stage">
+
+  <!-- ============ 01 · COVER ============ -->
+  <section class="slide" data-notes="Begrüssung + Dank für die Einladung. Ein Satz zum Rahmen: 'Wir zeigen kurz, wer wir sind und was wir bauen, und dann gehört die meiste Zeit Ihren Prozessen.' Nicht länger als 60 Sekunden auf dieser Folie bleiben.">
+    <div class="cover-brand">
+      <span class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span><b>automatisierbar</b><span class="sub">automatisierbar.ch</span></span>
+    </div>
+    <div class="grow">
+      <div class="kicker"><b>//</b> FÜR DIE VR VERWALTUNGEN AG</div>
+      <h1>Digital von der Aufgabe bis zum <span class="accent">Zahlungseingang.</span></h1>
+      <p class="lead">Wer wir sind, wie wir arbeiten und drei ehrliche Wege zu Ihrem Order2Cash-Prozess.</p>
+      <div class="cover-meta">
+        <span class="chip green"><span class="dot"></span>Solothurn · 5. August 2026</span>
+        <span class="chip">90 Minuten</span>
+        <span class="todo">GERÜST v0.1 · Inhalt-Owner Tej · Platzhalter vor S8 auflösen</span>
+      </div>
+    </div>
+    <p class="footnote">Bedienung: Pfeiltasten oder Wischen · N = Notizen</p>
+  </section>
+
+  <!-- ============ 02 · AGENDA ============ -->
+  <section class="slide" data-notes="Agenda aktiv als Vertrag anbieten: 'Passt Ihnen diese Aufteilung?' Wichtigster Satz: Der grösste Block gehört ihren Prozessen, wir sind zum Zuhören hier. Bitte um die Besichtigung der Hauswartung bestätigen, falls in der Vorab-Mail zugesagt.">
+    <div class="kicker"><b>// 01</b> · HEUTE</div>
+    <h2>90 Minuten, der grösste Teil gehört Ihren Prozessen.</h2>
+    <div class="agenda">
+      <div class="row card"><span class="t">10 min</span><div><h3>Wer wir sind, wie wir arbeiten</h3><p>Kurz. Sie sollen wissen, mit wem Sie es zu tun haben.</p></div></div>
+      <div class="row card"><span class="t">15 min</span><div><h3>Live an unseren Systemen</h3><p>Keine Folien-Behauptungen: die Werkzeuge, mit denen wir selbst täglich arbeiten.</p></div></div>
+      <div class="row card hl"><span class="t">60 min</span><div><h3>Ihre Prozesse im Detail</h3><p>Strukturierte Aufnahme: Order2Cash, pebeFinance, Hauswartung, IT und Sicherheit. Wir fragen, Sie erzählen.</p></div></div>
+      <div class="row card"><span class="t">10 min</span><div><h3>Nächste Schritte</h3><p>Was Sie bis wann von uns bekommen, und welcher Termin dafür sinnvoll ist.</p></div></div>
+    </div>
+  </section>
+
+  <!-- ============ 03 · WER WIR SIND ============ -->
+  <section class="slide" data-notes="Ehrlichkeit zuerst: jung, vier Gründer, alles selbst gebaut. Rechtsform-Satz gemäss 6.2 (Joaquin). Nicht entschuldigen, einordnen: 'Weil wir jung sind, zeigen wir lieber, was läuft.' Überleitung zur Arbeitsweise.">
+    <div class="kicker"><b>// 02</b> · WER WIR SIND</div>
+    <h2>Vier Gründer. Wer hier präsentiert, baut auch.</h2>
+    <div class="grid-4">
+      <div class="card person"><span class="cnr tl"></span><div class="avatar">J</div><h3>Joaquin</h3><p class="role">Architektur + Technik</p><span class="todo">Foto + Bio (3.5)</span></div>
+      <div class="card person"><div class="avatar">N</div><h3>Nico</h3><p class="role">Gesprächsführung + Kunden</p><span class="todo">Foto + Bio (3.5)</span></div>
+      <div class="card person"><div class="avatar">T</div><h3>Tej</h3><p class="role">Demo + Umsetzung</p><span class="todo">Foto + Bio (3.5)</span></div>
+      <div class="card person"><span class="cnr br"></span><div class="avatar">P</div><h3>Patrik</h3><p class="role">Organisation + Betrieb</p><span class="todo">Foto + Bio (3.5)</span></div>
+    </div>
+    <p class="footnote"><span class="todo">Rechtsform-Satz aus Task 6.2 (Joaquin): Einzelunternehmen, GmbH-Gründung vor Vertragsstart</span> &nbsp; <span class="todo">Rollen-Zuteilung final in S6 (4.2)</span></p>
+  </section>
+
+  <!-- ============ 04 · WIE WIR ARBEITEN ============ -->
+  <section class="slide" data-notes="Drei Prinzipien, je ein Satz Erklärung. Beim dritten Prinzip den Satz aus der KI-Strategie setzen: KI entwirft, Menschen entscheiden, keine Kundendaten im Modell-Training. Das nimmt die spätere Sicherheitsfrage vorweg.">
+    <div class="kicker"><b>// 03</b> · WIE WIR ARBEITEN</div>
+    <h2>Drei Prinzipien statt Hochglanz.</h2>
+    <div class="grid-3">
+      <div class="card principle"><span class="cnr tl"></span><span class="num">01</span><h3>Erst verstehen, dann bauen</h3><p>Heute nehmen wir Ihre Prozesse strukturiert auf. Die Offerte entsteht aus Ihren Antworten, nicht aus einer Vorlage.</p></div>
+      <div class="card principle"><span class="num">02</span><h3>Ergebnisse alle 1 bis 2 Wochen</h3><p>Kurze Lieferzyklen, früh sichtbare Zwischenstände, Kontrollpunkte, an denen Sie neu entscheiden können. Keine Sechs-Monats-Überraschung.</p></div>
+      <div class="card principle"><span class="cnr br"></span><span class="num">03</span><h3>KI-nativ, Mensch entscheidet</h3><p>Wir entwickeln mit KI und sind damit schneller als klassische Teams. Alles mit Aussenwirkung durchläuft eine menschliche Freigabe, und Kundendaten landen in keinem Modell-Training.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ 05 · WIR BENUTZEN, WAS WIR BAUEN ============ -->
+  <section class="slide" data-notes="Überleitung zur Live-Demo (Tej übernimmt). Reihenfolge: 1. Hub als Beweis für 'zentralisierte Plattform', 2. Feld-PWA auf dem Handy als Hauswart-App-Beweis (Foto, offline), 3. Beleg-Erfassung als Material/Spesen-Beweis. Fallback bei Netzproblemen: Screenshots im Tech-Kit (4.5).">
+    <div class="kicker"><b>// 04</b> · SUBSTANZ STATT FOLIEN</div>
+    <h2>Wir benutzen täglich, was wir Ihnen vorschlagen.</h2>
+    <div class="grid-3">
+      <div class="card sys"><span class="cnr tl"></span><span class="live"><span class="dot"></span>LIVE</span><h3>Unser Work-OS</h3><p>Aufgaben, Aufträge, Leads und Termine des ganzen Teams auf einer Plattform. Von uns gebaut, jeden Tag im Einsatz.</p><span class="proof">= zentralisierte Plattform, wie ausgeschrieben</span></div>
+      <div class="card sys"><span class="live"><span class="dot"></span>LIVE</span><h3>Feld-Erfassung mobil</h3><p>Installierbare Handy-App: unterwegs erfassen mit Foto und Sprache, funktioniert ohne Empfang weiter und synchronisiert später.</p><span class="proof">= Hauswart-App-Muster: Checkliste, Foto, offline</span></div>
+      <div class="card sys"><span class="cnr br"></span><span class="live"><span class="dot"></span>LIVE</span><h3>Beleg-Erfassung</h3><p>Beleg fotografieren, automatische Text-Erkennung, strukturierte Ablage und Auswertung.</p><span class="proof">= Material- und Spesenerfassung fürs Reporting</span></div>
+    </div>
+    <p class="footnote"><b>Jetzt 15 Minuten live.</b> Alles, was Sie gleich sehen, läuft produktiv und wurde von den vier Personen in diesem Raum gebaut.</p>
+  </section>
+
+  <!-- ============ 06 · PROJEKTE ============ -->
+  <section class="slide" data-notes="Ehrlichkeits-Disziplin: Labels laut aussprechen ('produktiv', 'geliefert', 'Pilot'). Ein Wirtschaftsprüfer merkt Aufschneiderei sofort, Ehrlichkeit ist hier die stärkere Karte. Referenzblätter als Handout erwähnen (3.6).">
+    <div class="kicker"><b>// 05</b> · AUSGEWÄHLTE PROJEKTE</div>
+    <h2>Ehrlich gelabelt: was läuft, was geliefert ist, was Pilot ist.</h2>
+    <div class="grid-4">
+      <div class="card ref"><span class="cnr tl"></span><span class="status live">PRODUKTIV</span><h3>Offerten-Generator</h3><p>Gartenbau-Zulieferer: Offerten in Minuten statt Stunden, täglich im Einsatz.</p></div>
+      <div class="card ref"><span class="status done">GELIEFERT</span><h3>Spesen-Lösung</h3><p>Beratungsunternehmen: Beleg-Erfassung mit automatischer Auswertung, als Web-App geliefert.</p></div>
+      <div class="card ref"><span class="status pilot">PILOT</span><h3>Prozess-MVP Gewerbe</h3><p>Auftragsabwicklung für einen Gewerbebetrieb, in Pilotphase mit echten Daten.</p></div>
+      <div class="card ref"><span class="cnr br"></span><span class="status pilot">PILOT</span><h3>Immobilien-Automation</h3><p>Pilot in der Immobilienverwaltung: Dokumente und wiederkehrende Abläufe.</p></div>
+    </div>
+    <p class="footnote"><span class="todo">Namen + finale Texte nach Kunden-Freigaben (3.3 + 6.4, bis 28.7.); bis dahin anonymisiert</span></p>
+  </section>
+
+  <!-- ============ 07 · UNSER VERSTÄNDNIS VON VRV ============ -->
+  <section class="slide" data-notes="Zeigen, dass wir die Ausschreibung gelesen und die Firma verstanden haben. Der Satz zum Zusammenspiel Bewirtschaftung/Hauswartung signalisiert Domänenverständnis (Modul 4). Ihr eigenes Einstein-Zitat aufgreifen: einfach, aber nicht einfacher. Danach sofort fragen: 'Haben wir das richtig verstanden?'">
+    <div class="kicker"><b>// 06</b> · UNSER VERSTÄNDNIS</div>
+    <h2>vR verwaltungen ag: fünf Geschäftsfelder, ein Prozess.</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:26px">
+      <span class="chip">Personalvorsorge-Verwaltung</span><span class="chip">Immobilien-Bewirtschaftung</span><span class="chip">Immobilienverkauf</span><span class="chip green"><span class="dot"></span>Eigene Hauswartung</span><span class="chip">Treuhand</span>
+      <span class="chip">~28 Mitarbeitende</span><span class="chip">Rötipark Solothurn</span>
+    </div>
+    <div class="grow">
+      <p class="statement">Die Bewirtschaftung beauftragt, die Hauswartung leistet, die Verwaltung verrechnet. <em>Zwei Abteilungen, ein durchgehender Prozess</em>, und genau der soll digital werden.</p>
+    </div>
+    <p class="footnote"><b>"Mache die Dinge so einfach wie möglich. Aber nicht einfacher."</b> · aus Ihrer Ausschreibung. Wir nehmen das als Bauanleitung.</p>
+  </section>
+
+  <!-- ============ 08 · ORDER2CASH ============ -->
+  <section class="slide" data-notes="Kernfolie des Verständnisses. Die 8 Stationen entlanggehen, dann auf die bernsteinfarbene Zone zeigen: zwischen Umsetzen und Erfassen verliert eine Verwaltung mit eigener Hauswartung erfahrungsgemäss am meisten Geld, Regie auf Zetteln, Erfassung am Abend, Verrechnung zu spät. WICHTIG: als Hypothese formulieren und fragen, wo es bei vRv klemmt. Keine erfundenen vRv-Zahlen.">
+    <div class="kicker"><b>// 07</b> · ORDER2CASH</div>
+    <h2>Acht Stationen. Die teuerste ist die, die heute keiner sieht.</h2>
+    <div class="grow" style="justify-content:center">
+    <div class="pipe">
+      <div class="track"><span class="hot"></span></div>
+      <ol>
+        <li><span class="st">1</span><span class="lbl">Auftrag</span></li>
+        <li><span class="st">2</span><span class="lbl">Planen</span></li>
+        <li class="hot"><span class="st">3</span><span class="lbl">Umsetzen</span></li>
+        <li class="hot"><span class="st">4</span><span class="lbl">Bestätigen</span></li>
+        <li class="hot"><span class="st">5</span><span class="lbl">Dokumentieren</span></li>
+        <li class="hot"><span class="st">6</span><span class="lbl">Erfassen</span></li>
+        <li><span class="st">7</span><span class="lbl">Verrechnen</span></li>
+        <li><span class="st">8</span><span class="lbl">Zahlung</span></li>
+      </ol>
+    </div>
+    <div class="leak"><b>Stationen 3 bis 6:</b> Hier entsteht Leistung, die nie oder zu spät verrechnet wird. Regiearbeit auf Zetteln, Erfassung im Abendbüro, Rechnungen Wochen nach der Arbeit. Unsere Frage an Sie heute: Wo genau reisst bei Ihnen der Faden?</div>
+    </div>
+  </section>
+
+  <!-- ============ 09 · DREI WEGE ============ -->
+  <section class="slide" data-notes="Kein Verkaufs-Moment, ein Architekten-Moment. Alle drei Wege ernst vorstellen, Empfehlung erst in der Offerte nach dem Detailwissen von heute. Neutralitäts-Satz bringen: Wir verdienen am Bauen und Betreiben, nicht am Lizenzverkauf. Scope-Entscheide vom 21.7. bestimmen die Formulierungen zu Betrieb/Infrastruktur.">
+    <div class="kicker"><b>// 08</b> · LÖSUNGSWEGE</div>
+    <h2>Drei ehrliche Wege. Entschieden wird mit Zahlen, nicht mit Ideologie.</h2>
+    <div class="grid-3">
+      <div class="card variant"><span class="tag">VARIANTE A</span><h3>Microsoft-Ausbau</h3>
+        <dl>
+          <dt>Stärke</dt><dd>Baut auf Ihren Lizenzen und Gewohnheiten auf; stark im Backoffice und in der Archivierung.</dd>
+          <dt>Grenze</dt><dd>Feldarbeit, Leistungserfassung und pebe-Naht brauchen Zusatzbausteine mit <b>Zusatzlizenzen</b>.</dd>
+          <dt>Kostenprofil</dt><dd>Tiefere Baukosten, dafür laufende Lizenzen pro Nutzer.</dd>
+        </dl>
+      </div>
+      <div class="card variant"><span class="tag">VARIANTE B</span><h3>Massgeschneiderte Plattform</h3>
+        <dl>
+          <dt>Stärke</dt><dd><b>Exakte Passform:</b> Ihr Prozess, Ihre Hauswart-App, Ihr Prüfpfad. Keine Lizenz pro Nutzer.</dd>
+          <dt>Grenze</dt><dd>Höhere Bauleistung am Anfang; Dokumente und Archiv bleiben sinnvollerweise in Ihrer Microsoft-Welt.</dd>
+          <dt>Kostenprofil</dt><dd>Investition plus schlanker Betrieb (Hosting Schweiz, Wartung, SLA).</dd>
+        </dl>
+      </div>
+      <div class="card variant rec"><span class="recchip">UNSER FAVORIT ZUR PRÜFUNG</span><span class="tag">VARIANTE C</span><h3>Hybrid</h3>
+        <dl>
+          <dt>Schnitt</dt><dd>Zusammenarbeit, Dokumente und Langzeit-Archiv in M365. Prozesskern, Feld-App und pebe-Brücke massgeschneidert.</dd>
+          <dt>Warum</dt><dd>Jede Welt macht, was sie am besten kann. <b>pebeFinance bleibt führend.</b></dd>
+          <dt>Kostenprofil</dt><dd>Mittelweg; ehrlicher 3-Jahres-Vergleich in der Offerte.</dd>
+        </dl>
+      </div>
+    </div>
+    <p class="footnote"><b>Unsere Neutralität:</b> Wir verdienen in allen drei Varianten am Bauen und Betreiben, nicht am Lizenzverkauf. Deshalb können wir sie ehrlich nebeneinanderlegen.</p>
+  </section>
+
+  <!-- ============ 10 · VARIANTE MICROSOFT ZU ENDE GEDACHT ============ -->
+  <section class="slide" data-notes="Wertschätzung zuerst, wörtlich: 'Ihre Variante ist gut gedacht, wir würden denselben Sockel wählen.' Dann vervollständigen statt abwerten: Microsoft selbst sieht für Feld, Daten und Reporting eigene Produkte vor. Field-Service-Moment als Preisanker bringen. Verbotene Wörter: Spielzeug, reicht nicht, geht nicht.">
+    <div class="kicker"><b>// 09</b> · IHRE VARIANTE MICROSOFT</div>
+    <h2>Gut gedacht. Zu Ende gedacht heisst: plus drei Bausteine.</h2>
+    <div class="ms-cols">
+      <div class="card"><span class="cnr tl"></span><h3>Ihr Vorschlag, der richtige Sockel</h3>
+        <div class="tools">
+          <span class="chip">To Do</span><span class="chip">Planner</span><span class="chip">Outlook</span><span class="chip">Teams</span><span class="chip">SharePoint</span><span class="chip">Power Automate</span>
+        </div>
+        <p style="color:var(--muted);font-size:14px;margin-top:16px;line-height:1.55">Aufgaben, Genehmigungen, Dokumente, interne Zusammenarbeit und die BVG-konforme Aufbewahrung: dafür ist diese Welt stark, und Sie besitzen sie schon.</p>
+      </div>
+      <div class="card"><span class="cnr br"></span><h3>Was Microsoft selbst dazustellt</h3>
+        <div class="plus-list">
+          <div class="row"><b>+ Power Apps</b><span>die eigentliche Feld-App: Pflichtfelder, Kamera, GPS, funktioniert offline im Keller</span></div>
+          <div class="row"><b>+ Dataverse</b><span>saubere Prozessdaten, feine Berechtigungen, Voraussetzung für offline</span></div>
+          <div class="row"><b>+ Power BI</b><span>Reporting über den ganzen Prozess statt Task-Status pro Board</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="anchor"><span class="big">USD 105</span><p>pro Nutzer und Monat kostet Microsofts eigenes Produkt für Hauswart-Einsätze (Dynamics 365 Field Service). Das zeigt: Ihr Anwendungsfall ist grösser als To Do + Planner, und es setzt den Preisanker, unter dem sich unsere Varianten bewegen.</p></div>
+  </section>
+
+  <!-- ============ 11 · PEBE BLEIBT ============ -->
+  <section class="slide" data-notes="Kompetenzfolie. Kernsätze: pebeFINANCE hat kein öffentliches API, die belegten Wege sind Dateiimport (Lizenz 'Schnittstellen'!) und der Zahlungsverkehr mit QR und camt. Import-Klick als Kontrollpunkt der Buchhaltung verkaufen, nicht als Schwäche. pebe mobile proaktiv einordnen (5-Franken-App, nur Zeit/Spesen). Freigabe für direkten pebe-Kontakt HEUTE einholen (c5).">
+    <div class="kicker"><b>// 10</b> · PEBEFINANCE</div>
+    <h2>Ihre Ausschreibung verlangt Integration, nicht Ablösung. Wir nehmen das wörtlich.</h2>
+    <div class="grow" style="justify-content:center">
+    <div class="flow">
+      <div class="fbox hl"><h4>Unsere Plattform</h4><p>Auftrag · Einsatz · Zeit · Material · Fakturavorschlag</p></div>
+      <div class="farrow"><div class="line"></div><small>geprüfte Importdatei<br>+ Freigabe-Klick</small></div>
+      <div class="fbox"><h4>pebeFINANCE</h4><p>bleibt führend: Fibu · Debitoren · Zahlungslauf</p></div>
+      <div class="farrow"><div class="line"></div><small>QR-Rechnung</small></div>
+      <div class="fbox"><h4>Bank</h4><p>Zahlungseingang</p></div>
+      <div class="farrow"><div class="line"></div><small>camt.053/054<br>automatischer Abgleich</small></div>
+      <div class="fbox"><h4>Status zurück</h4><p>bezahlt / offen / mahnen, sichtbar in der Plattform</p></div>
+    </div>
+    <div class="ctrl">
+      <span class="chip green"><span class="dot"></span>Der Import-Klick bleibt Ihr Kontrollpunkt</span>
+      <span class="chip">Zu klären: pebe-Lizenz "Schnittstellen"</span>
+      <span class="chip">Format-Spezifikation direkt mit pebe AG, mit Ihrer Freigabe</span>
+    </div>
+    </div>
+    <p class="footnote"><b>Ehrlich:</b> pebeFINANCE hat kein öffentliches API. Genau deshalb bauen wir auf den belegten, stabilen Wegen: Dateiimport und Schweizer Zahlungsstandards. Keine fragile Software-Fernsteuerung.</p>
+  </section>
+
+  <!-- ============ 12 · SICHERHEIT + DATENSCHUTZ ============ -->
+  <section class="slide" data-notes="Nur die Landkarte zeigen, Details liefert das Security-Antwortpaket in der Offerte (3.4). Bei FINMA-Frage glänzen: BVSA + OAK BV zuständig, FINMA nur Lebensversicherer. Ehrlich bleiben: keine eigene ISO-Zertifizierung, zertifiziert sind die Infrastrukturanbieter. KI-Satz: Geschäftskunden-APIs, kein Training, Verarbeitungsorte im Vertrag.">
+    <div class="kicker"><b>// 11</b> · SICHERHEIT + DATENSCHUTZ</div>
+    <h2>Antworten auf jede Ihrer Sicherheitsfragen, ehrlich dimensioniert.</h2>
+    <div class="grid-6">
+      <div class="card sec-card"><span class="cnr tl"></span><h4><span class="num">01</span> Datenstandort Schweiz</h4><p>Zertifizierte Schweizer Rechenzentren (ISO 27001). Produktivdaten bleiben in der Schweiz. <span class="todo" style="margin-top:6px">Anbieter-Entscheid 6.3 bis 27.7.</span></p></div>
+      <div class="card sec-card"><h4><span class="num">02</span> Login über Ihre Microsoft-Konten</h4><p>Entra ID SSO mit Ihrer MFA- und Zugriffs-Richtlinie. Keine zweite Passwort-Welt, Ein- und Austritte wirken automatisch.</p></div>
+      <div class="card sec-card"><h4><span class="num">03</span> Rollen + Prüfpfad</h4><p>Berechtigungen nach minimalem Prinzip, jede Aktion einem Konto zugeordnet, Audit-Log für sicherheitsrelevante Schritte.</p></div>
+      <div class="card sec-card"><h4><span class="num">04</span> Backups, die zurückkommen</h4><p>Täglich, verschlüsselt, 3-2-1 mit Zweitanbieter, und: Wiederherstellung wird getestet, nicht nur behauptet.</p></div>
+      <div class="card sec-card"><h4><span class="num">05</span> nDSG sauber</h4><p>Auftragsbearbeitungsvertrag mit dokumentierten Massnahmen, Meldung von Vorfällen innert 24 Stunden.</p></div>
+      <div class="card sec-card"><span class="cnr br"></span><h4><span class="num">06</span> BVG-Archivierung</h4><p>Revisionssicheres Archiv nach Art. 27i-k BVV 2: jederzeit lesbar, Integritätsnachweis, protokollierte Migration. Aufsicht korrekt eingeordnet: BVSA + OAK BV, nicht FINMA.</p></div>
+    </div>
+    <p class="footnote"><b>KI-Strategie in einem Satz:</b> KI entwirft, Menschen geben frei, Kundendaten landen in keinem Modell-Training, und die Verarbeitungsorte stehen im Vertrag.</p>
+  </section>
+
+  <!-- ============ 13 · VORGEHEN ============ -->
+  <section class="slide" data-notes="Premium-Positionierung: bezahlte Phasen, jede mit eigenständigem Wert, Ausstiegspunkt nach jeder Phase. KEIN Gratis-Prototyp anbieten, das Wort 'gratis' kommt in diesem Termin nicht vor. Auf die Ausschreibungsfrage Festpreis vs. agil antworten: Festpreis im Rahmen, agil im Inhalt.">
+    <div class="kicker"><b>// 12</b> · VORGEHEN</div>
+    <h2>Bezahlte Phasen. Nach jeder entscheiden Sie neu.</h2>
+    <div class="grow" style="justify-content:center">
+    <div class="phases">
+      <div class="phase"><span class="p-num">PHASE 1</span><h3>Detailkonzept</h3><p>Prozessanalyse, Architektur, Anforderungskatalog, Mengengerüst, pebe-Abklärung. Zum Festpreis, und das Ergebnis gehört Ihnen, auch wenn Sie danach mit jemand anderem bauen.</p><span class="price">FESTPREIS</span></div>
+      <div class="gate"><span class="diamond"></span><small>Ihr<br>Entscheid</small></div>
+      <div class="phase"><span class="p-num">PHASE 2</span><h3>Pilot</h3><p>Ein echter Teilprozess mit echten Nutzern, zum Beispiel die Regieaufträge von zwei bis drei Hauswarten. Messkriterien vorher definiert, parallel zum heutigen Ablauf.</p><span class="price">FESTPREIS / KOSTENDACH</span></div>
+      <div class="gate"><span class="diamond"></span><small>Ihr<br>Entscheid</small></div>
+      <div class="phase"><span class="p-num">PHASE 3</span><h3>Rollout + Betrieb</h3><p>Schrittweise Ausweitung auf Teams und Prozesse, Datenmigration, Schulung. Danach Betrieb mit Service-Vereinbarung und definierten Reaktionszeiten.</p><span class="price">PLATTFORM + SLA</span></div>
+    </div>
+    </div>
+    <p class="footnote"><b>Antwort auf Ihre Frage "Festpreis, Dienstleistung oder agil":</b> Festpreis im Rahmen, agil im Inhalt. Zusatzkosten wie Migration und Schulung stehen einzeln in der Offerte, nichts ist eingerechnet versteckt.</p>
+  </section>
+
+  <!-- ============ 14 · TEAM + ANSPRECHPARTNER ============ -->
+  <section class="slide" data-notes="Kurz halten. Ein Ansprechpartner mit Stellvertretung, direkte Erreichbarkeit der Gründer. Rollenverteilung final nach S6 (4.2). Visitenkarten/Print-Set übergeben (3.6).">
+    <div class="kicker"><b>// 13</b> · IHRE ANSPRECHPARTNER</div>
+    <h2>Direkter Draht zu denen, die bauen.</h2>
+    <div class="grid-2" style="max-width:900px">
+      <div class="card"><span class="cnr tl"></span><h3 style="font-size:19px;font-weight:700">Ihr Ansprechpartner</h3><p style="color:var(--muted);font-size:15px;margin-top:8px;line-height:1.6">Eine Person führt Ihr Projekt, mit benannter Stellvertretung. Entscheidungen, Status und Eskalation laufen über einen Kanal.</p><p style="margin-top:14px"><span class="todo">Name + Foto nach Rollen-Entscheid S6 (4.2)</span></p></div>
+      <div class="card"><span class="cnr br"></span><h3 style="font-size:19px;font-weight:700">Kontakt</h3><p style="color:var(--muted);font-size:15px;margin-top:8px;line-height:1.9">info@automatisierbar.ch<br>automatisierbar.ch<br><span class="todo">Telefon + Postadresse ergänzen (3.5)</span></p></div>
+    </div>
+    <p class="footnote">Wöchentlicher Status in Ihrer Inbox, Entscheidungs-Log einsehbar, keine Projektleiter-Rotation.</p>
+  </section>
+
+  <!-- ============ 15 · NÄCHSTE SCHRITTE ============ -->
+  <section class="slide" data-notes="BAMFAM: den Offerten-Präsentationstermin HIER im Raum fixieren, nicht 'wir melden uns'. Offerten-Datum konkret zusagen (realistisch: 2 Wochen nach Termin, intern Rohfassung 8.8.). pebe-Freigabe als dritten Punkt abholen. Danach danken, Besichtigung Hauswartung falls vereinbart.">
+    <div class="kicker"><b>// 14</b> · NÄCHSTE SCHRITTE</div>
+    <h2>Drei Zusagen, bevor wir gehen.</h2>
+    <div class="steps">
+      <div class="row card"><span class="n">1</span><div><h3>Sie erhalten die Offerte mit drei durchgerechneten Varianten</h3><p>inklusive 3-Jahres-Kostenvergleich und allem, was Ihre Ausschreibung verlangt. <span class="todo" style="margin-left:6px">Datum am Termin zusagen (Ziel: innert 2 Wochen)</span></p></div></div>
+      <div class="row card hl"><span class="n">2</span><div><h3>Wir fixieren jetzt den Termin für die Offerten-Präsentation</h3><p>45 Minuten, bei Ihnen oder online. Dann diskutieren wir Zahlen statt Vermutungen.</p></div></div>
+      <div class="row card"><span class="n">3</span><div><h3>Sie geben uns die Freigabe, mit der pebe AG direkt zu sprechen</h3><p>Unser Fragenkatalog liegt bereit. So steht die Integrations-Klärung schon in der Offerte statt danach.</p></div></div>
+    </div>
+    <p class="footnote">Danke für Ihre Zeit. Und falls möglich: Wir würden auf dem Weg nach draussen gerne der Hauswartung über die Schulter schauen.</p>
+  </section>
+
+</div></div>
+
+<div id="hud"><div id="bar"></div></div>
+<div id="counter">1 / 15</div>
+<div id="navhint">← → blättern · N Notizen</div>
+<button class="navbtn" id="prev" aria-label="Zurück">‹</button>
+<button class="navbtn" id="next" aria-label="Weiter">›</button>
+<div id="notes"><div class="nt">// REFERENTENNOTIZEN</div><p id="notes-text"></p></div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=Math.min(Math.max(parseInt(location.hash.slice(1),10)||1,1),slides.length)-1;
+  var bar=document.getElementById('bar'),counter=document.getElementById('counter');
+  var notes=document.getElementById('notes'),notesText=document.getElementById('notes-text');
+  var navhint=document.getElementById('navhint');
+
+  function show(n){
+    i=Math.min(Math.max(n,0),slides.length-1);
+    slides.forEach(function(s,k){s.classList.toggle('active',k===i)});
+    bar.style.width=((i+1)/slides.length*100)+'%';
+    counter.textContent=(i+1)+' / '+slides.length;
+    notesText.textContent=slides[i].getAttribute('data-notes')||'(keine Notizen)';
+    navhint.classList.toggle('hidden',i!==0);
+    history.replaceState(null,'','#'+(i+1));
+  }
+  function next(){show(i+1)} function prev(){show(i-1)}
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();next()}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev()}
+    else if(e.key==='Home'){show(0)} else if(e.key==='End'){show(slides.length-1)}
+    else if(e.key==='n'||e.key==='N'){notes.classList.toggle('open')}
+  });
+  document.getElementById('next').addEventListener('click',next);
+  document.getElementById('prev').addEventListener('click',prev);
+
+  window.addEventListener('hashchange',function(){
+    var n=parseInt(location.hash.slice(1),10);
+    if(n>=1&&n<=slides.length&&n-1!==i)show(n-1);
+  });
+
+  var tx=null;
+  document.addEventListener('touchstart',function(e){tx=e.changedTouches[0].clientX},{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(tx===null)return;
+    var dx=e.changedTouches[0].clientX-tx;
+    if(Math.abs(dx)>60){dx<0?next():prev()}
+    tx=null;
+  },{passive:true});
+
+  var stage=document.getElementById('stage');
+  function fit(){
+    var s=Math.min(window.innerWidth/1280,window.innerHeight/720);
+    stage.style.transform='scale('+s+')';
+  }
+  window.addEventListener('resize',fit);
+  fit(); show(i);
+})();
+</script>
+</body>
+</html>

@@ -25,23 +25,24 @@
 - [x] 1.5 v2: **Client-Vorab-Seite LIVE** /vrv/kunde (C, 10.7., 14 Tage vor Soll) — Link für vRv: `https://cockpit.automatisierbar.ch/vrv/kunde?k=Y-nEjyA6pcjrL-Qo9DqvZ-it` (Token in /etc/cockpit/env; Token löschen = Zugriff widerrufen). Versand an Schmid erst mit Vorab-Mail 4.1 nach Halt-Gate
 - [ ] 1.6 v2: Prototyp-Spec-Export (C, bis 28.7., darf nach dem 5.8. rutschen)
 - [ ] 1.7 Ernstfall-Test im Mock-Meeting S7 (alle, 1./2.8.)
+- [x] 1.8 SOP [workflows/tender_vrv_discovery.md](../workflows/tender_vrv_discovery.md) (C, 10.7.) — Betrieb, Zugänge, Widerruf, Meeting-Ablauf, Edge Cases; L2 / Bike-Phase 1
 
 ## Lane WS2: Upskilling (Sessions Di/Fr, 18:00 vorgeschlagen)
 
 - [ ] 2.0 Session-Termine im Team fixieren (J, "legen wir später fest" 10.7.) — Vorschlag bleibt Di/Fr 18:00
 - [x] 2.1 Primer + Quiz Modul 4 Immobilien-Domäne/Order2Cash/pebe FERTIG (C, 10.7.) → upskilling/modul-4-primer.md + modul-4-quiz.md; S1-Owner Nico, Termin folgt aus 2.0
-- [ ] 2.2 Primer + Quiz Modul 1 O365/Power Platform (C bis 16.7.) → S2 Fr 17.7. (Owner T)
+- [x] 2.2 Primer + Quiz Modul 1 O365/Power Platform FERTIG (C, 10.7., 6 Tage vor Soll) → upskilling/modul-1-primer.md + modul-1-quiz.md; S2-Owner Tej, Termin folgt aus 2.0
 - [ ] 2.3 Primer + Quiz Modul 2 Cybersecurity/IT-Infra (C bis 20.7.) → S3 Di 21.7. (Owner J) + Scope-Session
 - [ ] 2.4 Primer + Quiz Modul 3 Schweizer Compliance (C bis 23.7.) → S4 Fr 24.7. (Owner P)
 - [ ] 2.5 Primer + Quiz Modul 6 Integrations-Architektur (C bis 27.7.) → S5 Di 28.7. (Owner T)
 - [ ] 2.6 Primer + Quiz Modul 5 Projektleitung/Offerten (C bis 30.7.) → S6 Fr 31.7. (Owner J)
-- [ ] 2.7 Fragen-Bank "Was Schmid fragen wird" (50 Fragen + Musterantworten) (C, bis 25.7.)
+- [x] 2.7 Fragen-Bank "Was Schmid fragen wird" FERTIG (C, 10.7., 15 Tage vor Soll) → upskilling/fragen-bank-schmid.md: 50 Fragen in 8 Blöcken mit Musterantworten + Drill-Anleitung S7; [Stand prüfen]-Marker (Versicherung/Hosting/Rechtsform/SLA/Referenzen) vor 4.8. auflösen
 - [ ] 2.8 Mock-Meeting S7: Claude spielt Schmid/Guldimann/Kunz (alle, Sa 1.8. oder So 2.8.)
 - [ ] 2.9 Generalprobe S8: Deck, Demo, Tech-Check (alle, Mo 3.8. oder Di 4.8.)
 
 ## Lane WS3: Präsentation + Unterlagen
 
-- [ ] 3.1 Company-Deck ~15 Slides, Brand-Look Website (C baut, T owned Inhalt; Gerüst bis 18.7., v1 bis 24.7., final bis 31.7.)
+- [~] 3.1 Company-Deck ~15 Slides, Brand-Look Website (C baut, T owned Inhalt) — **Gerüst FERTIG 10.7.** (8 Tage vor Soll): deck/deck.html, 15 Folien, Browser-QA bestanden; Platzhalter-Chips (Fotos/Bios 3.5, Rechtsform 6.2, Referenz-Freigaben, Hosting 6.3, Kontakt) müssen vor S8 auf null; Referentennotizen mit Taste N; v1 nach Team-Feedback bis 24.7., final bis 31.7.
 - [ ] 3.2 Live-Demo-Dreh: Hub + Walk-in PWA + Ausgaben-PWA, Skript + Fallback-Screenshots (T+J, bis 27.7.)
 - [ ] 3.3 Referenzblätter Juglans/Bieri/KnowGravity/Gränacher (C entwirft bis 20.7.; Freigaben: T=Juglans, N=Bieri, J=KnowGravity+Gränacher, bis 28.7.)
 - [ ] 3.4 Security-Antwortpaket 2-3 Seiten (C+J, bis 28.7., braucht Hosting-Entscheid 6.3)
@@ -58,7 +59,7 @@
 
 ## Lane WS5: Offerte + Prototyp
 
-- [ ] 5.1 Offerten-Skelett nach ihrer Kapitelstruktur (C, Gliederung bis 22.7. nach Scope-Entscheid, final bis 31.7.)
+- [~] 5.1 Offerten-Skelett nach ihrer Kapitelstruktur — **Skelett FERTIG 10.7.**: offer/offerten-skelett.md mit Abdeckungs-Matrix (jede "Gewünschte Information" → Kapitel), Quellen-Legende (TOOL/Dossier/Task) und Arbeitsablauf nach 5.8.; Scope-abhängige Kapitel (10.x) nach Entscheid 21.7. fixieren, füllen ab 6.8.
 - [ ] 5.2 Architektur-Varianten-Papier A/B/C (C+J, bis 27.7.)
 - [ ] 5.3 Preismodell-Optionen: bezahlte Phasen, kein Gratis-Prototyp (J+C, bis 31.7.)
 - [ ] 5.4 Demo-Asset "Muster-Slice" Go/No-Go nach 0.10, dann Build (J, Entscheid 21.7.)
