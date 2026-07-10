@@ -7,10 +7,10 @@
 - [x] 0.1 Projekt-Scaffold `tender-vrv/` (C, 10.7.)
 - [~] 0.2 Hub-Projekt anlegen mit diesen Lanes (C+J, bis 12.7.)
 - [x] 0.3 decisions/log.md Eintrag (C, 10.7.)
-- [~] 0.4 Dossier A: pebeFinance Integrationsflächen (C, bis 14.7.) — projekt-kritisch
-- [~] 0.5 Dossier B: Software-Landschaft Immobilienverwaltung CH (C, bis 14.7.)
-- [~] 0.6 Dossier C: Variante Microsoft seriös bewertet (C, bis 14.7.)
-- [~] 0.7 Dossier D: Security/Compliance-Antwortkatalog (C, bis 14.7.)
+- [x] 0.4 Dossier A: pebeFinance Integrationsflächen (C, 10.7.) — Kernbefunde: kein API, CSV-Import braucht "Schnittstellen"-Lizenz, camt/QR als Zahlungs-Bus, ACHTUNG "pebe mobile" existiert (Einwand vorbereiten)
+- [x] 0.5 Dossier B: Software-Landschaft CH (C, 10.7.) — keine Suite mit pebe-Schnittstelle; gefährlichster Pitch: AbaImmo+AbaSmart; Mitbewerber-Landkarte drin
+- [x] 0.6 Dossier C: Variante Microsoft (C, 10.7.) — Planner-Grenzen verifiziert (20 Checklistenpunkte, kein GPS); Power Apps/Field Service als Preisanker; CH-Preise drin
+- [x] 0.7 Dossier D: Security/Compliance-Katalog (C, 10.7.) — BVSA/OAK-BV-statt-FINMA präzis belegt + sprechfähige Bausteine; Hosting-Empfehlung Exoscale/Infomaniak
 - [ ] 0.8 vRv-Deep-Recon: LinkedIn Schmid/Böni/Guldimann/Kunz, Facts-Seite, Handelsregister, Stiftungs-Mandate (N+C, bis 15.7.) — "mibo" = Mirjam Böni bereits identifiziert
 - [ ] 0.9 **Dossier E: Teilbereichs-Machbarkeitsanalyse** (C, bis 18.7.) — Kernstück, blockiert 0.10
 - [ ] 0.10 **Scope-Entscheidungs-Session** 45 min an S3 (alle 4, 21.7.) — je Teilbereich: selbst / Partner / nicht anbieten
