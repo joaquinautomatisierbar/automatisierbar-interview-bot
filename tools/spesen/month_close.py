@@ -32,7 +32,9 @@ def _safe(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", (s or "").strip())[:40] or "x"
 
 
-def build_month_data(knowbody: dict, jahr_monat: str, belege: list, attest: dict | None = None) -> dict:
+def build_month_data(knowbody: dict, jahr_monat: str, belege: list, attest: dict | None = None,
+                     verpflegung_days: list | None = None, kilometer: dict | None = None,
+                     verpflegung_summary: dict | None = None) -> dict:
     total = round(sum(float(b.get("betrag_chf") or 0) for b in belege), 2)
     kat_sums: dict = {}
     for b in belege:
@@ -40,6 +42,17 @@ def build_month_data(knowbody: dict, jahr_monat: str, belege: list, attest: dict
         kat_sums[k] = round(kat_sums.get(k, 0.0) + float(b.get("betrag_chf") or 0), 2)
     weiter = [b for b in belege if b.get("weiterverrechenbar")]
     summe_weiter = round(sum(float(b.get("betrag_chf") or 0) for b in weiter), 2)
+
+    # Verpflegungs-/Kilometerblatt totals (kept separate from receipts; the client
+    # sheet totals them independently). A None component means an unknown (placeholder)
+    # rate — then the combined payout is left None rather than a guessed number.
+    v_total = (verpflegung_summary or {}).get("verpflegung_total_chf")
+    km_entsch = ((verpflegung_summary or {}).get("km") or {}).get("entschaedigung_chf")
+    if v_total is None or km_entsch is None:
+        total_auszahlung = None
+    else:
+        total_auszahlung = round(total + v_total + km_entsch, 2)
+
     return {
         "knowbody": {"name": knowbody.get("name", ""), "email": knowbody.get("email", "")},
         "jahr_monat": jahr_monat,
@@ -51,6 +64,11 @@ def build_month_data(knowbody: dict, jahr_monat: str, belege: list, attest: dict
         "summe_weiter_chf": summe_weiter,
         "anzahl": len(belege),
         "attest": attest or None,
+        "verpflegung": {"days": verpflegung_days or [], "summary": verpflegung_summary or None},
+        "kilometer": kilometer or None,
+        "verpflegung_total_chf": v_total,
+        "km_entschaedigung_chf": km_entsch,
+        "total_auszahlung_chf": total_auszahlung,
     }
 
 
@@ -69,7 +87,12 @@ def close_month(knowbody_id: int, jahr_monat: str, accountant_email: str = "",
         return {"ok": False, "error": "KnowBody nicht gefunden"}
 
     belege = db.belege_for_month(knowbody_id, jahr_monat, include_kaffeekasse=False)
-    month_data = build_month_data(kb, jahr_monat, belege, attest=attest)
+    v_days = db.list_verpflegung_month(knowbody_id, jahr_monat)
+    v_summary = db.compute_verpflegung_summary(knowbody_id, jahr_monat)
+    km_row = db.get_kilometer_monat(knowbody_id, jahr_monat)
+    month_data = build_month_data(kb, jahr_monat, belege, attest=attest,
+                                  verpflegung_days=v_days, kilometer=km_row,
+                                  verpflegung_summary=v_summary)
 
     pdf_path = report_pdf.generate_spesen_pdf(month_data)
     xlsx_path = report_excel.generate_spesen_xlsx(month_data)
@@ -98,6 +121,8 @@ def close_month(knowbody_id: int, jahr_monat: str, accountant_email: str = "",
         pdf_pfad=pdf_path, xlsx_pfad=xlsx_path, zip_pfad=zip_path,
         bestaetigung_text=_att.get("text", ""), bestaetigt_von=_att.get("von", ""),
         bestaetigt_am=_att.get("am", ""),
+        verpflegung_total_chf=month_data["verpflegung_total_chf"],
+        km_entschaedigung_chf=month_data["km_entschaedigung_chf"],
     )
 
     return {

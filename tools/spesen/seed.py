@@ -1,15 +1,18 @@
-"""seed.py — demo data for KnowSpesen so a demo looks full + flowing.
+"""seed.py — demo + real seed data for KnowSpesen.
 
-seed_demo() (called by POST /api/spesen/setup-db {"seed_demo": true}, or directly):
-  - upserts Markus + 2 test KnowBodies with deterministic magic-link tokens
-  - if Markus has no belege this month, inserts a varied sample set (CHF, EUR,
-    weiterverrechenbar, a Kaffeekasse item, a Pauschale)
+seed_knowbodies() (go-live): upserts the 6 REAL KnowBodies (from Markus's mail of
+  2026-07-10, see references/knowgravity/markus-email-2026-07-10.md) with secure
+  random magic-link tokens. Idempotent — a token is generated once per person and
+  preserved on re-run so already-distributed links keep working.
 
-Real KnowBody names + emails replace these before go-live (see workflows/knowspesen.md).
+seed_demo() (demo only): upserts Markus + 2 fictional test KnowBodies with
+  deterministic 'demo-*' tokens and, if Markus has no belege this month, a varied
+  sample set (CHF, EUR, weiterverrechenbar, a Kaffeekasse item, a Pauschale).
 """
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -20,11 +23,39 @@ except ImportError:  # pragma: no cover
 
 TZ = ZoneInfo("Europe/Zurich")
 
+# The 6 real KnowBodies (name, email) — Markus Schacher, 2026-07-10.
+KNOWBODIES = [
+    ("Christian Bühler", "christian.buehler@knowgravity.com"),
+    ("Jonas Bucher", "jonas.bucher@knowgravity.com"),
+    ("Markus Schacher", "markus.schacher@knowgravity.com"),
+    ("Patrick Grässle", "patrick.graessle@knowgravity.com"),
+    ("Reto Schreppers", "reto.schreppers@knowgravity.com"),
+    ("Rolf Gubser", "rolf.gubser@knowgravity.com"),
+]
+
 DEMO_MEMBERS = [
     ("Markus Schacher", "markus.schacher@knowgravity.com", "demo-markus"),
     ("Anna Beispiel", "anna@knowgravity.com", "demo-anna"),
     ("Luca Muster", "luca@knowgravity.com", "demo-luca"),
 ]
+
+
+def seed_knowbodies() -> dict:
+    """Idempotently upsert the 6 real KnowBodies with secure random magic-link
+    tokens. A token is generated ONCE per person and preserved on re-run, so links
+    already handed out stay valid; a leftover 'demo-*' token is replaced on first
+    real run. Returns the list incl. magic links for distribution."""
+    db.init_db()
+    existing = {kb["email"]: kb for kb in db.list_knowbodies(active_only=False) if kb.get("email")}
+    out = []
+    for name, email in KNOWBODIES:
+        prev = existing.get(email)
+        keep = bool(prev and prev.get("login_token") and not prev["login_token"].startswith("demo-"))
+        tok = prev["login_token"] if keep else secrets.token_urlsafe(16)
+        kid = db.upsert_knowbody(name, email, tok)
+        out.append({"id": kid, "name": name, "email": email,
+                    "token": tok, "login": f"/spesen?k={tok}"})
+    return {"knowbodies": out, "count": len(out)}
 
 
 def _kf(betrag, pausch=False):
@@ -85,4 +116,8 @@ def seed_demo() -> dict:
 
 if __name__ == "__main__":
     import json
-    print(json.dumps(seed_demo(), ensure_ascii=False, indent=2))
+    import sys
+    if "--real" in sys.argv:
+        print(json.dumps(seed_knowbodies(), ensure_ascii=False, indent=2))
+    else:
+        print(json.dumps(seed_demo(), ensure_ascii=False, indent=2))

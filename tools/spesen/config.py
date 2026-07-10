@@ -45,11 +45,11 @@ def attestation_matches(typed: str) -> bool:
 # collected in the "Kaffeekasse" and excluded from the monthly ZIP.
 MIN_REIMBURSE_CHF = 50.0
 
-# OPEN QUESTION for the client (in the follow-up mail): the CHF-50 minimum is
-# stated for *Pauschalen*. Whether small *receipted* items (< 50, with a real
-# Beleg) should also be swept into the Kaffeekasse is unconfirmed. The bot-spec
-# generated from the client's own process said yes; we follow that by default,
-# but it is a one-line toggle once Markus confirms.
+# The CHF-50 minimum applies to *receipted* items too, not only Pauschalen: the
+# client's own "KNOWEXPENCESS" Spesenaufstellung (references/knowgravity/) prints
+# "erst Spesen ab 50.- können ausgewiesen werden" over the receipted-expense table.
+# So we keep the sweep on by default; the SharePoint/handling detail for those
+# small items is still open with Markus, but that no longer affects this toggle.
 KAFFEEKASSE_ALSO_SMALL_RECEIPTS = True
 
 
@@ -77,6 +77,9 @@ SUBCATEGORY_HINTS = {
 # --- Payment methods (Zahlungsart) ----------------------------------------------
 # From the interview: Firmenkreditkarte, private Kreditkarte, Cash, Revolut,
 # and the "Lieferantenrechnung an die Firma" (normaler Rechnungsprozess) path.
+# NOTE (2026-07-10): the client's real Spesenaufstellung uses a simpler taxonomy —
+# Bar / CC (Credit Card) / EC (EC-Debit). Aligning our list to theirs is a proposed
+# change flagged for Markus; left as-is until confirmed so no data model churn.
 PAYMENT_METHODS = [
     "Firmenkreditkarte",
     "Privat-Kreditkarte",
@@ -98,52 +101,52 @@ CURRENCIES = ["CHF", "EUR", "USD", "GBP"]
 # unit        'pauschale' (flat) | 'pro_km' | 'pro_nacht'
 # is_placeholder  True  -> rate unknown; UI shows "Tarif folgt", excluded from totals
 #
-# KNOWN (client stated these explicitly in the interview):
-#   - Mittagessen beim Kunden = CHF 30
-#   - Frühstück vor 8 Uhr      = CHF 10
-# UNKNOWN (built as placeholders, 1 edit each once the Regelwerk arrives):
-#   - Abendessen beim Kunden, Autokilometer, SBB-Klasse, Übernachtung
+# KNOWN — confirmed by the client's own example sheets (references/knowgravity/,
+# "Km_Verpflegungs-Spesen_2026_MS.pdf"), 2026-07-10:
+#   - Mittagessen              = CHF 30   (interview)
+#   - Frühstück (Start <07:30) = CHF 10   (interview; sheet trigger column "<07:30")
+#   - Nachtessen (Arbeit >19:30) = CHF 30 (sheet column header "SFr. 30")
+#   - Autokilometer            = CHF 0.70/km (derived: 200.00 CHF / 286 km); Firma-
+#                                Anteil = 5/7 der Monats-km (KM_FIRMA_FACTOR below)
+# STILL UNKNOWN (placeholder until the written Reglement arrives):
+#   - Übernachtung (no data in the examples)
+# REMOVED: sbb_pauschale — Markus confirmed SBB e-tickets are used directly as a
+#   receipt (a normal Beleg via PDF upload), so there is no SBB per-diem. Pruned
+#   from any existing DB in db._migrate().
 PAUSCHALTARIFE = [
     {
         "code": "mittagessen_kunde",
-        "label": "Mittagessen beim Kunden",
+        "label": "Mittagessen",
         "rate_chf": 30.0,
         "unit": "pauschale",
         "is_placeholder": False,
     },
     {
         "code": "fruehstueck_vor_8",
-        "label": "Frühstück vor 8 Uhr",
+        "label": "Frühstück (Start vor 07:30)",
         "rate_chf": 10.0,
         "unit": "pauschale",
         "is_placeholder": False,
     },
     {
         "code": "abendessen_kunde",
-        "label": "Abendessen beim Kunden",
-        "rate_chf": None,
+        "label": "Nachtessen (Arbeit über 19:30)",
+        "rate_chf": 30.0,
         "unit": "pauschale",
-        "is_placeholder": True,
+        "is_placeholder": False,
     },
     {
         "code": "auto_km",
         "label": "Autokilometer (pro km)",
-        "rate_chf": None,
+        "rate_chf": 0.70,
         "unit": "pro_km",
-        "is_placeholder": True,
+        "is_placeholder": False,
     },
     {
         "code": "uebernachtung",
         "label": "Übernachtungspauschale (pro Nacht)",
         "rate_chf": None,
         "unit": "pro_nacht",
-        "is_placeholder": True,
-    },
-    {
-        "code": "sbb_pauschale",
-        "label": "SBB-Pauschale",
-        "rate_chf": None,
-        "unit": "pauschale",
         "is_placeholder": True,
     },
 ]
@@ -163,3 +166,28 @@ def known_categories() -> set:
 
 def known_payment_methods() -> set:
     return set(PAYMENT_METHODS)
+
+
+# --- Verpflegungs- & Kilometerblatt (monthly per-diem grid) ---------------------
+# Mirrors the client's "Verpflegungs- und Kilometerspesen" sheet. All CHF figures
+# resolve through PAUSCHALTARIFE above (never hardcoded), so a rate change is still
+# one edit in this file.
+#
+# Meal slot -> PAUSCHALTARIFE code. The grid engine (verpflegung.py) looks up the
+# rate + is_placeholder by these codes, so a placeholder meal shows a count but
+# never a guessed CHF amount.
+VERPFLEGUNG_MEALS = {
+    "fruehstueck": "fruehstueck_vor_8",   # earned when the workday starts before 07:30
+    "mittag": "mittagessen_kunde",         # midday meal
+    "nacht": "abendessen_kunde",           # earned when work runs past 19:30
+}
+
+# How each claimed meal is covered on the sheet (VISA = company card, Bar = cash,
+# KS = Kaffeekasse). Validated at the route and enforced by a CHECK in db.py.
+DECKUNG_OPTIONS = ["VISA", "Bar", "KS"]
+
+# Kilometer: the company-reimbursed share defaults to 5/7 of the month's total km
+# (per the client sheet: "Gefahrene Kilometer Firma (5/7)"), overridable per month.
+# The per-km rate is the auto_km PAUSCHALTARIFE row.
+KM_CODE = "auto_km"
+KM_FIRMA_FACTOR = 5 / 7

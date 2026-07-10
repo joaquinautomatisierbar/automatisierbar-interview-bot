@@ -33,9 +33,9 @@ except Exception:
 # Import config robustly whether loaded as a package (api.py: `import spesen.db`)
 # or run directly as a script (`python3 tools/spesen/db.py`).
 try:
-    from . import config  # type: ignore
+    from . import config, verpflegung  # type: ignore
 except ImportError:  # pragma: no cover - direct-script run: tools/spesen is sys.path[0]
-    import config  # type: ignore
+    import config, verpflegung  # type: ignore
 
 TZ = ZoneInfo("Europe/Zurich")
 
@@ -131,6 +131,43 @@ CREATE TABLE IF NOT EXISTS belege (
 CREATE INDEX IF NOT EXISTS idx_belege_kb_month ON belege(knowbody_id, beleg_datum);
 CREATE INDEX IF NOT EXISTS idx_belege_close ON belege(monatsabschluss_id);
 
+-- Verpflegungs- & Kilometerblatt (monthly per-diem grid, mirrors the client sheet).
+CREATE TABLE IF NOT EXISTS verpflegung_tag (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  knowbody_id    INTEGER NOT NULL REFERENCES knowbodies(id),
+  tag_datum      TEXT NOT NULL,                       -- 'YYYY-MM-DD'
+  arb_vormittag  INTEGER NOT NULL DEFAULT 0,          -- V
+  arb_nachmittag INTEGER NOT NULL DEFAULT 0,          -- N
+  arb_spaet      INTEGER NOT NULL DEFAULT 0,          -- >19:30 -> Nachtessen
+  arb_frueh      INTEGER NOT NULL DEFAULT 0,          -- <07:30 -> Frühstück
+  fr_claimed     INTEGER NOT NULL DEFAULT 0,
+  fr_deckung     TEXT CHECK(fr_deckung IS NULL OR fr_deckung IN ('VISA','Bar','KS')),
+  mi_claimed     INTEGER NOT NULL DEFAULT 0,
+  mi_deckung     TEXT CHECK(mi_deckung IS NULL OR mi_deckung IN ('VISA','Bar','KS')),
+  na_claimed     INTEGER NOT NULL DEFAULT 0,
+  na_deckung     TEXT CHECK(na_deckung IS NULL OR na_deckung IN ('VISA','Bar','KS')),
+  bemerkung      TEXT,
+  monatsabschluss_id INTEGER REFERENCES monatsabschluesse(id),
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(knowbody_id, tag_datum)
+);
+CREATE INDEX IF NOT EXISTS idx_vtag_kb_month ON verpflegung_tag(knowbody_id, tag_datum);
+CREATE INDEX IF NOT EXISTS idx_vtag_close ON verpflegung_tag(monatsabschluss_id);
+
+CREATE TABLE IF NOT EXISTS kilometer_monat (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  knowbody_id    INTEGER NOT NULL REFERENCES knowbodies(id),
+  jahr_monat     TEXT NOT NULL,                        -- 'YYYY-MM'
+  km_start       REAL,                                 -- Stand Anfang Monat
+  km_end         REAL,                                 -- Stand Ende Monat
+  km_firma_override REAL,                              -- NULL => Total * KM_FIRMA_FACTOR
+  monatsabschluss_id INTEGER REFERENCES monatsabschluesse(id),
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(knowbody_id, jahr_monat)
+);
+
 CREATE TABLE IF NOT EXISTS feedback (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   knowbody_id INTEGER REFERENCES knowbodies(id),
@@ -175,6 +212,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column_if_missing(conn, "monatsabschluesse", "bestaetigung_text", "TEXT")
     _add_column_if_missing(conn, "monatsabschluesse", "bestaetigt_von", "TEXT")
     _add_column_if_missing(conn, "monatsabschluesse", "bestaetigt_am", "TEXT")
+    # Deprecated tariff: SBB is a normal Beleg (e-ticket PDF), not a per-diem
+    # (Markus, 2026-07-10). Prune the orphan row so it stops showing as an option.
+    conn.execute("DELETE FROM pauschaltarife WHERE code='sbb_pauschale'")
+    # Verpflegungs-/Kilometerblatt totals persisted on the close row (grid feature).
+    _add_column_if_missing(conn, "monatsabschluesse", "verpflegung_total_chf", "REAL")
+    _add_column_if_missing(conn, "monatsabschluesse", "km_entschaedigung_chf", "REAL")
     conn.commit()
 
 
@@ -367,6 +410,115 @@ def delete_beleg(beleg_id: int) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Verpflegungs- & Kilometerblatt (monthly per-diem grid)
+# ---------------------------------------------------------------------------
+
+_VTAG_COLS = (
+    "arb_vormittag", "arb_nachmittag", "arb_spaet", "arb_frueh",
+    "fr_claimed", "fr_deckung", "mi_claimed", "mi_deckung",
+    "na_claimed", "na_deckung", "bemerkung",
+)
+_KM_COLS = ("km_start", "km_end", "km_firma_override")
+
+
+def upsert_verpflegung_tag(knowbody_id: int, tag_datum: str, fields: dict) -> int:
+    """Insert or update one grid day (by knowbody+date). Only whitelisted columns
+    are taken. Refuses (returns 0) if the day is already locked by a month-close."""
+    cols = [c for c in _VTAG_COLS if c in fields]
+    conn = get_conn()
+    try:
+        existing = conn.execute(
+            "SELECT id, monatsabschluss_id FROM verpflegung_tag WHERE knowbody_id=? AND tag_datum=?",
+            (knowbody_id, tag_datum)).fetchone()
+        if existing and existing["monatsabschluss_id"] is not None:
+            return 0  # locked (month closed)
+        if existing:
+            if cols:
+                sets = ", ".join(f"{c}=?" for c in cols) + ", updated_at=?"
+                vals = [fields[c] for c in cols] + [now_iso(), existing["id"]]
+                conn.execute(f"UPDATE verpflegung_tag SET {sets} WHERE id=?", vals)
+                conn.commit()
+            return existing["id"]
+        allcols = ["knowbody_id", "tag_datum"] + cols
+        vals = [knowbody_id, tag_datum] + [fields[c] for c in cols]
+        ph = ", ".join("?" for _ in allcols)
+        cur = conn.execute(
+            f"INSERT INTO verpflegung_tag ({', '.join(allcols)}) VALUES ({ph})", vals)
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_verpflegung_tag(knowbody_id: int, tag_datum: str) -> dict | None:
+    conn = get_conn()
+    try:
+        return row_to_dict(conn.execute(
+            "SELECT * FROM verpflegung_tag WHERE knowbody_id=? AND tag_datum=?",
+            (knowbody_id, tag_datum)).fetchone())
+    finally:
+        conn.close()
+
+
+def list_verpflegung_month(knowbody_id: int, jahr_monat: str) -> list[dict]:
+    """All grid days for a KnowBody in a 'YYYY-MM' month, oldest first."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM verpflegung_tag WHERE knowbody_id=? AND substr(tag_datum,1,7)=? "
+            "ORDER BY tag_datum ASC", (knowbody_id, jahr_monat)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def upsert_kilometer_monat(knowbody_id: int, jahr_monat: str, fields: dict) -> int:
+    """Insert or update the month's kilometer row. Refuses (0) if month is closed."""
+    cols = [c for c in _KM_COLS if c in fields]
+    conn = get_conn()
+    try:
+        existing = conn.execute(
+            "SELECT id, monatsabschluss_id FROM kilometer_monat WHERE knowbody_id=? AND jahr_monat=?",
+            (knowbody_id, jahr_monat)).fetchone()
+        if existing and existing["monatsabschluss_id"] is not None:
+            return 0  # locked
+        if existing:
+            if cols:
+                sets = ", ".join(f"{c}=?" for c in cols) + ", updated_at=?"
+                vals = [fields[c] for c in cols] + [now_iso(), existing["id"]]
+                conn.execute(f"UPDATE kilometer_monat SET {sets} WHERE id=?", vals)
+                conn.commit()
+            return existing["id"]
+        allcols = ["knowbody_id", "jahr_monat"] + cols
+        vals = [knowbody_id, jahr_monat] + [fields[c] for c in cols]
+        ph = ", ".join("?" for _ in allcols)
+        cur = conn.execute(
+            f"INSERT INTO kilometer_monat ({', '.join(allcols)}) VALUES ({ph})", vals)
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_kilometer_monat(knowbody_id: int, jahr_monat: str) -> dict | None:
+    conn = get_conn()
+    try:
+        return row_to_dict(conn.execute(
+            "SELECT * FROM kilometer_monat WHERE knowbody_id=? AND jahr_monat=?",
+            (knowbody_id, jahr_monat)).fetchone())
+    finally:
+        conn.close()
+
+
+def compute_verpflegung_summary(knowbody_id: int, jahr_monat: str) -> dict:
+    """DB-backed convenience: fetch the month's grid days + km row + current tariff
+    rates and delegate to the pure verpflegung engine."""
+    rows = list_verpflegung_month(knowbody_id, jahr_monat)
+    km = get_kilometer_monat(knowbody_id, jahr_monat)
+    return verpflegung.compute_verpflegung_summary(rows, km, tariffs=list_pauschalen())
+
+
+# ---------------------------------------------------------------------------
 # Monatsabschluss
 # ---------------------------------------------------------------------------
 
@@ -439,10 +591,12 @@ def finalize_close(knowbody_id: int, jahr_monat: str, *, summe_chf: float,
                    summe_weiter_chf: float, anzahl: int, beleg_ids: list[int],
                    pdf_pfad: str = "", xlsx_pfad: str = "", zip_pfad: str = "",
                    bestaetigung_text: str = "", bestaetigt_von: str = "",
-                   bestaetigt_am: str = "") -> int:
+                   bestaetigt_am: str = "", verpflegung_total_chf=None,
+                   km_entschaedigung_chf=None) -> int:
     """Atomically: upsert the monatsabschluss row (incl. the typed Kontroll-
-    Bestätigung), then lock every included beleg by stamping its monatsabschluss_id.
-    Re-closing a month overwrites artifacts and re-locks the current set. Returns id."""
+    Bestätigung + Verpflegungs-/Km-Totals), then lock every included beleg AND all
+    grid/km rows of the month by stamping monatsabschluss_id. Re-closing a month
+    overwrites artifacts and re-locks the current set. Returns id."""
     conn = get_conn()
     try:
         conn.execute("BEGIN")
@@ -454,26 +608,41 @@ def finalize_close(knowbody_id: int, jahr_monat: str, *, summe_chf: float,
             conn.execute(
                 "UPDATE monatsabschluesse SET summe_chf=?, summe_weiterverrechenbar_chf=?, "
                 "anzahl_belege=?, pdf_pfad=?, xlsx_pfad=?, zip_pfad=?, geschlossen_am=?, "
-                "bestaetigung_text=?, bestaetigt_von=?, bestaetigt_am=? WHERE id=?",
+                "bestaetigung_text=?, bestaetigt_von=?, bestaetigt_am=?, "
+                "verpflegung_total_chf=?, km_entschaedigung_chf=? WHERE id=?",
                 (summe_chf, summe_weiter_chf, anzahl, pdf_pfad, xlsx_pfad, zip_pfad, now_iso(),
-                 bestaetigung_text or None, bestaetigt_von or None, bestaetigt_am or None, ma_id),
+                 bestaetigung_text or None, bestaetigt_von or None, bestaetigt_am or None,
+                 verpflegung_total_chf, km_entschaedigung_chf, ma_id),
             )
-            # release any previously-locked belege for this month before re-locking the current set
+            # release any previously-locked belege + grid/km rows before re-locking the current set
             conn.execute("UPDATE belege SET monatsabschluss_id=NULL WHERE monatsabschluss_id=?", (ma_id,))
+            conn.execute("UPDATE verpflegung_tag SET monatsabschluss_id=NULL WHERE monatsabschluss_id=?", (ma_id,))
+            conn.execute("UPDATE kilometer_monat SET monatsabschluss_id=NULL WHERE monatsabschluss_id=?", (ma_id,))
         else:
             cur = conn.execute(
                 "INSERT INTO monatsabschluesse (knowbody_id, jahr_monat, summe_chf, "
                 "summe_weiterverrechenbar_chf, anzahl_belege, pdf_pfad, xlsx_pfad, zip_pfad, "
-                "bestaetigung_text, bestaetigt_von, bestaetigt_am) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "bestaetigung_text, bestaetigt_von, bestaetigt_am, "
+                "verpflegung_total_chf, km_entschaedigung_chf) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (knowbody_id, jahr_monat, summe_chf, summe_weiter_chf, anzahl, pdf_pfad, xlsx_pfad,
-                 zip_pfad, bestaetigung_text or None, bestaetigt_von or None, bestaetigt_am or None),
+                 zip_pfad, bestaetigung_text or None, bestaetigt_von or None, bestaetigt_am or None,
+                 verpflegung_total_chf, km_entschaedigung_chf),
             )
             ma_id = cur.lastrowid
         for bid in beleg_ids:
             conn.execute(
                 "UPDATE belege SET monatsabschluss_id=?, updated_at=? WHERE id=? AND knowbody_id=?",
                 (ma_id, now_iso(), bid, knowbody_id))
+        # lock the whole month's grid + km (month-keyed, avoids threading 31 ids)
+        conn.execute(
+            "UPDATE verpflegung_tag SET monatsabschluss_id=?, updated_at=? "
+            "WHERE knowbody_id=? AND substr(tag_datum,1,7)=?",
+            (ma_id, now_iso(), knowbody_id, jahr_monat))
+        conn.execute(
+            "UPDATE kilometer_monat SET monatsabschluss_id=?, updated_at=? "
+            "WHERE knowbody_id=? AND jahr_monat=?",
+            (ma_id, now_iso(), knowbody_id, jahr_monat))
         conn.commit()
         return ma_id
     except Exception:
@@ -522,6 +691,12 @@ def reopen_close(knowbody_id: int, jahr_monat: str) -> bool:
         ma_id = row["id"]
         conn.execute(
             "UPDATE belege SET monatsabschluss_id=NULL, updated_at=? WHERE monatsabschluss_id=?",
+            (now_iso(), ma_id))
+        conn.execute(
+            "UPDATE verpflegung_tag SET monatsabschluss_id=NULL, updated_at=? WHERE monatsabschluss_id=?",
+            (now_iso(), ma_id))
+        conn.execute(
+            "UPDATE kilometer_monat SET monatsabschluss_id=NULL, updated_at=? WHERE monatsabschluss_id=?",
             (now_iso(), ma_id))
         conn.execute("DELETE FROM monatsabschluesse WHERE id=?", (ma_id,))
         conn.commit()

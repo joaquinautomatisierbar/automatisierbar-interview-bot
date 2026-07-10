@@ -59,6 +59,12 @@ db.insert_beleg({"knowbody_id": kb, "art": "beleg", "haendler": "Mai-Beleg",
                  "betrag_chf": 99.0, "kategorie": "Mahlzeit", "zahlungsart": "Firmenkreditkarte",
                  "weiterverrechenbar": 0, "ist_kaffeekasse": 0})
 
+# Verpflegungs-/Kilometerblatt (grid): 2 lunches + 1 dinner (= 90.00) + km 700 (=350.00)
+db.upsert_verpflegung_tag(kb, "2026-06-10", {"mi_claimed": 1, "mi_deckung": "VISA"})
+db.upsert_verpflegung_tag(kb, "2026-06-11", {"mi_claimed": 1, "mi_deckung": "KS",
+                                             "na_claimed": 1, "na_deckung": "Bar"})
+db.upsert_kilometer_monat(kb, "2026-06", {"km_start": 10000, "km_end": 10700})
+
 res = month_close.close_month(kb, "2026-06", accountant_email="buchhaltung@gubser-kalt.ch")
 
 check("close ok", res.get("ok") is True)
@@ -90,6 +96,15 @@ kaffee = [r for r in rows if r["ist_kaffeekasse"] == 1]
 check("2 Belege gesperrt", len(locked) == 2)
 check("Kaffeekasse NICHT gesperrt", kaffee and kaffee[0]["monatsabschluss_id"] is None)
 
+# --- grid: totals persisted + grid/km locked ---
+close_row = db.get_close(kb, "2026-06")
+check("Verpflegung total 90 persisted", abs((close_row["verpflegung_total_chf"] or 0) - 90.0) < 0.001)
+check("Km-Entschädigung 350 persisted", abs((close_row["km_entschaedigung_chf"] or 0) - 350.0) < 0.001)
+vlocked = [r for r in db.list_verpflegung_month(kb, "2026-06") if r["monatsabschluss_id"] is not None]
+check("2 Grid-Tage gesperrt", len(vlocked) == 2)
+check("Grid-Upsert nach Abschluss verweigert", db.upsert_verpflegung_tag(kb, "2026-06-10", {"mi_claimed": 0}) == 0)
+check("km-Zeile gesperrt", db.get_kilometer_monat(kb, "2026-06")["monatsabschluss_id"] is not None)
+
 # locked beleg can't be edited/deleted
 locked_id = locked[0]["id"]
 check("gesperrter Beleg nicht editierbar", db.update_beleg(locked_id, {"haendler": "x"}) is False)
@@ -104,6 +119,10 @@ check("reopen ok", db.reopen_close(kb, "2026-06") is True)
 rows2 = db.list_belege(kb, "2026-06")
 check("nach reopen: keine Sperre mehr", all(r["monatsabschluss_id"] is None for r in rows2))
 check("nach reopen: get_close None", db.get_close(kb, "2026-06") is None)
+check("nach reopen: Grid entsperrt",
+      all(r["monatsabschluss_id"] is None for r in db.list_verpflegung_month(kb, "2026-06")))
+check("nach reopen: km entsperrt", db.get_kilometer_monat(kb, "2026-06")["monatsabschluss_id"] is None)
+check("nach reopen: Grid wieder editierbar", db.upsert_verpflegung_tag(kb, "2026-06-10", {"mi_claimed": 0}) > 0)
 check("nach reopen: Beleg wieder editierbar", db.update_beleg(locked_id, {"haendler": "Hiltl neu"}) is True)
 check("reopen ohne Abschluss -> False", db.reopen_close(kb, "2030-01") is False)
 

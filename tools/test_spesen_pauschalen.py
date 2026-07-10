@@ -29,17 +29,21 @@ check("Betrag None -> nicht Kaffeekasse", pauschalen.is_kaffeekasse(None, ist_pa
 expected_small = bool(config.KAFFEEKASSE_ALSO_SMALL_RECEIPTS)
 check("Beleg 12.00 folgt Config-Toggle", pauschalen.is_kaffeekasse(12.00, ist_pauschale=False) is expected_small)
 
-# --- Known flat tariffs (client-stated) -------------------------------------
+# --- Known flat tariffs (client-confirmed via example sheets, 2026-07-10) ----
 mittag = pauschalen.resolve_by_code("mittagessen_kunde")
-check("Mittagessen beim Kunden = 30.00", mittag["ok"] and mittag["betrag_chf"] == 30.00)
+check("Mittagessen = 30.00", mittag["ok"] and mittag["betrag_chf"] == 30.00)
 frueh = pauschalen.resolve_by_code("fruehstueck_vor_8")
-check("Frühstück vor 8 Uhr = 10.00", frueh["ok"] and frueh["betrag_chf"] == 10.00)
-
-# --- Unknown tariff is a guarded placeholder, never a number ----------------
+check("Frühstück = 10.00", frueh["ok"] and frueh["betrag_chf"] == 10.00)
+nachtessen = pauschalen.resolve_by_code("abendessen_kunde")
+check("Nachtessen = 30.00", nachtessen["ok"] and nachtessen["betrag_chf"] == 30.00)
 autokm = pauschalen.resolve_by_code("auto_km")
-check("Autokilometer -> Platzhalter, kein Betrag",
-      autokm["ok"] is False and autokm["is_placeholder"] is True and autokm["betrag_chf"] is None)
-check("Autokilometer -> 'Tarif folgt' Meldung", "Tarif folgt" in (autokm["error"] or ""))
+check("Autokilometer = 0.70/km", autokm["ok"] and autokm["betrag_chf"] == 0.70)
+
+# --- Still-unknown tariff is a guarded placeholder, never a number -----------
+uebern = pauschalen.resolve_by_code("uebernachtung")
+check("Übernachtung -> Platzhalter, kein Betrag",
+      uebern["ok"] is False and uebern["is_placeholder"] is True and uebern["betrag_chf"] is None)
+check("Übernachtung -> 'Tarif folgt' Meldung", "Tarif folgt" in (uebern["error"] or ""))
 
 # --- per-km / per-night multiply (synthetic known rate) ---------------------
 km = pauschalen.resolve_pauschale(

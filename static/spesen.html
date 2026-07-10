@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1B2A4A">
+<meta name="theme-color" content="#004040">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="KnowSpesen">
@@ -16,16 +16,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#F4F6FA; --card:#FFFFFF; --surface:#F7F9FC;
-    --border:#E3E8EF; --border-2:#D2DAE6;
-    --navy:#1B2A4A; --navy-deep:#11203B; --navy-soft:#2C4068;
-    --ink:#1F2933; --muted:#6B7785; --dim:#94A0AE;
-    --blue:#2E6BE6; --green:#0F7B4F; --green-soft:#E7F4EE;
+    /* KnowGravity brand: deep petrol #004040 + teal #00A090 + mint accent.
+       --navy/--navy-*/--blue keep their names (used 24x) but carry the new hues. */
+    --bg:#F1F6F5; --card:#FFFFFF; --surface:#F4F9F8;
+    --border:#DCE8E6; --border-2:#C6DAD6;
+    --navy:#004040; --navy-deep:#00302F; --navy-soft:#0C5A53;
+    --ink:#132422; --muted:#5B7370; --dim:#8CA6A2;
+    --blue:#00897B; --green:#0F7B4F; --green-soft:#E4F4EC;
+    --mint:#12C99A;
     --red:#DC2626; --amber:#B45309; --amber-soft:#FBF3E6;
     --radius:16px; --radius-sm:11px; --radius-pill:999px;
     --ease:.18s cubic-bezier(.2,.6,.2,1);
-    --shadow:0 1px 2px rgba(16,32,64,.04),0 8px 24px rgba(16,32,64,.06);
-    --shadow-lg:0 12px 40px rgba(16,32,64,.18);
+    --shadow:0 1px 2px rgba(0,48,46,.05),0 8px 24px rgba(0,48,46,.07);
+    --shadow-lg:0 12px 40px rgba(0,48,46,.20);
     --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   }
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -41,8 +44,9 @@
 
   /* header */
   header{display:flex;align-items:center;gap:11px;padding:8px 4px 16px}
-  .logo{width:38px;height:38px;border-radius:11px;flex:none;background:var(--navy);
-    display:grid;place-items:center;box-shadow:0 6px 16px rgba(27,42,74,.22)}
+  .logo{width:38px;height:38px;border-radius:11px;flex:none;background:#fff;border:1px solid var(--border);
+    display:grid;place-items:center;box-shadow:0 6px 16px rgba(0,48,46,.14)}
+  .logo img{width:27px;height:27px;object-fit:contain}
   .logo svg{width:21px;height:21px;color:#fff}
   .brand b{font-weight:800;letter-spacing:-.3px;font-size:17px;display:block;color:var(--navy)}
   .brand .sub{color:var(--dim);font-size:11.5px;font-weight:600;letter-spacing:.2px}
@@ -61,11 +65,11 @@
   .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 15px;box-shadow:var(--shadow)}
   .kpi.total{grid-column:1 / -1;background:var(--navy);border-color:var(--navy)}
   .kpi .l{font-size:11.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-  .kpi.total .l{color:#AEBBD4}
+  .kpi.total .l{color:#9DC3BE}
   .kpi .v{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-top:3px;color:var(--ink)}
   .kpi.total .v{color:#fff;font-size:30px}
   .kpi .v small{font-size:14px;font-weight:700;color:var(--dim)}
-  .kpi.total .v small{color:#AEBBD4}
+  .kpi.total .v small{color:#9DC3BE}
   .kpi.sub .v{font-size:19px}
   .kpi .v.green{color:var(--green)} .kpi .v.amber{color:var(--amber)}
 
@@ -99,7 +103,7 @@
   input,select,textarea{
     width:100%;font-family:var(--sans);font-size:16px;color:var(--ink);background:#fff;
     border:1px solid var(--border-2);border-radius:var(--radius-sm);padding:12px 13px;transition:var(--ease);-webkit-appearance:none;appearance:none}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,42,74,.12)}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(0,64,64,.14)}
   textarea{min-height:74px;resize:vertical}
   select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7785' stroke-width='1.7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:34px}
   .hint{font-size:11.5px;color:var(--dim);margin:5px 2px 0}
@@ -170,12 +174,48 @@
     padding:12px 18px;border-radius:var(--radius-pill);box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:.22s;z-index:80}
   .toast.show{opacity:1}
   .toast.err{background:var(--red)} .toast.warn{background:var(--amber)}
+
+  /* Verpflegung & Kilometer grid */
+  .segtabs{display:flex;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-pill);padding:4px;margin:0 2px 14px}
+  .segtab{flex:1;min-width:0;border:none;background:transparent;padding:9px 6px;border-radius:var(--radius-pill);font:inherit;font-weight:700;font-size:13px;color:var(--muted);cursor:pointer;transition:var(--ease);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .segtab.active{background:#fff;color:var(--navy);box-shadow:var(--shadow)}
+  .vday{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 11px 10px;margin-bottom:7px}
+  .vday.we{background:var(--surface)}
+  .vday.claimed{border-color:var(--navy-soft);box-shadow:0 0 0 1px var(--navy-soft) inset}
+  .vday-top{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .vday-date{font-weight:700;font-size:13px;color:var(--ink);min-width:58px;white-space:nowrap}
+  .vday-date .wd{color:var(--dim);font-weight:600;margin-right:4px}
+  .vday-bem{flex:1;min-width:0;border:1px solid var(--border);border-radius:8px;padding:6px 9px;font:inherit;font-size:12.5px;color:var(--ink);background:#fff}
+  .vday-bem:disabled{background:var(--surface);color:var(--muted)}
+  .meals{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+  .mealwrap{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+  .chip{border:1px solid var(--border-2);background:#fff;border-radius:var(--radius-pill);padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;transition:var(--ease)}
+  .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .chip:disabled{opacity:.55;cursor:default}
+  .deck{display:flex;gap:3px}
+  .deck button{border:1px solid var(--border);background:#fff;border-radius:7px;padding:3px 8px;font:inherit;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer}
+  .deck button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .deck button:disabled{opacity:.55;cursor:default}
+  .att{display:flex;gap:14px;flex-wrap:wrap}
+  .att label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);font-weight:600;cursor:pointer}
+  .att input{width:16px;height:16px;accent-color:var(--navy)}
+  .km-inputs{display:flex;flex-direction:column;gap:11px}
+  .km-inputs label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:var(--muted)}
+  .km-inputs input{border:1px solid var(--border-2);border-radius:9px;padding:10px 11px;font:inherit;font-size:15px;color:var(--ink);background:#fff}
+  .km-inputs input:disabled{background:var(--surface);color:var(--muted)}
+  .km-derived{margin-top:13px;border-top:1px solid var(--border);padding-top:11px;display:flex;flex-direction:column;gap:7px}
+  .km-derived>div{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+  .km-derived b{color:var(--ink);font-weight:700}
+  .km-derived .tot{padding-top:6px;border-top:1px dashed var(--border)}
+  .km-derived .tot b{color:var(--navy);font-size:16px}
+  /* desktop: show the day-list two-up */
+  @media (min-width:900px){ #vp-list{display:grid;grid-template-columns:1fr 1fr;gap:7px} #vp-list .vday{margin-bottom:0} }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <span class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17l-2.5-1.5L13 22l-2.5-1.5L8 22l-2-1.3V2z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></span>
+    <span class="logo"><img src="/static/knowgravity-mark.png" alt="KnowGravity" width="27" height="27"></span>
     <div class="brand"><b>KnowSpesen</b><span class="sub">KnowGravity Inc.</span></div>
     <span class="who hidden" id="who">…</span>
     <button class="hidden" id="fb-btn" aria-label="Feedback senden" title="Nachricht an den Entwickler" style="margin-left:8px;width:38px;height:38px;border-radius:11px;border:1px solid var(--border-2);background:#fff;color:var(--navy);font-size:17px;cursor:pointer;box-shadow:var(--shadow);flex:none">✉</button>
@@ -189,6 +229,12 @@
       <button class="mnav" id="m-next" aria-label="Nächster Monat">›</button>
     </div>
 
+    <div class="segtabs">
+      <button class="segtab active" id="tab-belege" type="button">Belege</button>
+      <button class="segtab" id="tab-verpflegung" type="button">Verpflegung &amp; Km</button>
+    </div>
+
+    <div id="dash-belege">
     <div class="kpis">
       <div class="kpi total"><div class="l">Total Monat</div><div class="v"><small>CHF</small> <span id="k-total">0.00</span></div></div>
       <div class="kpi sub"><div class="l">Belege</div><div class="v" id="k-count">0</div></div>
@@ -215,6 +261,37 @@
     </div>
 
     <div id="storage-note" class="hidden" style="text-align:center;color:var(--dim);font-size:11.5px;margin:16px 2px 2px;line-height:1.5"></div>
+    </div><!-- /dash-belege -->
+
+    <!-- ===== Verpflegung & Kilometer ===== -->
+    <div id="dash-verpflegung" class="hidden">
+      <div class="kpis">
+        <div class="kpi total"><div class="l">Verpflegung</div><div class="v"><small>CHF</small> <span id="vp-k-verpflegung">0.00</span></div></div>
+        <div class="kpi sub"><div class="l">Tage erfasst</div><div class="v" id="vp-k-tage">0</div></div>
+        <div class="kpi sub"><div class="l">Km CHF</div><div class="v green" id="vp-k-km">0.00</div></div>
+      </div>
+      <div class="card hidden" id="vp-closed" style="border-color:#CDE9DB;background:var(--green-soft)">
+        <div style="font-weight:700;color:var(--green);font-size:14px">✓ Monat abgeschlossen</div>
+        <div class="hint" style="color:var(--green)">Verpflegung und Kilometer sind gesperrt. Öffne den Monat unter «Belege», um zu bearbeiten.</div>
+      </div>
+      <p class="hint" id="vp-intro" style="margin:0 2px 10px">Tippe pro Tag an, welche Mahlzeit-Pauschale du beziehst (und wie gedeckt), und markiere deine Arbeitszeiten. Wird automatisch gespeichert.</p>
+      <div id="vp-list"></div>
+      <div class="card" id="vp-km" style="margin-top:8px">
+        <div style="font-weight:800;color:var(--navy);font-size:14px;margin-bottom:12px">Kilometerspesen</div>
+        <div class="km-inputs">
+          <label>Kilometerstand Anfang Monat<input id="km-start" inputmode="decimal" autocomplete="off" placeholder="z.B. 58900"></label>
+          <label>Kilometerstand Ende Monat<input id="km-end" inputmode="decimal" autocomplete="off" placeholder="z.B. 59300"></label>
+          <label>Geschäftliche km (optional, überschreibt 5/7)<input id="km-firma" inputmode="decimal" autocomplete="off" placeholder="Standard: 5/7 der gefahrenen km"></label>
+        </div>
+        <div class="km-derived">
+          <div><span>Gefahren total</span><b id="km-total">—</b></div>
+          <div><span>Geschäftlich (5/7)</span><b id="km-firma-calc">—</b></div>
+          <div><span>Ansatz</span><b id="km-rate">—</b></div>
+          <div class="tot"><span>Km-Entschädigung</span><b id="km-entsch">CHF 0.00</b></div>
+        </div>
+      </div>
+      <div id="vp-total-note" style="text-align:center;color:var(--navy);font-weight:700;font-size:13px;margin:16px 2px 2px"></div>
+    </div>
   </div>
 
   <!-- ============ CAPTURE ============ -->
@@ -411,10 +488,10 @@ let CFG=null, CUR={year:0,month:0}, selectedFile=null, lastClose=null, editingId
 /* ---------- month helpers ---------- */
 function ym(){return CUR.year+'-'+pad(CUR.month);}
 function setMonthLabel(){$('m-label').textContent=MONTHS[CUR.month]+' '+CUR.year;}
-function shiftMonth(d){let m=CUR.month+d,y=CUR.year;if(m<1){m=12;y--;}if(m>12){m=1;y++;}CUR.month=m;CUR.year=y;setMonthLabel();loadDash();}
+function shiftMonth(d){let m=CUR.month+d,y=CUR.year;if(m<1){m=12;y--;}if(m>12){m=1;y++;}CUR.month=m;CUR.year=y;setMonthLabel();refreshPane();}
 
 /* ---------- view switching ---------- */
-function showDash(){editingId=null;editingBeleg=null;hide($('view-capture'));show($('view-dash'));show($('bottombar'));setMonthLabel();loadDash();}
+function showDash(){editingId=null;editingBeleg=null;hide($('view-capture'));show($('view-dash'));show($('bottombar'));setMonthLabel();setPane('belege');loadDash();}
 function showCapture(){resetForm();hide($('view-dash'));show($('view-capture'));hide($('bottombar'));}
 
 /* ---------- config + dropdowns ---------- */
@@ -463,6 +540,101 @@ async function loadDash(){
   }catch(e){if(e&&e.auth)return gate();toast('Laden fehlgeschlagen',true);}
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- Verpflegung & Kilometer ---------- */
+let CURPANE='belege', vpDays=[], vpClosed=false;
+const VP_SLOTS=[['fr','fr_claimed','fr_deckung','Frühstück'],['mi','mi_claimed','mi_deckung','Mittag'],['na','na_claimed','na_deckung','Nacht']];
+const VP_ATT=[['arb_vormittag','V'],['arb_nachmittag','N'],['arb_spaet','>19:30'],['arb_frueh','<07:30']];
+
+function setPane(p){CURPANE=p;
+  $('tab-belege').classList.toggle('active',p==='belege');
+  $('tab-verpflegung').classList.toggle('active',p==='verpflegung');
+  $('dash-belege').classList.toggle('hidden',p!=='belege');
+  $('dash-verpflegung').classList.toggle('hidden',p!=='verpflegung');
+}
+function openPane(p){setPane(p);if(p==='verpflegung')loadVerpflegung();else loadDash();}
+function refreshPane(){if(CURPANE==='verpflegung')loadVerpflegung();else loadDash();}
+function findDay(datum){return vpDays.find(x=>x.datum===datum);}
+
+function mealChipHtml(d,slot,claimKey,deckKey,label,closed){
+  const on=!!d[claimKey];
+  let h='<div class="mealwrap"><button type="button" class="chip'+(on?' on':'')+'" data-datum="'+d.datum+'" data-slot="'+slot+'"'+(closed?' disabled':'')+'>'+label+'</button>';
+  if(on){const opts=(CFG.verpflegung&&CFG.verpflegung.deckung_options)||['VISA','Bar','KS'];
+    h+='<div class="deck">'+opts.map(o=>'<button type="button" class="'+(d[deckKey]===o?'on':'')+'" data-datum="'+d.datum+'" data-slot="'+slot+'" data-deck="'+o+'"'+(closed?' disabled':'')+'>'+o+'</button>').join('')+'</div>';}
+  return h+'</div>';
+}
+function cardHtml(d,closed){
+  const claimedAny=d.fr_claimed||d.mi_claimed||d.na_claimed;
+  const p=String(d.datum).split('-');const dm=p[2]+'.'+p[1]+'.';
+  const meals=VP_SLOTS.map(([s,ck,dk,lb])=>mealChipHtml(d,s,ck,dk,lb,closed)).join('');
+  const att=VP_ATT.map(([k,lbl])=>'<label><input type="checkbox" data-datum="'+d.datum+'" data-att="'+k+'"'+(d[k]?' checked':'')+(closed?' disabled':'')+'>'+lbl+'</label>').join('');
+  return '<div class="vday'+(d.is_weekend?' we':'')+(claimedAny?' claimed':'')+'" data-datum="'+d.datum+'">'
+    +'<div class="vday-top"><span class="vday-date"><span class="wd">'+esc(d.weekday)+'</span>'+dm+'</span>'
+    +'<input class="vday-bem" data-datum="'+d.datum+'" placeholder="Bemerkung (z.B. Kunde)" value="'+esc(d.bemerkung||'')+'"'+(closed?' disabled':'')+'></div>'
+    +'<div class="meals">'+meals+'</div><div class="att">'+att+'</div></div>';
+}
+function renderVdays(){ $('vp-list').innerHTML=vpDays.map(d=>cardHtml(d,vpClosed)).join(''); }
+
+async function loadVerpflegung(){
+  try{
+    const d=await api('/api/spesen/verpflegung?month='+ym());
+    vpDays=d.days||[];vpClosed=!!d.closed;
+    $('vp-closed').classList.toggle('hidden',!vpClosed);
+    $('vp-intro').classList.toggle('hidden',vpClosed);
+    renderVdays();
+    const k=d.kilometer||{};
+    $('km-start').value=k.km_start!=null?k.km_start:'';
+    $('km-end').value=k.km_end!=null?k.km_end:'';
+    $('km-firma').value=k.km_firma_override!=null?k.km_firma_override:'';
+    ['km-start','km-end','km-firma'].forEach(id=>{$(id).disabled=vpClosed;});
+    applyVSummary(d.summary);
+  }catch(e){if(e&&e.auth)return gate();toast('Laden fehlgeschlagen',true);}
+}
+
+function applyVSummary(s){
+  if(!s)return;
+  $('vp-k-verpflegung').textContent=s.verpflegung_total_chf==null?'—':chf(s.verpflegung_total_chf);
+  $('vp-k-tage').textContent=vpDays.filter(d=>d.fr_claimed||d.mi_claimed||d.na_claimed).length;
+  const km=s.km||{};
+  $('vp-k-km').textContent=km.entschaedigung_chf==null?'—':chf(km.entschaedigung_chf);
+  $('km-total').textContent=km.total==null?'—':(km.total+' km');
+  $('km-firma-calc').textContent=km.firma==null?'—':(km.firma+' km'+(km.firma_is_override?' (manuell)':' (5/7)'));
+  $('km-rate').textContent=km.is_placeholder?'Tarif folgt':('CHF '+chf(km.rate_chf)+'/km');
+  $('km-entsch').textContent=km.entschaedigung_chf==null?'Tarif folgt':('CHF '+chf(km.entschaedigung_chf));
+  $('vp-total-note').textContent=s.gesamttotal_chf==null?'':('Total Verpflegung + Km: CHF '+chf(s.gesamttotal_chf));
+}
+
+async function patchDay(datum,patch,rerender){
+  if(vpClosed)return;
+  try{
+    const r=await api('/api/spesen/verpflegung/'+datum,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+    if(r.day)Object.assign(findDay(datum),r.day);
+    if(rerender){const el=$('vp-list').querySelector('.vday[data-datum="'+datum+'"]');if(el)el.outerHTML=cardHtml(findDay(datum),vpClosed);}
+    applyVSummary(r.summary);
+  }catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Speichern fehlgeschlagen','err');}
+}
+let bemT={};
+function saveBem(datum,val){clearTimeout(bemT[datum]);bemT[datum]=setTimeout(()=>{const c=findDay(datum);if(c)c.bemerkung=val;patchDay(datum,{bemerkung:val},false);},600);}
+
+/* client-side km preview for instant feedback (server is authoritative on save) */
+function kmPreview(){
+  const km=(CFG&&CFG.km)||{};const st=parseAmount($('km-start').value),en=parseAmount($('km-end').value),ov=parseAmount($('km-firma').value);
+  const total=(st!=null&&en!=null&&en>=st)?Math.round(en-st):null;
+  const firma=ov!=null?Math.round(ov):(total!=null?Math.round(total*(km.factor||5/7)):null);
+  $('km-total').textContent=total==null?'—':(total+' km');
+  $('km-firma-calc').textContent=firma==null?'—':(firma+' km'+(ov!=null?' (manuell)':' (5/7)'));
+  $('km-rate').textContent=km.is_placeholder?'Tarif folgt':('CHF '+chf(km.rate_chf)+'/km');
+  const ent=(firma&&!km.is_placeholder)?Math.round(firma*km.rate_chf*100)/100:(firma?null:0);
+  $('km-entsch').textContent=ent==null?'Tarif folgt':('CHF '+chf(ent));
+  $('vp-k-km').textContent=ent==null?'—':chf(ent);
+}
+let kmT;
+function saveKm(){clearTimeout(kmT);kmT=setTimeout(async()=>{
+  if(vpClosed)return;
+  const patch={km_start:$('km-start').value||'',km_end:$('km-end').value||'',km_firma_override:$('km-firma').value||''};
+  try{const r=await api('/api/spesen/kilometer?month='+ym(),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});applyVSummary(r.summary);}
+  catch(e){if(e&&e.auth)return gate();toast((e.body&&e.body.error)||'Speichern fehlgeschlagen','err');}
+},600);}
 
 /* ---------- capture: image ---------- */
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
@@ -766,6 +938,30 @@ $('fb-send').addEventListener('click',async()=>{
 $('m-prev').addEventListener('click',()=>shiftMonth(-1));
 $('m-next').addEventListener('click',()=>shiftMonth(1));
 
+/* ---------- Verpflegung pane wiring ---------- */
+$('tab-belege').addEventListener('click',()=>openPane('belege'));
+$('tab-verpflegung').addEventListener('click',()=>openPane('verpflegung'));
+$('vp-list').addEventListener('click',(e)=>{
+  const chip=e.target.closest('.chip');
+  if(chip&&!chip.disabled){const datum=chip.dataset.datum,slot=chip.dataset.slot,d=findDay(datum);
+    const on=!d[slot+'_claimed'];const patch={};patch[slot+'_claimed']=on;
+    if(on&&!d[slot+'_deckung'])patch[slot+'_deckung']='KS';
+    patchDay(datum,patch,true);return;}
+  const dbtn=e.target.closest('.deck button');
+  if(dbtn&&!dbtn.disabled){patchDay(dbtn.dataset.datum,{[dbtn.dataset.slot+'_deckung']:dbtn.dataset.deck},true);}
+});
+$('vp-list').addEventListener('change',(e)=>{
+  const cb=e.target.closest('input[type=checkbox][data-att]');
+  if(!cb)return;const datum=cb.dataset.datum,att=cb.dataset.att;const patch={};patch[att]=cb.checked;
+  if(att==='arb_spaet'&&cb.checked)patch.na_claimed=true;   // >19:30 -> Nachtessen
+  if(att==='arb_frueh'&&cb.checked)patch.fr_claimed=true;   // <07:30 -> Frühstück
+  patchDay(datum,patch,true);
+});
+$('vp-list').addEventListener('input',(e)=>{
+  const bem=e.target.closest('.vday-bem');if(bem)saveBem(bem.dataset.datum,bem.value);
+});
+['km-start','km-end','km-firma'].forEach(id=>$(id).addEventListener('input',()=>{kmPreview();saveKm();}));
+
 /* ---------- boot ---------- */
 function gate(){hide($('view-dash'));hide($('view-capture'));hide($('bottombar'));hide($('fb-btn'));hide($('who'));show($('gate'));}
 async function boot(){
@@ -776,6 +972,7 @@ async function boot(){
     $('who').textContent=me.name;show($('who'));show($('fb-btn'));
     await loadConfig();
     hide($('gate'));showDash();
+    if(location.hash==='#verpflegung')openPane('verpflegung');   // deep-link to the grid pane
   }catch(e){gate();}
 }
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/spesen-sw.js',{scope:'/spesen'}).catch(()=>{});}

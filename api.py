@@ -4462,6 +4462,13 @@ def spesen_config():
     if not _spesen_member():
         return jsonify({"error": "Unauthorized"}), 401
     from spesen import db as _sdb, config as _cfg
+    prc = {p["code"]: p for p in _sdb.list_pauschalen()}
+    meals = {}
+    for slot, code in _cfg.VERPFLEGUNG_MEALS.items():
+        p = prc.get(code, {})
+        meals[slot] = {"code": code, "label": p.get("label", slot),
+                       "rate_chf": p.get("rate_chf"), "is_placeholder": bool(p.get("is_placeholder", True))}
+    km = prc.get(_cfg.KM_CODE, {})
     return jsonify({
         "categories": _cfg.CATEGORIES,
         "subcategory_hints": _cfg.SUBCATEGORY_HINTS,
@@ -4470,6 +4477,9 @@ def spesen_config():
         "pauschalen": _sdb.list_pauschalen(),
         "accountant_email": SPESEN_ACCOUNTANT_EMAIL,
         "attestation_text": _cfg.ATTESTATION_TEXT,
+        "verpflegung": {"meals": meals, "deckung_options": _cfg.DECKUNG_OPTIONS},
+        "km": {"rate_chf": km.get("rate_chf"), "factor": _cfg.KM_FIRMA_FACTOR,
+               "is_placeholder": bool(km.get("is_placeholder", True))},
     })
 
 
@@ -4777,6 +4787,126 @@ def spesen_month_reopen():
     month = (d.get("month") or "").strip() or _now_local().strftime("%Y-%m")
     from spesen import db as _sdb
     return jsonify({"ok": _sdb.reopen_close(kb["id"], month)})
+
+
+# --- Verpflegungs- & Kilometerblatt (monthly per-diem grid) -----------------
+
+_SPESEN_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+_SPESEN_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_WD_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+
+
+def _verpflegung_scaffold(kb_id, month):
+    """Build one entry per calendar day of `month`, merging any stored grid rows onto
+    empty defaults, so the UI always gets a full month."""
+    import calendar
+    from datetime import date
+    from spesen import db as _sdb
+    y, mo = int(month[:4]), int(month[5:7])
+    ndays = calendar.monthrange(y, mo)[1]
+    stored = {r["tag_datum"]: r for r in _sdb.list_verpflegung_month(kb_id, month)}
+    days = []
+    for dd in range(1, ndays + 1):
+        dt = date(y, mo, dd)
+        iso = dt.isoformat()
+        r = stored.get(iso, {})
+        days.append({
+            "datum": iso, "weekday": _WD_DE[dt.weekday()], "is_weekend": dt.weekday() >= 5,
+            "arb_vormittag": r.get("arb_vormittag", 0), "arb_nachmittag": r.get("arb_nachmittag", 0),
+            "arb_spaet": r.get("arb_spaet", 0), "arb_frueh": r.get("arb_frueh", 0),
+            "fr_claimed": r.get("fr_claimed", 0), "fr_deckung": r.get("fr_deckung"),
+            "mi_claimed": r.get("mi_claimed", 0), "mi_deckung": r.get("mi_deckung"),
+            "na_claimed": r.get("na_claimed", 0), "na_deckung": r.get("na_deckung"),
+            "bemerkung": r.get("bemerkung"),
+        })
+    return days
+
+
+@app.route("/api/spesen/verpflegung", methods=["GET"])
+def spesen_verpflegung_get():
+    kb = _spesen_member()
+    if not kb:
+        return jsonify({"error": "Unauthorized"}), 401
+    month = request.args.get("month") or _now_local().strftime("%Y-%m")
+    if not _SPESEN_MONTH_RE.match(month):
+        return jsonify({"error": "Monat ungültig (YYYY-MM)"}), 400
+    from spesen import db as _sdb
+    km = _sdb.get_kilometer_monat(kb["id"], month) or {}
+    close = _sdb.get_close(kb["id"], month)
+    return jsonify({
+        "month": month,
+        "days": _verpflegung_scaffold(kb["id"], month),
+        "kilometer": {"km_start": km.get("km_start"), "km_end": km.get("km_end"),
+                      "km_firma_override": km.get("km_firma_override")},
+        "summary": _sdb.compute_verpflegung_summary(kb["id"], month),
+        "closed": bool(close),
+    })
+
+
+@app.route("/api/spesen/verpflegung/<datum>", methods=["PATCH"])
+def spesen_verpflegung_patch(datum):
+    kb = _spesen_member()
+    if not kb:
+        return jsonify({"error": "Unauthorized"}), 401
+    if not _SPESEN_DAY_RE.match(datum or ""):
+        return jsonify({"error": "Datum ungültig (YYYY-MM-DD)"}), 400
+    from spesen import db as _sdb, config as _cfg, capture as _cap
+    month = datum[:7]
+    if _sdb.get_close(kb["id"], month):
+        return jsonify({"error": "Monat bereits abgeschlossen"}), 409
+    d = request.get_json(silent=True) or {}
+    fields = {}
+    for k in ("arb_vormittag", "arb_nachmittag", "arb_spaet", "arb_frueh",
+              "fr_claimed", "mi_claimed", "na_claimed"):
+        if k in d:
+            fields[k] = 1 if _cap.to_bool(d[k]) else 0
+    for k in ("fr_deckung", "mi_deckung", "na_deckung"):
+        if k in d:
+            v = d[k]
+            if v in (None, "", "null"):
+                fields[k] = None
+            elif v in _cfg.DECKUNG_OPTIONS:
+                fields[k] = v
+            else:
+                return jsonify({"error": f"Deckung ungültig: {v}"}), 400
+    if "bemerkung" in d:
+        b = (str(d["bemerkung"]).strip() or None)
+        fields["bemerkung"] = b[:500] if b else None
+    if not fields:
+        return jsonify({"error": "Nichts zu ändern"}), 400
+    rid = _sdb.upsert_verpflegung_tag(kb["id"], datum, fields)
+    if not rid:
+        return jsonify({"error": "Monat bereits abgeschlossen"}), 409
+    return jsonify({"ok": True, "day": _sdb.get_verpflegung_tag(kb["id"], datum),
+                    "summary": _sdb.compute_verpflegung_summary(kb["id"], month)})
+
+
+@app.route("/api/spesen/kilometer", methods=["PATCH"])
+def spesen_kilometer_patch():
+    kb = _spesen_member()
+    if not kb:
+        return jsonify({"error": "Unauthorized"}), 401
+    month = request.args.get("month") or _now_local().strftime("%Y-%m")
+    if not _SPESEN_MONTH_RE.match(month):
+        return jsonify({"error": "Monat ungültig (YYYY-MM)"}), 400
+    from spesen import db as _sdb, capture as _cap
+    if _sdb.get_close(kb["id"], month):
+        return jsonify({"error": "Monat bereits abgeschlossen"}), 409
+    d = request.get_json(silent=True) or {}
+    fields = {}
+    for k in ("km_start", "km_end", "km_firma_override"):
+        if k in d:
+            fields[k] = _cap.parse_amount(d[k]) if d[k] not in (None, "") else None
+    if not fields:
+        return jsonify({"error": "Nichts zu ändern"}), 400
+    rid = _sdb.upsert_kilometer_monat(kb["id"], month, fields)
+    if not rid:
+        return jsonify({"error": "Monat bereits abgeschlossen"}), 409
+    km = _sdb.get_kilometer_monat(kb["id"], month) or {}
+    return jsonify({"ok": True,
+                    "kilometer": {"km_start": km.get("km_start"), "km_end": km.get("km_end"),
+                                  "km_firma_override": km.get("km_firma_override")},
+                    "summary": _sdb.compute_verpflegung_summary(kb["id"], month)})
 
 
 @app.route("/api/spesen/feedback", methods=["POST"])

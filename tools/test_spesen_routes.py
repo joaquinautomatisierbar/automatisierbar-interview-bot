@@ -87,10 +87,10 @@ bj = r.get_json()
 check("Pauschale Mittagessen = 30", bj["ok"] and bj["betrag_chf"] == 30.0)
 check("Pauschale < 50 -> Kaffeekasse + Warnung", bj["ist_kaffeekasse"] is True and bool(bj["warnung"]))
 
-# --- placeholder pauschale rejected -----------------------------------------
+# --- placeholder pauschale rejected (uebernachtung: rate still unknown) ------
 r = c.post("/api/spesen/beleg" + Q, data={
-    "art": "pauschale", "datum": "2026-06-12", "kategorie": "Transport",
-    "pauschale_code": "auto_km", "zahlungsart": "Privat-Cash"})
+    "art": "pauschale", "datum": "2026-06-12", "kategorie": "Unterkunft",
+    "pauschale_code": "uebernachtung", "zahlungsart": "Privat-Cash"})
 check("Platzhalter-Pauschale -> 422", r.status_code == 422)
 
 # --- validation error --------------------------------------------------------

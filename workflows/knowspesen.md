@@ -127,15 +127,34 @@ python3 tools/test_spesen_month_close.py
 python3 tools/test_spesen_routes.py        # inkl. Bild-Endpoint, PATCH-Währung, Kaffeekasse, health, Attestation
 ```
 
-## Offen / beim Kunden (siehe Follow-up-Mail an Markus)
+## Markus-Antwort 2026-07-10 eingearbeitet
 
-- **Regelwerk-Tarife** (Auto-km, SBB-Klasse, Übernachtung, Abendessen): in
-  `config.PAUSCHALTARIFE` als `is_placeholder` gebaut; bei Eingang Werte eintragen +
-  `is_placeholder=False`, Service neu starten (re-seedet aus config).
-- **6 echte KnowBody-Namen + E-Mails** → `seed`/`upsert_knowbody` + Tokens.
-- **Beispiel-Dokumente** (heutige Excel/Word-Abrechnung + Beispiel-ZIP) → Output angleichen.
-- **Kaffeekasse-Interpretation** (`config.KAFFEEKASSE_ALSO_SMALL_RECEIPTS`) + SharePoint-Ablage.
-- **Buchhaltungs-E-Mail** (`SPESEN_ACCOUNTANT_EMAIL`) für den Versand-Entwurf.
+Quelle + Assets: `references/knowgravity/` (`markus-email-2026-07-10.md` + 2 Beispiel-PDFs + 3 Logos).
+
+- ✅ **6 echte KnowBodies** → `seed.seed_knowbodies()` (sichere Zufalls-Tokens, idempotent).
+  Deployment: `python3 tools/spesen/seed.py --real` → 6 Magic-Links verteilen.
+- ✅ **KnowGravity-Logo + Rebrand**: Navy → Petrol/Teal (`#004040`/`#00A090`) in
+  `static/spesen.html`+`.webmanifest`, PWA-Icons (`make_icons.py`, Feder-Glyph),
+  `report_pdf.py`+`report_excel.py`. SW-Cache `knowspesen-v4`.
+- ✅ **Regelwerk aus Beispielen** (in `config.PAUSCHALTARIFE`): Nachtessen CHF 30 (>19:30),
+  Frühstück CHF 10 (<07:30), Auto-km CHF 0.70 (Firma-Anteil 5/7). `sbb_pauschale` entfernt
+  (SBB = normaler Beleg via E-Ticket-Upload). CHF-50-Minimum bestätigt.
+- ✅ **Monats-Grid „Verpflegung & Kilometer“** neu gebaut (nach Vorbild des Client-Blatts):
+  `tools/spesen/verpflegung.py` (Engine) + `db.py` Tabellen `verpflegung_tag`/`kilometer_monat`
+  + Routes `/api/spesen/verpflegung|kilometer` + PWA-Tab in `spesen.html` (Autosave) +
+  Landscape-Seite im Monats-PDF + Excel-Blatt „Verpflegung“. Tests:
+  `test_spesen_verpflegung.py` + `test_spesen_verpflegung_routes.py`.
+
+## Noch offen (Markus: „ab nächster Woche“)
+
+- **Volles Spesenreglement + Prozess-Varianten** (Halbtag/Ganztag-Zeitregeln,
+  Übernachtungs-Ansatz noch `is_placeholder`, ob Übernachtung/Bahn pauschal vs. Beleg).
+- **Fragen an Gubser Kalt & Partner** (MwSt pro Beleg? Konten/Kategorien? E-Mail) →
+  `SPESEN_ACCOUNTANT_EMAIL` für den Versand-Entwurf.
+- **Kaffeekasse/SharePoint-Ablage** + Bestätigung Lieferantenrechnung-Ausschluss.
+- **Zahlungsart-Taxonomie** ggf. an Client-Schema Bar/CC/EC angleichen (aktuell nur geflaggt).
+- **Preis** (Markus: „was uns der ganze Spass kosten soll“).
+- **Prod-Deploy** auf `knowspesen.automatisierbar.ch` erst auf Joaquins Go.
 
 ## Selbst-Verbesserungs-Loop / nächste Stufen
 
