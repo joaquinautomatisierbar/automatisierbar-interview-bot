@@ -34,8 +34,8 @@
 - [x] 2.2 Primer + Quiz Modul 1 O365/Power Platform FERTIG (C, 10.7., 6 Tage vor Soll) → upskilling/modul-1-primer.md + modul-1-quiz.md; S2-Owner Tej, Termin folgt aus 2.0
 - [x] 2.3 Primer + Quiz Modul 2 Cybersecurity/IT-Infra FERTIG (C, 10.7., 10 Tage vor Soll) → upskilling/modul-2-primer.md + modul-2-quiz.md; enthält die E4-Zahlen für die Scope-Session; S3-Owner Joaquin, Termin folgt aus 2.0
 - [x] 2.4 Primer + Quiz Modul 3 Schweizer Compliance FERTIG (C, 10.7., 13 Tage vor Soll) → upskilling/modul-3-primer.md + modul-3-quiz.md (Rechtslandkarte in 12 Begriffen, B-O-F-Eselsbrücke, KI-Regeln); S4-Owner Patrik, Termin folgt aus 2.0
-- [ ] 2.5 Primer + Quiz Modul 6 Integrations-Architektur (C bis 27.7.) → S5 Di 28.7. (Owner T)
-- [ ] 2.6 Primer + Quiz Modul 5 Projektleitung/Offerten (C bis 30.7.) → S6 Fr 31.7. (Owner J)
+- [x] 2.5 Primer + Quiz Modul 6 Integrations-Architektur FERTIG (C, 10.7., 17 Tage vor Soll) → upskilling/modul-6-primer.md + modul-6-quiz.md (Integrations-Hierarchie, pebe-Brücke Station für Station, Graph-Berechtigungen, Migration, Archiv-Technik); S5-Owner Tej
+- [x] 2.6 Primer + Quiz Modul 5 Projektleitung/Offerten FERTIG (C, 10.7., 20 Tage vor Soll) → upskilling/modul-5-primer.md + modul-5-quiz.md (Phasenmodell als Vertragslogik, 6 PL-Artefakte, RACI, CR-Prozess, S6-Entscheid-Agenda: Rollen 4.2 + SLA-Validierung + Preismodell-Eckwerte); S6-Owner Joaquin. **ALLE 6 Modul-Primer + Quizzes damit fertig; Sessions können starten, sobald 2.0 Termine stehen**
 - [x] 2.7 Fragen-Bank "Was Schmid fragen wird" FERTIG (C, 10.7., 15 Tage vor Soll) → upskilling/fragen-bank-schmid.md: 50 Fragen in 8 Blöcken mit Musterantworten + Drill-Anleitung S7; [Stand prüfen]-Marker (Versicherung/Hosting/Rechtsform/SLA/Referenzen) vor 4.8. auflösen
 - [ ] 2.8 Mock-Meeting S7: Claude spielt Schmid/Guldimann/Kunz (alle, Sa 1.8. oder So 2.8.)
 - [ ] 2.9 Generalprobe S8: Deck, Demo, Tech-Check (alle, Mo 3.8. oder Di 4.8.)
@@ -71,7 +71,7 @@
 - [ ] 6.2 Rechtsform-Story festlegen + GmbH-Fahrplan (J, bis 31.7.)
 - [~] 6.3 CH-Hosting-Standard definieren — **Entscheidungsvorlage FERTIG 10.7.**: offer/hosting-kostenblatt.md (Referenz-Setup, Anbieter-Vergleich mit Exoscale-Zahlen Stand 2/2026, Empfehlung Exoscale-Betrieb + Infomaniak-Offsite, 10-min-Entscheid-Checkliste); **JETZT dran: Joaquin entscheidet + zieht CHF-Preise im Portal** (bis 27.7.); danach Baustein 8.1 + AVV-Liste + SLA-Kopplung durch C
 - [ ] 6.4 Referenz-Freigaben einholen (N koordiniert, bis 28.7.)
-- [ ] 6.5 Datenschutz-Statement + AVV-Template (C, Review J, bis 1.8.)
+- [~] 6.5 Datenschutz-Statement + AVV-Template — **Entwürfe FERTIG 10.7.** (22 Tage vor Soll): templates/datenschutz-statement.md (1-Seiter für Offerte Kap. 8.6) + templates/avv-template.md (12 Ziffern + TOMs-/Unterauftragsbearbeiter-Anhänge + Einsatz-Checkliste); **JETZT dran: Joaquin-Review + empfohlener Anwalts-Review (CHF 500-1'500, Fokus in der Checkliste)**; Platzhalter brauchen 6.2 (Rechtsform) + 6.3 (Hosting)
 
 ## Meilensteine
 
