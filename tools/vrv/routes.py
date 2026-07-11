@@ -132,6 +132,101 @@ def vrv_dashboard():
 
 
 # ---------------------------------------------------------------------------
+# Hub: homework submissions (Abgaben). Files live in VRV_DATA_DIR/uploads,
+# lookups go by uuid id only — the on-disk name never leaves the server.
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/vrv/uploads", methods=["POST"])
+def vrv_upload_create():
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import uploads
+    f = request.files.get("file")
+    if f is None or not (f.filename or "").strip():
+        return jsonify({"ok": False, "error": "Datei fehlt (Feld 'file')"}), 400
+    error = uploads.validate_meta(
+        (request.form.get("modul") or "").strip(),
+        (request.form.get("who") or "").strip(),
+        request.form.get("comment") or "",
+    )
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    content = f.read(uploads.MAX_UPLOAD_BYTES + 1)
+    if not content:
+        return jsonify({"ok": False, "error": "Datei ist leer"}), 400
+    if len(content) > uploads.MAX_UPLOAD_BYTES:
+        return jsonify({"ok": False, "error": "Datei zu gross (max. 15 MB)"}), 413
+    try:
+        entry = uploads.save_upload(
+            (request.form.get("modul") or "").strip(),
+            (request.form.get("who") or "").strip(),
+            request.form.get("comment") or "",
+            content,
+            f.mimetype,
+            f.filename,
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 415
+    return jsonify({"ok": True, "upload": uploads.public_entry(entry)}), 201
+
+
+@bp.route("/api/vrv/uploads", methods=["GET"])
+def vrv_upload_list():
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import uploads
+    modul = (request.args.get("modul") or "").strip() or None
+    return jsonify({"uploads": [uploads.public_entry(e) for e in uploads.list_uploads(modul)]})
+
+
+@bp.route("/api/vrv/uploads/<uid>/file", methods=["GET"])
+def vrv_upload_file(uid):
+    guard = _require_internal()
+    if guard:
+        return guard
+    from flask import send_file
+    from vrv import uploads
+    entry = uploads.get_upload(uid)
+    if entry is None:
+        return jsonify({"ok": False, "error": "Unbekannte Abgabe"}), 404
+    path = uploads.abs_path_for(entry)
+    if not os.path.isfile(path):
+        return jsonify({"ok": False, "error": "Datei fehlt auf dem Server"}), 404
+    resp = send_file(
+        path,
+        mimetype=uploads.serve_mimetype(entry),
+        as_attachment=False,
+        download_name=entry.get("orig_name") or entry["stored"],
+        conditional=True,
+    )
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+@bp.route("/api/vrv/uploads/<uid>", methods=["DELETE"])
+def vrv_upload_delete(uid):
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import uploads
+    if not uploads.delete_upload(uid):
+        return jsonify({"ok": False, "error": "Unbekannte Abgabe"}), 404
+    current_app.logger.info("vrv upload %s deleted", uid)
+    return jsonify({"ok": True})
+
+
+@bp.app_errorhandler(413)
+def vrv_payload_too_large(e):
+    """JSON 413 for the vrv API only (uploads > global MAX_CONTENT_LENGTH die
+    in Werkzeug before our route runs); every other tool keeps the default."""
+    if request.path.startswith("/api/vrv/"):
+        return jsonify({"ok": False, "error": "Datei zu gross (max. 15 MB)"}), 413
+    return e
+
+
+# ---------------------------------------------------------------------------
 # Catalog + state
 # ---------------------------------------------------------------------------
 

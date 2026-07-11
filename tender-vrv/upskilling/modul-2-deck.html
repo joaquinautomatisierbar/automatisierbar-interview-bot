@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A0F0D">
+<title>Modul 2 · Cybersecurity &amp; IT-Infrastruktur</title>
+<!--
+  Modul-2-Lehrdeck (Session 3, Owner Joaquin). 22 Folien, 60 Minuten.
+  Bedienung: Pfeiltasten/Leertaste/Swipe = blättern · N = Referentennotizen (dein Spickzettel!) · Home/End.
+  Referentennotizen tragen T+Minuten-Marker; 3 Folien sind als [SKIP] markiert, wenn die Zeit drückt.
+  Öffnen: Hub → Lernen → Modul 2 → Präsentation (Beamer-Gerät VORHER im Hub einloggen, die URL ist geschützt).
+  Quellen: modul-2-primer.md, Dossier D (Security), Dossier E (E4). Google Fonts nur Verschönerung, offline ok.
+-->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Crect width='500' height='500' rx='110' ry='110' fill='%2315C97A'/%3E%3Cpolyline points='100,250 175,250 215,155 285,345 325,250 400,250' fill='none' stroke='white' stroke-width='30' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0F0D; --surface-1:#111815; --surface-2:#18211D; --surface-3:#1F2A25;
+    --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.15);
+    --text:#ECF3EF; --muted:#8A9892; --dim:#5A655F;
+    --green:#15C97A; --green-dark:#0A8F54; --green-soft:#5EE0A6; --green-glow:rgba(21,201,122,.16);
+    --amber:#E8B84B; --amber-soft:rgba(232,184,75,.14);
+    --red:#E2604C; --red-soft:rgba(226,96,76,.14);
+    --wire:rgba(21,201,122,.20);
+    --grid:rgba(120,180,150,.045);
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow:hidden}
+  ::selection{background:rgba(21,201,122,.24);color:#fff}
+
+  #viewport{position:fixed;inset:0;display:grid;place-items:center;overflow:hidden}
+  #stage{width:1280px;height:720px;position:relative;transform-origin:center center}
+  .slide{position:absolute;inset:0;padding:60px 76px;display:none;flex-direction:column;
+    background-color:var(--bg);
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:34px 34px}
+  .slide.active{display:flex}
+  .slide::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(700px 380px at 18% -8%,rgba(21,201,122,.10),transparent 65%)}
+  .slide>*{position:relative;z-index:1}
+
+  .kicker{font-family:var(--mono);font-size:13px;letter-spacing:.5px;font-weight:500;color:var(--muted);margin-bottom:16px}
+  .kicker b{color:var(--green);font-weight:700}
+  h1{font-size:54px;font-weight:800;letter-spacing:-1.6px;line-height:1.06;max-width:22ch}
+  h1 .accent{color:var(--green-soft)}
+  h2{font-size:36px;font-weight:700;letter-spacing:-1px;line-height:1.12;max-width:30ch}
+  h2 .accent{color:var(--green-soft)}
+  .lead{color:var(--muted);font-size:19px;line-height:1.5;margin-top:14px;max-width:60ch}
+  .lead b{color:var(--text)}
+  .statement{font-size:23px;font-weight:600;letter-spacing:-.4px;line-height:1.4;max-width:50ch}
+  .statement em{color:var(--green-soft);font-style:normal}
+  .grow{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .footnote{color:var(--dim);font-size:13.5px;line-height:1.5;margin-top:auto;padding-top:16px;max-width:100ch}
+  .footnote b{color:var(--muted);font-weight:600}
+  .card{background:linear-gradient(180deg,rgba(24,33,29,.72),rgba(17,24,21,.72));
+    border:1px solid var(--border);border-radius:16px;padding:20px 22px;position:relative}
+  .cnr{position:absolute;width:12px;height:12px;pointer-events:none;opacity:.65}
+  .cnr.tl{top:-1px;left:-1px;border-top:2px solid var(--green);border-left:2px solid var(--green)}
+  .cnr.br{bottom:-1px;right:-1px;border-bottom:2px solid var(--green);border-right:2px solid var(--green)}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;font-weight:500;
+    letter-spacing:.3px;color:var(--muted);border:1px solid var(--border-2);border-radius:999px;padding:5px 12px}
+  .chip.green{color:var(--green-soft);border-color:rgba(21,201,122,.4)}
+  .chip.amber{color:var(--amber);border-color:rgba(232,184,75,.5)}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .num{font-family:var(--mono);font-weight:700;color:var(--green);font-size:13px;letter-spacing:.5px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
+  .deutsch{border-left:3px solid var(--green);background:var(--surface-2);border-radius:0 12px 12px 0;
+    padding:14px 18px;margin-top:18px;font-size:18px;line-height:1.5;max-width:100ch}
+  .deutsch b{color:var(--green-soft)}
+  .saytext{margin-top:auto;border:1px dashed rgba(21,201,122,.45);background:rgba(21,201,122,.07);border-radius:12px;
+    padding:12px 18px;font-size:15px;line-height:1.5;color:var(--text)}
+  .saytext::before{content:"SO SAGST DU ES AM 5.8.";display:block;font-family:var(--mono);font-size:10px;
+    letter-spacing:1px;color:var(--green);margin-bottom:5px}
+
+  /* Cover */
+  .cover-brand{display:flex;align-items:center;gap:14px}
+  .logo{width:44px;height:44px;border-radius:12px;overflow:hidden;flex:none;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06),0 6px 22px var(--green-glow)}
+  .logo svg{width:100%;height:100%;display:block}
+  .cover-brand b{font-size:19px;font-weight:700;letter-spacing:-.2px;display:block}
+  .cover-brand .sub{color:var(--dim);font-size:12px;font-family:var(--mono);letter-spacing:.4px;margin-top:2px}
+  .cover-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+
+  /* Fragen-Wand */
+  .qwall{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+  .qwall .q{font-size:15px;color:var(--muted);border:1px solid var(--border-2);border-radius:12px;padding:10px 16px;line-height:1.35;background:var(--surface-1)}
+  .qwall .q b{color:var(--text);font-family:var(--mono);font-size:11px;margin-right:8px;color:var(--green)}
+
+  /* Schichten-Haus */
+  .layers{display:flex;flex-direction:column;gap:12px;margin-top:28px}
+  .layer{display:flex;align-items:center;gap:20px;border:1px solid var(--border-2);border-radius:14px;padding:18px 22px;background:var(--surface-1)}
+  .layer .who{font-family:var(--mono);font-size:12px;letter-spacing:.5px;width:190px;flex:none;color:var(--muted)}
+  .layer h3{font-size:19px;font-weight:700;letter-spacing:-.2px}
+  .layer p{color:var(--muted);font-size:14px;margin-top:3px;line-height:1.4}
+  .layer.us{border-color:rgba(21,201,122,.55);box-shadow:0 0 22px var(--green-glow)}
+  .layer.us .who{color:var(--green-soft);font-weight:700}
+
+  /* Angriffskette */
+  .chain{display:flex;align-items:stretch;gap:0;margin-top:30px}
+  .cbox{flex:1;border:1px solid rgba(226,96,76,.5);border-radius:14px;background:var(--surface-1);padding:16px;text-align:center}
+  .cbox .ico{font-size:26px;display:block;margin-bottom:8px}
+  .cbox h4{font-size:15.5px;font-weight:700;letter-spacing:-.2px}
+  .cbox p{color:var(--muted);font-size:12.5px;margin-top:5px;line-height:1.4}
+  .carrow{width:56px;flex:none;display:flex;align-items:center;justify-content:center}
+  .carrow .line{width:100%;height:2px;background:rgba(226,96,76,.5);position:relative}
+  .carrow .line::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--red)}
+  .stops{display:flex;gap:0;margin-top:14px}
+  .stop{flex:1;text-align:center;padding:0 6px}
+  .stop .shield{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;font-weight:700;
+    color:#04130c;background:var(--green);border-radius:8px;padding:6px 11px;letter-spacing:.2px}
+  .stopgap{width:56px;flex:none}
+
+  /* Ringe */
+  .rings{display:flex;gap:34px;margin-top:26px;align-items:center}
+  .ringbox{flex:none}
+  .ring{border:2px solid var(--wire);border-radius:22px;padding:16px}
+  .ring>.rl{font-family:var(--mono);font-size:11.5px;letter-spacing:.8px;color:var(--green-soft);margin-bottom:10px}
+  .ring .core{border:2px solid var(--green);border-radius:14px;background:var(--green-glow);padding:22px 30px;text-align:center;
+    font-weight:800;font-size:18px;letter-spacing:-.2px}
+  .ringlist{display:flex;flex-direction:column;gap:12px}
+  .ringlist .row{display:flex;gap:14px;align-items:baseline}
+  .ringlist .n{font-family:var(--mono);color:var(--green);font-weight:700;font-size:14px;width:26px;flex:none}
+  .ringlist h3{font-size:19px;font-weight:700;letter-spacing:-.2px;display:inline}
+  .ringlist span{color:var(--muted);font-size:15px}
+
+  /* Begriff-Karten */
+  .term h3{font-size:18px;font-weight:700;letter-spacing:-.2px;display:flex;gap:10px;align-items:center}
+  .term p{color:var(--muted);font-size:14px;line-height:1.5;margin-top:7px}
+  .term p b{color:var(--text)}
+  .term .tag{font-family:var(--mono);font-size:10px;letter-spacing:.8px;color:var(--green-soft);border:1px solid rgba(21,201,122,.4);border-radius:6px;padding:3px 7px}
+  .term .tag.amber{color:var(--amber);border-color:rgba(232,184,75,.5)}
+
+  /* Firewall 3 Ebenen */
+  .fw{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
+  .fw .card h3{font-size:17px}
+  .fw .owner{margin-top:12px;font-family:var(--mono);font-size:11px;letter-spacing:.5px}
+  .fw .owner.us{color:var(--green-soft)} .fw .owner.them{color:var(--amber)}
+
+  /* Tunnel */
+  .tunnel{display:flex;align-items:center;gap:0;margin-top:28px}
+  .tnode{border:1px solid var(--border-2);border-radius:14px;background:var(--surface-1);padding:16px 20px;text-align:center;flex:none;width:210px}
+  .tnode h4{font-size:15px;font-weight:700} .tnode p{color:var(--muted);font-size:12px;margin-top:4px}
+  .tpipe{flex:1;height:34px;border:2px dashed rgba(232,184,75,.55);border-left:0;border-right:0;position:relative;
+    display:flex;align-items:center;justify-content:center;background:var(--amber-soft)}
+  .tpipe small{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.5px}
+  .tneeds{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+
+  /* Vergleich Burg vs Türsteher */
+  .versus{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:26px}
+  .versus .card h3{font-size:18px;display:flex;gap:10px;align-items:center}
+  .versus .card p{color:var(--muted);font-size:14.5px;line-height:1.55;margin-top:8px}
+  .versus .card p b{color:var(--text)}
+
+  /* Rollen-Tabelle */
+  table.roles{border-collapse:collapse;width:100%;margin-top:24px}
+  table.roles th{font-family:var(--mono);font-size:11px;letter-spacing:.8px;color:var(--dim);text-transform:uppercase;text-align:left;padding:10px 14px;border-bottom:1px solid var(--border-2)}
+  table.roles td{padding:12px 14px;border-bottom:1px solid var(--border);font-size:15px;color:var(--muted);vertical-align:top}
+  table.roles td:first-child{color:var(--text);font-weight:700;white-space:nowrap}
+  table.roles td .mono{font-family:var(--mono);font-size:12px;color:var(--green-soft)}
+
+  /* 3-2-1 */
+  .b321{display:flex;gap:22px;margin-top:28px;align-items:stretch}
+  .b321 .grp{flex:1;border:1px solid var(--border-2);border-radius:14px;padding:18px;background:var(--surface-1);text-align:center}
+  .b321 .big{font-family:var(--mono);font-size:40px;font-weight:700;color:var(--green-soft)}
+  .b321 h4{font-size:16px;font-weight:700;margin-top:6px}
+  .b321 p{color:var(--muted);font-size:13px;margin-top:5px;line-height:1.45}
+  .b321 .grp.ext{border-color:rgba(21,201,122,.5);box-shadow:0 0 18px var(--green-glow)}
+
+  /* RTO/RPO Zeitstrahl */
+  .tline{margin-top:40px;position:relative;height:120px}
+  .tline .axis{position:absolute;top:56px;left:0;right:0;height:2px;background:var(--wire)}
+  .tline .ev{position:absolute;top:0;text-align:center;transform:translateX(-50%)}
+  .tline .ev .dot{width:14px;height:14px;border-radius:50%;margin:49px auto 8px;background:var(--surface-3);border:3px solid var(--green)}
+  .tline .ev.bad .dot{border-color:var(--red);background:var(--red-soft)}
+  .tline .ev .lb{font-size:14px;font-weight:700}
+  .tline .ev .sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+  .tline .span{position:absolute;top:44px;height:26px;border:2px dashed rgba(232,184,75,.6);border-radius:8px;background:var(--amber-soft);
+    display:flex;align-items:center;justify-content:center}
+  .tline .span small{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:.4px;font-weight:700}
+  .tline .span.grn{border-color:rgba(21,201,122,.55);background:rgba(21,201,122,.08)}
+  .tline .span.grn small{color:var(--green-soft)}
+
+  /* Haben/Fehlt */
+  .hf{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}
+  .hf ul{list-style:none;margin-top:12px;display:flex;flex-direction:column;gap:9px}
+  .hf li{font-size:15px;color:var(--muted);display:flex;gap:10px;line-height:1.4}
+  .hf li b{color:var(--text);font-weight:600}
+  .hf .ok li::before{content:"✓";color:var(--green);font-family:var(--mono);font-weight:700;flex:none}
+  .hf .no li::before{content:"·";color:var(--amber);font-family:var(--mono);font-weight:700;flex:none}
+  .hf h3{font-size:17px;display:flex;align-items:center;gap:10px}
+
+  /* E4 Waage */
+  .e4{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+  .e4 .card h3{font-size:17px}
+  .e4 dl{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+  .e4 dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.8px;color:var(--dim);text-transform:uppercase}
+  .e4 dd{font-size:15.5px;color:var(--muted);margin-top:2px;line-height:1.45}
+  .e4 dd b{color:var(--green-soft);font-family:var(--mono)}
+  .reco{margin-top:16px;border:1px solid rgba(21,201,122,.45);border-radius:12px;background:rgba(21,201,122,.06);padding:13px 18px;font-size:15px;line-height:1.5}
+  .reco b{color:var(--green-soft)}
+
+  /* Sätze */
+  .sents{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;margin-top:22px}
+  .sents .s{display:flex;gap:10px;font-size:13.5px;line-height:1.45;color:var(--muted);border:1px solid var(--border);border-radius:10px;padding:9px 12px;background:var(--surface-1)}
+  .sents .s b{font-family:var(--mono);color:var(--green);flex:none;font-size:12px}
+
+  /* Hausaufgabe */
+  .hw{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;margin-top:24px}
+  .hw ol{margin:10px 0 0 20px;display:flex;flex-direction:column;gap:8px}
+  .hw li{font-size:15px;color:var(--muted);line-height:1.45}
+  .hw li b{color:var(--text)}
+  .warnbox{border:1px dashed rgba(226,96,76,.6);background:var(--red-soft);border-radius:12px;padding:13px 16px;font-size:13.5px;line-height:1.5;color:var(--text)}
+  .warnbox b{color:var(--red)}
+  .deadline-chip{display:inline-flex;font-family:var(--mono);font-weight:700;font-size:14px;color:#04130c;background:var(--green);border-radius:8px;padding:7px 14px;letter-spacing:.2px}
+
+  /* HUD + Notes + Print (identisch zum Haupt-Deck) */
+  #hud{position:fixed;left:0;right:0;bottom:0;z-index:10;pointer-events:none}
+  #bar{height:3px;background:linear-gradient(90deg,var(--green),var(--green-soft));width:0%;transition:width .25s ease;box-shadow:0 0 8px var(--green-glow)}
+  #counter{position:fixed;right:18px;bottom:14px;font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.5px}
+  #navhint{position:fixed;left:18px;bottom:12px;font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.4px;opacity:.8;transition:opacity .3s ease}
+  #navhint.hidden{opacity:0}
+  .navbtn{position:fixed;bottom:34px;z-index:11;width:40px;height:40px;border-radius:50%;border:1px solid var(--border-2);
+    background:rgba(17,24,21,.8);color:var(--muted);font-size:17px;cursor:pointer;display:grid;place-items:center}
+  .navbtn:hover{border-color:var(--green);color:var(--green-soft)}
+  #prev{right:110px} #next{right:60px}
+  #notes{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(10,15,13,.96);border-top:1px solid var(--border-2);
+    backdrop-filter:blur(10px);padding:16px 26px 22px;display:none;max-height:38vh;overflow:auto}
+  #notes.open{display:block}
+  #notes .nt{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:.6px;margin-bottom:8px}
+  #notes p{color:var(--muted);font-size:14.5px;line-height:1.6;max-width:110ch}
+  @media print{
+    html,body{overflow:visible;background:#0A0F0D}
+    #viewport{position:static;display:block}
+    #stage{width:1280px;height:auto;transform:none !important}
+    .slide{display:flex;position:relative;width:1280px;height:720px;page-break-after:always;margin:0 auto}
+    #hud,#counter,#navhint,.navbtn,#notes{display:none !important}
+  }
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage">
+
+<!-- ============ 01 · COVER ============ -->
+<section class="slide" data-notes="T+0 · Begrüssung kurz. Sag ehrlich: 'Ich habe mir das Thema selber gerade erst erarbeitet, und genau deshalb erkläre ich es so, dass es JEDER versteht. Am 5.8. muss jeder von uns diese Begriffe aussprechen können, ohne rot zu werden.' Ziel der Session in einem Satz: Nach 60 Minuten könnt ihr jede Sicherheitsfrage der Ausschreibung einordnen und wisst, was bei UNS dahintersteckt. Taste N zeigt dir übrigens jederzeit diese Notizen.">
+  <div class="cover-brand">
+    <span class="logo"><svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <span><b>automatisierbar</b><span class="sub">// INTERNE SCHULUNG · VRV-VORBEREITUNG</span></span>
+  </div>
+  <div class="grow">
+    <div class="kicker"><b>// MODUL 2</b> · SESSION 3</div>
+    <h1>Cybersecurity &amp;<br>IT-Infrastruktur, <span class="accent">so dass es jeder versteht.</span></h1>
+    <p class="lead">Vom grossen Bild (wer ist wofür verantwortlich) bis zum einzelnen Begriff (was heisst EDR wirklich). Alles mit dem einen Ziel: am 5. August sprechfähig sein.</p>
+    <div class="cover-meta">
+      <span class="chip green"><span class="dot"></span>60 Minuten</span>
+      <span class="chip">Owner: Joaquin</span>
+      <span class="chip">danach: Quiz + Scope-Session E4</span>
+      <span class="chip">Taste N = Notizen</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 · WARUM ============ -->
+<section class="slide" data-notes="T+2 · Einstieg über die Angst: 'Das hier sind echte Fragen, die uns Rolf Schmid am 5.8. stellen wird. Er ist Wirtschaftsprüfer. Er merkt in Sekunden, ob wir flunkern.' Lies 2-3 Fragen laut vor (ISO-Frage und AlwaysOnVPN-Frage sind die besten). Dann der Trost: 'Nach heute könnt ihr JEDE davon beantworten, und zwar ehrlich. Die Antworten stehen wortwörtlich in unserer Fragen-Bank, heute versteht ihr, WARUM sie stimmen.'">
+  <div class="kicker"><b>// 01</b> · WARUM DIESES MODUL</div>
+  <h2>Die Ausschreibung fragt genau das. Und Schmid fragt nach.</h2>
+  <p class="lead">Pflichtkapitel der Offerte: Rechenzentrum, Datensicherheit, Notfallkonzept, Firewalls, Berechtigungsstruktur, EndpointSecurity, VPN/AlwaysOnVPN. Das sind seine Fragen dazu:</p>
+  <div class="qwall">
+    <div class="q"><b>Q28</b>Wo genau liegen unsere Daten?</div>
+    <div class="q"><b>Q29</b>Sind Sie ISO-27001-zertifiziert?</div>
+    <div class="q"><b>Q32</b>Was passiert, wenn Sie gehackt werden?</div>
+    <div class="q"><b>Q33</b>Haben Sie das Wiederherstellen schon mal gemacht?</div>
+    <div class="q"><b>Q34</b>Wer bei Ihnen hat Zugriff auf unsere Daten?</div>
+    <div class="q"><b>Q36</b>Und was ist mit dem geforderten AlwaysOnVPN?</div>
+  </div>
+  <p class="footnote"><b>Merksatz für heute:</b> Der Prüfer testet nicht unser Sicherheits-Niveau. Er testet, ob wir flunkern. Ehrlich + präzis schlägt aufgeblasen, immer.</p>
+</section>
+
+<!-- ============ 03 · VERANTWORTUNGSSCHICHTEN ============ -->
+<section class="slide" data-notes="T+5 · DAS Fundament der ganzen Session, nimm dir 3 Minuten. Metapher: Miethaus. Der Vermieter (Rechenzentrum) verantwortet Mauern, Strom, Brandschutz. Wir verantworten unsere Wohnung komplett: was drin steht, wer einen Schlüssel hat, die Ordnung. Und die Wohnung des Kunden (sein Büro, seine Laptops, sein Microsoft) gehört dem Kunden bzw. seinem IT-Partner. Punchline aus dem Primer: 'Wer alles verspricht, hat entweder ein 50-Personen-NOC oder lügt.' Diese Abgrenzung ist keine Ausrede, sie ist unser Glaubwürdigkeits-Argument Nummer 1.">
+  <div class="kicker"><b>// 02</b> · DAS GROSSE BILD</div>
+  <h2>Zuerst die eine Frage: <span class="accent">Wer ist wofür verantwortlich?</span></h2>
+  <div class="layers">
+    <div class="layer">
+      <span class="who">KUNDE / IT-PARTNER</span>
+      <div><h3>Kundenumgebung</h3><p>Büronetz, Endgeräte, Microsoft-365-Konten von vRv. Bleibt beim Kunden bzw. seinem IT-Partner (je nach E4-Entscheid: bei uns).</p></div>
+    </div>
+    <div class="layer us">
+      <span class="who">WIR · VOLL</span>
+      <div><h3>Unsere Applikation + Betrieb</h3><p>Architektur, Code, Betrieb, Datenhaltung, Backups unserer Lösung. Hier gibt es keine Ausreden, das ist unser Haus.</p></div>
+    </div>
+    <div class="layer">
+      <span class="who">RZ-ANBIETER (ISO 27001)</span>
+      <div><h3>Physische Infrastruktur</h3><p>Gebäude, Strom, Netz, physische Sicherheit. Machen zertifizierte Schweizer Rechenzentren, wir mieten.</p></div>
+    </div>
+  </div>
+  <div class="saytext">"Wir beantworten Ihre Sicherheitsfragen als Software- und Betriebsanbieter unserer Lösung; Büronetz und Endgeräte bleiben sauber abgegrenzt bei Ihrem IT-Betrieb."</div>
+</section>
+
+<!-- ============ 04 · ANGRIFFSKETTE ============ -->
+<section class="slide" data-notes="T+8 · Erzähl es als Geschichte, langsam: 'Dienstag, 07:43. Nico bekommt eine Mail: Ihre Microsoft-Anmeldung läuft ab, hier klicken. Die Seite sieht ECHT aus. Er tippt sein Passwort ein. Ab jetzt hat der Angreifer sein Konto. Er liest still zwei Wochen mit, findet die Kundenliste, exportiert alles.' Pause. 'So laufen die allermeisten echten Angriffe: kein Hollywood-Hacking, sondern eine Mail und ein müder Mensch um 07:43.' Frage in die Runde: An welcher Station hätte man das stoppen können? Antworten kommen auf der nächsten Folie.">
+  <div class="kicker"><b>// 03</b> · WIE ANGRIFFE WIRKLICH LAUFEN</div>
+  <h2>Kein Hollywood. Eine Mail, ein Klick, ein müder Mensch.</h2>
+  <div class="grow">
+    <div class="chain">
+      <div class="cbox"><span class="ico">📧</span><h4>1 · Phishing-Mail</h4><p>"Ihre Anmeldung läuft ab." Absender sieht echt aus, Druck + Eile.</p></div>
+      <div class="carrow"><span class="line"></span></div>
+      <div class="cbox"><span class="ico">🔑</span><h4>2 · Passwort eingetippt</h4><p>Gefälschte Login-Seite. Passwort ist jetzt beim Angreifer.</p></div>
+      <div class="carrow"><span class="line"></span></div>
+      <div class="cbox"><span class="ico">👤</span><h4>3 · Konto übernommen</h4><p>Angreifer liest still mit: Mails, Dateien, Zugänge, Weiterleitungen.</p></div>
+      <div class="carrow"><span class="line"></span></div>
+      <div class="cbox"><span class="ico">📦</span><h4>4 · Daten weg</h4><p>Kundendaten exportiert oder verschlüsselt + Lösegeld (Ransomware).</p></div>
+    </div>
+    <p class="lead" style="margin-top:26px"><b>Frage an euch:</b> An welcher Station hätte man diese Kette brechen können?</p>
+  </div>
+  <p class="footnote">Phishing ist Einfallstor Nummer 1, weltweit und bei KMU sowieso. Technik hilft, aber die Kette bricht an mehreren Stellen gleichzeitig, nie nur an einer.</p>
+</section>
+
+<!-- ============ 05 · STOPP-PUNKTE ============ -->
+<section class="slide" data-notes="T+11 · Die Auflösung, Station für Station: Station 2: der Passwort-Manager füllt auf der FALSCHEN Domain nichts aus, das allein entlarvt die Seite. Station 3: selbst mit geklautem Passwort kommt der Angreifer ohne zweiten Faktor (MFA) nicht rein, das ist die wirksamste Einzelmassnahme überhaupt. Station 3b: EDR merkt verdächtiges Verhalten wie eine plötzliche Weiterleitung aller Mails. Station 4: Least Privilege heisst, ein einzelnes Konto kann gar nicht ALLES exportieren, und das Backup macht Ransomware-Erpressung wirkungslos. Kernsatz: 'Sicherheit ist eine Kette von Netzen. Jedes einzelne darf reissen, alle zusammen fast nie.' Damit ist das Wort SCHUTZRINGE eingeführt, nächste Folie.">
+  <div class="kicker"><b>// 03</b> · DIE KETTE BRECHEN</div>
+  <h2>Dieselbe Kette, mit unseren <span class="accent">Netzen darunter.</span></h2>
+  <div class="grow">
+    <div class="chain">
+      <div class="cbox"><span class="ico">📧</span><h4>Phishing-Mail</h4><p>kommt trotzdem an, Menschen bleiben Menschen</p></div>
+      <div class="carrow"><span class="line"></span></div>
+      <div class="cbox"><span class="ico">🔑</span><h4>Passwort-Falle</h4><p>Manager füllt auf falscher Domain nichts aus</p></div>
+      <div class="carrow"><span class="line"></span></div>
+      <div class="cbox"><span class="ico">👤</span><h4>Konto-Übernahme</h4><p>ohne zweiten Faktor kommt er nicht rein</p></div>
+      <div class="carrow"><span class="line"></span></div>
+      <div class="cbox"><span class="ico">📦</span><h4>Daten-Abfluss</h4><p>ein Konto darf nie alles; Backup entwertet Erpressung</p></div>
+    </div>
+    <div class="stops">
+      <div class="stop"></div>
+      <div class="stopgap"></div>
+      <div class="stop"><span class="shield">🛡 PASSWORT-MANAGER</span></div>
+      <div class="stopgap"></div>
+      <div class="stop"><span class="shield">🛡 MFA + EDR</span></div>
+      <div class="stopgap"></div>
+      <div class="stop"><span class="shield">🛡 LEAST PRIVILEGE + BACKUP</span></div>
+    </div>
+  </div>
+  <div class="saytext">"Sicherheit ist bei uns eine Kette von Netzen: Reisst eines, hängt der Angriff im nächsten. Genau diese Netze gehen wir jetzt einzeln durch."</div>
+</section>
+
+<!-- ============ 06 · DIE 4 SCHUTZRINGE ============ -->
+<section class="slide" data-notes="T+14 · Nur Orientierung, 90 Sekunden: 'Das ist unsere Landkarte für die nächsten 25 Minuten.' Von aussen nach innen: Ring 1 Identität (wer bist du), Ring 2 Gerät (womit arbeitest du), Ring 3 Netz (worüber verbindest du dich), Ring 4 Daten (was darfst du sehen). Im Kern: die Kundendaten. Und unter allem das Sicherheitsnetz für den Ernstfall: Backups. Sag dazu: 'Fachleute nennen das Defense in Depth, Verteidigung in der Tiefe. Merkt euch einfach: Zwiebel.'">
+  <div class="kicker"><b>// 04</b> · DIE LANDKARTE</div>
+  <h2>Vier Schutzringe um die Daten. <span class="accent">Wie eine Zwiebel.</span></h2>
+  <div class="rings grow">
+    <div class="ringbox">
+      <div class="ring"><div class="rl">RING 1 · IDENTITÄT</div>
+        <div class="ring"><div class="rl">RING 2 · GERÄT</div>
+          <div class="ring"><div class="rl">RING 3 · NETZ</div>
+            <div class="ring"><div class="rl">RING 4 · ZUGRIFF</div>
+              <div class="core">KUNDEN-<br>DATEN</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ringlist">
+      <div class="row"><span class="n">1</span><div><h3>Identität</h3> <span>· Wer bist du? Passwörter, MFA</span></div></div>
+      <div class="row"><span class="n">2</span><div><h3>Gerät</h3> <span>· Womit arbeitest du? Verschlüsselung, EDR, Updates</span></div></div>
+      <div class="row"><span class="n">3</span><div><h3>Netz</h3> <span>· Worüber verbindest du dich? Firewall, TLS, VPN-Frage</span></div></div>
+      <div class="row"><span class="n">4</span><div><h3>Zugriff auf Daten</h3> <span>· Was darfst du sehen? Rollen, Audit-Log</span></div></div>
+      <div class="row"><span class="n">+</span><div><h3>Das Netz darunter</h3> <span>· Wenn alles schiefgeht: Backup + Wiederherstellung</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 · RING 1 IDENTITÄT ============ -->
+<section class="slide" data-notes="T+16 · MFA in einem Satz: Zweiter Schlüssel neben dem Passwort, meist die Bestätigung am Handy. Damit ist ein GEKLAUTES Passwort allein wertlos, deshalb nennt der Primer MFA die wirksamste Einzelmassnahme. Abstufung erklären: SMS-Codes sind abfangbar (gut, aber gelb), App-Codes besser, Passkeys/FIDO2 sind phishing-RESISTENT, weil sie auf einer gefälschten Seite technisch gar nicht funktionieren können. Beim Kunden: Wir bauen KEINE eigene Passwort-Welt, der Login läuft über die Microsoft-Konten von vRv, damit erben wir automatisch deren MFA-Regeln. Kündige an: Genau das prüft ihr in der Hausaufgabe an euren eigenen Konten.">
+  <div class="kicker"><b>// 05</b> · RING 1</div>
+  <h2>Identität: Passwörter sind der Anfang, <span class="accent">nie die Antwort.</span></h2>
+  <div class="deutsch"><b>Auf Deutsch:</b> MFA (Multi-Faktor-Authentifizierung) = ein zweiter Schlüssel zusätzlich zum Passwort, z.B. die Bestätigung auf deinem Handy. Ein gestohlenes Passwort allein wird damit wertlos.</div>
+  <div class="grid-3">
+    <div class="card term"><span class="cnr tl"></span><h3>Passwort-Manager <span class="tag">PFLICHT BEI UNS</span></h3><p>Ein Tresor, überall <b>einzigartige</b> Passwörter. Bonus: Auf einer gefälschten Login-Seite füllt er nichts aus, er kennt die Domain nicht.</p></div>
+    <div class="card term"><h3>MFA überall <span class="tag">PFLICHT BEI UNS</span></h3><p>Die wirksamste Einzelmassnahme gegen Kontoübernahme. SMS-Codes = ok, App-Codes = gut, <b>Passkeys/FIDO2 = phishing-resistent</b>.</p></div>
+    <div class="card term"><span class="cnr br"></span><h3>Beim Kunden: SSO <span class="tag">SO ANTWORTEN WIR</span></h3><p>Unsere Lösung nutzt die <b>Microsoft-Konten von vRv</b> (Single Sign-on). Deren MFA- und Zugriffs-Regeln gelten automatisch auch bei uns.</p></div>
+  </div>
+  <div class="saytext">"Unsere Lösung braucht keine eigene Passwort-Welt: Anmeldung über Ihre Microsoft-Konten, Ihre MFA-Regeln gelten automatisch."</div>
+</section>
+
+<!-- ============ 08 · RING 2 GERÄT / EDR ============ -->
+<section class="slide" data-notes="T+19 · Die beste Metapher des Abends: Antivirus = Türsteher mit einem Stapel Fahndungsfotos, er erkennt nur bekannte Gesichter. EDR = Wachhund im Haus, der VERHALTEN beobachtet: Warum verschlüsselt dieses Programm gerade 500 Dateien? Warum ruft Excel plötzlich ein fremdes Land an? Er schlägt an und kann das Gerät sofort isolieren, also vom Netz trennen. Produktnamen einmal aussprechen, damit sie am 5.8. nicht fremd klingen: Microsoft Defender for Business ist das EDR, Intune die zentrale Geräteverwaltung, beides steckt in der Business-Premium-Lizenz, die vRv vermutlich eh hat oder braucht. Wichtig für die Abgrenzung: Auf den KUNDEN-Geräten ist das Sache des IT-Partners (oder unsere, falls E4 = selbst), unsere Lösung selbst braucht dort keinen Agenten, sie läuft im Browser.">
+  <div class="kicker"><b>// 06</b> · RING 2</div>
+  <h2>Gerät: EDR ist der Wachhund, <span class="accent">nicht der Türsteher.</span></h2>
+  <div class="deutsch"><b>Auf Deutsch:</b> Klassisches Antivirus erkennt nur bekannte Schädlinge (Fahndungsfotos). EDR (Endpoint Detection &amp; Response) beobachtet das <b>Verhalten</b> des Geräts und kann es bei Alarm sofort isolieren.</div>
+  <div class="grid-2">
+    <div class="card term"><span class="cnr tl"></span><h3>Was EDR sieht</h3><p>Prozesse, Netzverbindungen, Dateizugriffe. "Warum verschlüsselt dieses Programm gerade 500 Dateien?" wird erkannt, <b>auch wenn der Schädling brandneu ist</b>. Reaktion: Gerät isolieren, Prozess stoppen.</p></div>
+    <div class="card term"><span class="cnr br"></span><h3>Die KMU-Realität dazu</h3><p><b>Microsoft Defender for Business</b> (das EDR) + <b>Intune</b> (zentrale Geräteverwaltung), beides in der Lizenz <b>Microsoft 365 Business Premium</b> enthalten. Genau die Welt von vRv.</p></div>
+  </div>
+  <div class="saytext">"EDR heisst: Das Gerät wird beobachtet, nicht nur gescannt. Auffälliges Verhalten wird erkannt, und das Gerät kann isoliert werden. Unsere eigenen Geräte: verschlüsselt, EDR aktiv, MFA. Für Ihre Geräte bleibt das bei Ihrem IT-Partner, unsere Lösung braucht dort keinen Agenten."</div>
+</section>
+
+<!-- ============ 09 · VERSCHLÜSSELUNG + PATCH [SKIP] ============ -->
+<section class="slide" data-notes="T+22 · [SKIP-KANDIDAT wenn hinter Zeitplan: beide Punkte in einem Satz auf der vorherigen Folie erwähnen.] Verschlüsselung at rest am Alltagsbeispiel: Laptop im Zug vergessen. MIT Verschlüsselung (FileVault/BitLocker) ist die Festplatte für den Finder Datenmüll, OHNE kann er sie ausbauen und alles lesen, Login-Passwort hin oder her. In transit = das Schloss im Browser, TLS, bei uns ausnahmslos alles. Patch-Management: Updates sind bei uns keine Fleissarbeit, sondern ein Versprechen mit Frist: kritische Lücken innert 48 Stunden, Server automatisch, Abhängigkeiten überwacht per Tooling.">
+  <div class="kicker"><b>// 06</b> · RING 2, TEIL 2</div>
+  <h2>Verschlüsselung + Updates: <span class="accent">die zwei Selbstverständlichen.</span></h2>
+  <div class="grid-2">
+    <div class="card term"><span class="cnr tl"></span><h3>Verschlüsselung <span class="tag">AT REST + IN TRANSIT</span></h3><p><b>At rest:</b> Gespeicherte Daten sind ohne Schlüssel unlesbar (AES-256). Der im Zug vergessene Laptop ist dann Datenmüll statt Datenleck. <b>In transit:</b> jede Verbindung über TLS, das Schloss im Browser. Bei uns gibt es kein unverschlüsseltes HTTP, und Zugangsdaten liegen nie im Code.</p></div>
+    <div class="card term"><span class="cnr br"></span><h3>Patch-Management <span class="tag">48H-VERSPRECHEN</span></h3><p>Sicherheitsupdates mit Frist statt nach Gefühl: <b>kritische Lücken innert 48 Stunden</b>, Server-Updates automatisch, Software-Abhängigkeiten laufend per Tooling überwacht. Managed-Datenbanken patcht der zertifizierte Anbieter.</p></div>
+  </div>
+  <div class="saytext">"Sämtliche Verbindungen laufen ausschliesslich verschlüsselt, gespeicherte Daten und Backups sind verschlüsselt, und kritische Sicherheitslücken schliessen wir innert 48 Stunden."</div>
+</section>
+
+<!-- ============ 10 · RING 3 FIREWALL ============ -->
+<section class="slide" data-notes="T+24 · Firewall in einem Satz: Türsteher für Netzwerkverkehr, entscheidet welche Tür für wen offen ist. Es gibt DREI Ebenen, und die Unterscheidung ist wichtig, weil die Ausschreibung pauschal 'Firewalls' fragt: 1. Die Kiste am Büro-Netzrand von vRv (Perimeter), das ist Sache ihres IT-Partners, NICHT unsere. 2. Die Host-Firewall auf jedem einzelnen Server, machen wir. 3. Cloud Security Groups beim Cloud-Anbieter, Regelwerke pro Server, machen wir. Unser Standard-Satz ist stark, weil er konkret ist: öffentlich offen ist genau EIN Port, HTTPS 443. Admin-Zugänge sind nicht öffentlich, nur mit Schlüssel von definierten Quellen.">
+  <div class="kicker"><b>// 07</b> · RING 3</div>
+  <h2>Firewall: ein Wort, <span class="accent">drei verschiedene Türsteher.</span></h2>
+  <div class="deutsch"><b>Auf Deutsch:</b> Eine Firewall entscheidet, welche Tür im Netzwerk für wen offen ist. Bei uns öffentlich offen: genau eine, HTTPS (Port 443).</div>
+  <div class="fw">
+    <div class="card"><h3>1 · Büro-Perimeter</h3><p style="color:var(--muted);font-size:14px;margin-top:8px;line-height:1.5">Die Kiste am Netzrand des vRv-Büros. Schützt deren lokales Netz.</p><div class="owner them">SACHE DES KUNDEN-IT-PARTNERS</div></div>
+    <div class="card"><span class="cnr tl"></span><h3>2 · Host-Firewall</h3><p style="color:var(--muted);font-size:14px;margin-top:8px;line-height:1.5">Auf jedem einzelnen Server: alles zu ausser dem, was der Dienst braucht.</p><div class="owner us">MACHEN WIR, HEUTE SCHON</div></div>
+    <div class="card"><span class="cnr br"></span><h3>3 · Cloud Security Groups</h3><p style="color:var(--muted);font-size:14px;margin-top:8px;line-height:1.5">Regelwerk beim Cloud-Anbieter, pro Server: nur 443 öffentlich, Admin nur per Schlüssel von definierten Quellen.</p><div class="owner us">MACHEN WIR, HEUTE SCHON</div></div>
+  </div>
+  <div class="saytext">"Öffentlich erreichbar ist bei uns genau ein Port: HTTPS. Administration läuft nur mit Schlüssel-Authentifizierung von definierten Quellen. Die Perimeter-Firewall Ihres Büros bleibt bewusst bei Ihrem IT-Betrieb."</div>
+</section>
+
+<!-- ============ 11 · VPN / ALWAYS ON VPN ============ -->
+<section class="slide" data-notes="T+27 · Die Ausschreibung verlangt wörtlich 'AlwaysOnVPN', darum müssen wir das Wort präzis können. VPN allgemein: verschlüsselter Tunnel von einem Gerät in ein Firmennetz, danach bist du 'drin wie im Büro'. Always On VPN ist konkret eine Microsoft-Windows-Technik: Der Tunnel baut sich automatisch auf, ohne Klick. Zwei Typen: Device Tunnel (verbindet schon VOR dem Login, nur für domain-joined Firmen-PCs) und User Tunnel (nach dem Login). Jetzt der Punkt, den kaum ein Anbieter laut sagt: Dahinter steckt ECHTER Serverbetrieb: RRAS-Server, NPS/RADIUS, eine eigene Zertifikats-Infrastruktur (PKI) mit Rollout auf jedes Gerät. Das ist die Welt eigener Server, Nachfolger des abgekündigten DirectAccess. UNSERE Lösung braucht das alles nicht: TLS + Microsoft-Login + MFA. Wenn vRv AOVPN fährt, läuft unsere Lösung einfach transparent hindurch.">
+  <div class="kicker"><b>// 08</b> · RING 3, DER PRÜFUNGSBEGRIFF</div>
+  <h2>Always On VPN: <span class="accent">automatischer Tunnel,</span> echter Serverbetrieb.</h2>
+  <div class="deutsch"><b>Auf Deutsch:</b> Ein VPN ist ein verschlüsselter Tunnel ins Firmennetz. "Always On" (Microsoft-Windows-Technik) heisst: Der Tunnel baut sich automatisch auf. Zwei Typen: <b>Device Tunnel</b> (schon vor dem Login) und <b>User Tunnel</b> (nach dem Login).</div>
+  <div class="tunnel">
+    <div class="tnode"><h4>💻 Firmen-Laptop</h4><p>domain-joined, mit Zertifikat</p></div>
+    <div class="tpipe"><small>AUTOMATISCHER VERSCHLÜSSELTER TUNNEL</small></div>
+    <div class="tnode"><h4>🏢 Firmennetz</h4><p>danach: drin wie im Büro</p></div>
+  </div>
+  <div class="tneeds">
+    <span class="chip amber">braucht: RRAS-Server</span>
+    <span class="chip amber">braucht: NPS / RADIUS</span>
+    <span class="chip amber">braucht: eigene PKI + Zertifikats-Rollout</span>
+    <span class="chip">= Betrieb eigener Server (Nachfolger von DirectAccess)</span>
+  </div>
+  <div class="saytext">"Unsere Lösung braucht kein VPN: verschlüsselte Verbindung, Anmeldung über Ihre Microsoft-Konten, Ihre MFA-Regeln gelten automatisch. Fahren Ihre Geräte Always On VPN, läuft unsere Lösung transparent hindurch; das VPN-Setup selbst bleibt bei Ihrem IT-Partner."</div>
+</section>
+
+<!-- ============ 12 · ZERO TRUST ============ -->
+<section class="slide" data-notes="T+30 · Das Bild: Burg mit Zugbrücke gegen Türsteher an jeder Tür. VPN-Denken = Burg: Wer einmal über die Zugbrücke ist, läuft frei durchs ganze Schloss. Zero Trust = an JEDER einzelnen Tür steht ein Türsteher und prüft: Wer bist du (Identität), ist dein Gerät gesund (Gerätezustand), darfst du in DIESEN Raum (Richtlinie). Zwei harte Microsoft-Fakten als Anker, die kannst du wörtlich zitieren: Entra Private Access kostet 5 Dollar pro User und Monat und wird von Microsoft explizit als VPN-Ablösung positioniert. Und die alte VPN-Technik SSTP wird per 31.3.2026 ausgemustert, das Signal ist eindeutig. WICHTIG fürs Meeting: Wir machen den Kunden-Vorschlag nie schlecht. Formel: respektvoll reframen auf 'sicherer mobiler Zugriff', das Tool fragt bei g5 nach, was vRv mit AOVPN wirklich meint.">
+  <div class="kicker"><b>// 09</b> · RING 3, DIE MODERNE ANTWORT</div>
+  <h2>Zero Trust: <span class="accent">Türsteher an jeder Tür</span> statt Burggraben.</h2>
+  <div class="versus">
+    <div class="card"><h3>🏰 Burg-Denken (Voll-VPN)</h3><p>Einmal über die Zugbrücke = frei im ganzen Schloss. <b>Ein gekapertes Gerät ist dann überall drin.</b> Dazu: eigener Serverpark, Zertifikats-Pflege, Legacy-Betrieb.</p></div>
+    <div class="card"><span class="cnr tl"></span><span class="cnr br"></span><h3>🚪 Zero Trust (Entra)</h3><p>Jede Applikation prüft einzeln: <b>Identität + Gerätezustand + Richtlinie.</b> Zugriff pro App statt aufs ganze Netz. Microsoft Entra Private Access: <b>USD 5/User/Monat</b>, von Microsoft als VPN-Ablösung positioniert.</p></div>
+  </div>
+  <p class="lead" style="margin-top:20px">Das Signal dazu: Microsoft mustert die alte VPN-Technik <b>SSTP per 31.3.2026</b> aus. Wer heute noch Voll-VPN-Betrieb offeriert, verkauft Vergangenheit.</p>
+  <div class="saytext">"Für den mobilen Zugriff positioniert Microsoft heute Zero Trust über Entra als Nachfolger des Voll-VPN; das ordnen wir gerne ein, bevor jemand teuren Legacy-Betrieb offeriert."</div>
+</section>
+
+<!-- ============ 13 · RING 4 RBAC ============ -->
+<section class="slide" data-notes="T+33 · RBAC unspektakulär aber prüfungsrelevant (Berechtigungsstruktur ist Pflichtkapitel). In einem Satz: Rechte hängen an ROLLEN, nie an Personen, und jede Rolle bekommt nur das Minimum (Least Privilege). Geh die vier Rollen der Tabelle kurz durch, betone die Revisions-Rolle: Ein Wirtschaftsprüfer LIEBT eine Nur-Lese-Rolle für die Revision, das ist Prüfpfad-Denken in seiner Sprache. Die drei Regeln darunter: persönliche Konten (nie Sammel-Logins), Admin getrennt vom Alltagskonto, jede sicherheitsrelevante Aktion im Audit-Log. Und der Offboarding-Bonus: Weil der Login über die Microsoft-Konten des Kunden läuft, wirkt ein Austritt beim Kunden automatisch auch bei uns.">
+  <div class="kicker"><b>// 10</b> · RING 4</div>
+  <h2>Zugriff: Rollen statt Vertrauen, <span class="accent">Minimum statt Bequemlichkeit.</span></h2>
+  <div class="deutsch"><b>Auf Deutsch:</b> RBAC = Rechte hängen an <b>Rollen</b>, nicht an Personen. Least Privilege = jede Rolle bekommt nur das Minimum, das sie wirklich braucht.</div>
+  <table class="roles">
+    <tr><th>Rolle (vRv-Plattform)</th><th>Darf</th><th>Darf nicht</th></tr>
+    <tr><td>Administration</td><td>alles konfigurieren, Rollen vergeben</td><td>unprotokolliert arbeiten<span class="mono"> · Audit-Log läuft immer</span></td></tr>
+    <tr><td>Sachbearbeitung</td><td>Aufträge, Rapporte, Verrechnung</td><td>Systemeinstellungen, fremde Mandate</td></tr>
+    <tr><td>Hauswart (mobil)</td><td>nur zugewiesene Objekte + Aufträge</td><td>alles andere: er sieht es gar nicht erst</td></tr>
+    <tr><td>Revision</td><td><b>nur lesen</b>, alles nachvollziehen</td><td>irgendetwas ändern</td></tr>
+  </table>
+  <div class="saytext">"Jede Aktion ist einem persönlichen Konto zugeordnet, sicherheitsrelevante Schritte stehen im Audit-Log, und für die Revision gibt es eine Nur-Lese-Rolle."</div>
+</section>
+
+<!-- ============ 14 · AUDIT-LOG [SKIP] ============ -->
+<section class="slide" data-notes="T+35 · [SKIP-KANDIDAT: Kernaussage steckt schon im Satz der vorherigen Folie.] Audit-Log für Nicht-Techniker: das Kassenbuch der Plattform. Wer hat wann was gemacht, unlöschbar mitgeschrieben. Für einen Wirtschaftsprüfer ist das dieselbe Logik wie eine saubere Buchhaltung: nicht weil man Misstrauen hat, sondern damit man NACHWEISEN kann. Verbinde zu Modul 3 (Patrik): Das Datenschutzgesetz verlangt Nachvollziehbarkeit, und unsere 24-Stunden-Meldepflicht bei Vorfällen funktioniert nur, wenn man im Log sehen kann, was passiert ist.">
+  <div class="kicker"><b>// 10</b> · RING 4, TEIL 2</div>
+  <h2>Das Audit-Log: <span class="accent">das Kassenbuch</span> der Plattform.</h2>
+  <div class="grow">
+    <div class="grid-2">
+      <div class="card term"><span class="cnr tl"></span><h3>Was drinsteht</h3><p>Wer hat wann was gemacht: Logins, Rechteänderungen, Exporte, Freigaben. <b>Mitgeschrieben, nicht wegdiskutierbar.</b> Für den Prüfer ist das die vertraute Logik der Buchführung, nur für Software.</p></div>
+      <div class="card term"><span class="cnr br"></span><h3>Warum es zählt</h3><p>Nachweisen statt beteuern: bei Kundenfragen, bei der Revision, und im Ernstfall (die <b>24h-Meldung</b> an den Kunden braucht Fakten aus dem Log, keine Vermutungen). Mehr dazu in Modul 3 bei Patrik.</p></div>
+    </div>
+  </div>
+  <p class="footnote"><b>Brücke:</b> Damit sind alle vier Ringe durch. Jetzt der Teil, der Prüfer wirklich interessiert: Was, wenn trotzdem alles schiefgeht?</p>
+</section>
+
+<!-- ============ 15 · BACKUP 3-2-1 ============ -->
+<section class="slide" data-notes="T+37 · Backup-Teil einleiten mit Schmids Q33: 'Haben Sie das Wiederherstellen schon mal gemacht?' Diese Frage trennt Anbieter, die Backups BEHAUPTEN, von denen, die sie KÖNNEN. 3-2-1 erklären: drei Kopien deiner Daten, auf zwei verschiedenen Systemen, davon eine ausser Haus bei einem ZWEITEN Anbieter. Warum extern: Wenn Ransomware das Haupt-System verschlüsselt oder der Anbieter brennt, lebt die dritte Kopie woanders. Idealerweise unveränderbar (Ransomware kann sie nicht mitverschlüsseln). Und dann der Kernsatz, gerne wörtlich: 'Ein Backup ohne getesteten Restore ist ein Gerücht.' Bei uns: tägliche verschlüsselte Backups, Kopie beim Zweitanbieter, Restore nach dokumentiertem Ablauf GEPROBT, für unsere eigenen Produktionssysteme eingerichtet.">
+  <div class="kicker"><b>// 11</b> · WENN ALLES SCHIEFGEHT</div>
+  <h2>Backup 3-2-1: <span class="accent">geübt,</span> nicht behauptet.</h2>
+  <div class="deutsch"><b>Auf Deutsch:</b> 3 Kopien der Daten, auf 2 verschiedenen Systemen, davon 1 ausser Haus. Und entscheidend ist nicht das Backup, sondern die <b>getestete Wiederherstellung</b>.</div>
+  <div class="b321">
+    <div class="grp"><span class="big">3</span><h4>Kopien</h4><p>Produktion + Backup + Zweitkopie. Eine Kopie ist keine Kopie.</p></div>
+    <div class="grp"><span class="big">2</span><h4>Systeme</h4><p>Datenbank-Backup mit Punkt-in-Zeit + Objektspeicher-Versionierung.</p></div>
+    <div class="grp ext"><span class="big">1</span><h4>extern, beim Zweitanbieter</h4><p>Überlebt Ransomware und Anbieter-Ausfall. Idealerweise unveränderbar.</p></div>
+  </div>
+  <div class="saytext">"Backup heisst bei uns 3-2-1 mit einer Kopie beim Zweitanbieter, und wir testen die Wiederherstellung, statt sie zu behaupten."</div>
+</section>
+
+<!-- ============ 16 · RTO / RPO ============ -->
+<section class="slide" data-notes="T+40 · Zwei Abkürzungen, ein Zeitstrahl. Erzähl Bönis Drill-Frage: 'Sonntag brennt Ihr Server ab, was ist Montag 08:00?' RPO = Blick ZURÜCK: Wie viel Arbeit ist maximal verloren, also die Zeit seit der letzten Sicherung. RTO = Blick VORWÄRTS: Wie lange dauert es, bis alles wieder läuft. Unsere ehrlichen Zielwerte laut aussprechen: RPO maximal 24 Stunden, dank Punkt-in-Zeit-Wiederherstellung der Datenbank meist deutlich besser. RTO wenige Stunden zu Servicezeiten. Und die Ehrlichkeit, die uns glaubwürdig macht: Die ÜBERWACHUNG mit Alarmierung läuft automatisch rund um die Uhr, aber ein 24/7-MENSCHEN-Pikett versprechen wir bewusst nicht, bei vier Personen wäre alles andere gelogen. Plus die Pflicht aus Modul 3: Vorfall = Meldung an den Kunden innert 24 Stunden.">
+  <div class="kicker"><b>// 12</b> · DIE ZWEI PRÜFER-ABKÜRZUNGEN</div>
+  <h2>RTO &amp; RPO: <span class="accent">der Zeitstrahl des Ernstfalls.</span></h2>
+  <div class="deutsch"><b>Auf Deutsch:</b> RPO = wie viel Datenverlust ist maximal drin (Blick zurück zur letzten Sicherung). RTO = wie schnell läuft alles wieder (Blick nach vorn).</div>
+  <div class="tline">
+    <span class="axis"></span>
+    <div class="ev" style="left:8%"><span class="dot"></span><div class="lb">Letzte Sicherung</div><div class="sub">täglich, verschlüsselt</div></div>
+    <div class="ev bad" style="left:42%"><span class="dot"></span><div class="lb">💥 Ausfall</div><div class="sub">Sonntag, 03:12</div></div>
+    <div class="ev" style="left:88%"><span class="dot"></span><div class="lb">Läuft wieder</div><div class="sub">aus Backup wiederhergestellt</div></div>
+    <div class="span" style="left:10%;width:29%"><small>RPO: max. 24h Verlust (DB: deutlich besser)</small></div>
+    <div class="span grn" style="left:45%;width:40%"><small>RTO: wenige Stunden, zu Servicezeiten</small></div>
+  </div>
+  <div class="grid-2" style="margin-top:8px">
+    <div class="card term"><h3>Rund um die Uhr: die Technik</h3><p>Monitoring + automatische Alarmierung aufs Telefon laufen <b>24/7</b>.</p></div>
+    <div class="card term"><h3>Ehrlich: kein Menschen-Pikett</h3><p>Personelle Reaktion zu vereinbarten Servicezeiten. <b>Bei 4 Leuten wäre alles andere gelogen.</b> Vorfall = Meldung an Kunde innert 24h.</p></div>
+  </div>
+  <div class="saytext">"Unsere ehrlichen Zielwerte: maximal 24 Stunden Datenverlust im schlimmsten Fall, Wiederanlauf in Stunden zu Servicezeiten, Überwachung automatisiert rund um die Uhr."</div>
+</section>
+
+<!-- ============ 17 · SELBSTAUSKUNFT ============ -->
+<section class="slide" data-notes="T+43 · Jetzt wird es persönlich, 4-5 Minuten Diskussion einplanen. Links steht, was bei uns real steht, rechts, was uns ehrlich fehlt. Die ISO-Frage einmal komplett durchspielen (Q29), das ist die Flunker-Falle: 'Nein, wir sind nicht ISO-zertifiziert, und bei vier Personen wäre die Behauptung unglaubwürdig. Zertifiziert sind die Schweizer Rechenzentren, auf denen wir betreiben, wir arbeiten nach dem KMU-Merkblatt des Bundesamts für Cybersicherheit.' Frag in die Runde: Fühlt sich jemand mit einem Punkt links unsicher? Dann Brücke zur Hausaufgabe: Genau DAS prüft jeder am eigenen Gerät, denn diese Liste gilt nur, wenn sie für alle vier stimmt.">
+  <div class="kicker"><b>// 13</b> · UNSER EIGENES HAUS</div>
+  <h2>Ehrliche Selbstauskunft: <span class="accent">haben</span> und fehlt.</h2>
+  <div class="hf">
+    <div class="card ok"><span class="cnr tl"></span><h3>✅ Steht bei uns</h3>
+      <ul>
+        <li><b>MFA auf allen Systemen</b> + Passwort-Manager</li>
+        <li><b>Verschlüsselte Geräte</b>, persönliche Konten, Least Privilege</li>
+        <li><b>Tägliche verschlüsselte Backups</b> mit getestetem Restore-Runbook</li>
+        <li><b>Automatisiertes Monitoring</b> mit Alarmierung</li>
+        <li>Dokumentierte Deploys, protokollierte Systeme</li>
+      </ul>
+    </div>
+    <div class="card no"><span class="cnr br"></span><h3>· Fehlt, und wir sagen es</h3>
+      <ul>
+        <li><b>Keine ISO-27001-Zertifizierung</b> unseres Unternehmens (zertifiziert: die RZ-Anbieter)</li>
+        <li><b>Kein 24/7-Pikett</b> mit Menschen</li>
+        <li><b>Kein dediziertes SOC</b> (Security Operations Center)</li>
+        <li>Referenzrahmen statt Zertifikat: BACS-KMU-Merkblatt + IKT-Minimalstandard des Bundes</li>
+      </ul>
+    </div>
+  </div>
+  <div class="saytext">"Wir sind nicht ISO-zertifiziert und behaupten das auch nicht; zertifiziert sind die Schweizer Rechenzentren, auf denen wir betreiben, und wir arbeiten nach dem KMU-Merkblatt des Bundesamts für Cybersicherheit."</div>
+</section>
+
+<!-- ============ 18 · E4 ============ -->
+<section class="slide" data-notes="T+48 · Vorschau auf den Scope-Entscheid am 21.7., die EINZIGE echte Debatte aus Dossier E: Bieten wir das Management der vRv-Endgeräte selbst an oder mit Partner? Links die Kosten: Ein Lernpfad von 150 bis 250 Stunden für eine Person bis Oktober (MD-102 plus Teile von SC-300, also 12-20 Stunden pro Woche), danach 25 bis 40 Stunden Betrieb pro Monat für rund 28 Geräte inklusive Helpdesk, und die Berufshaftpflicht muss Managed Services EXPLIZIT decken (fliesst in Patriks Versicherungsanfrage 6.1). Rechts der Ertrag: Marktpreis 50 bis 120 Franken pro User und Monat, bei 28 Seats rund 2500 Franken wiederkehrend, Lizenzbasis Business Premium 17.80 (Achtung, Microsoft-Preiserhöhung per 1.7., Preise neu ziehen). Empfehlung aus Dossier E: SELBST, mit definiertem Support-Fenster Mo-Fr 08-17, Reaktion 4h, plus Partner-Backstop für schwere Incidents. Und der Satz aus dem Primer: Wer am 21.7. dagegen ist, bringt eine Zahl mit, kein Bauchgefühl.">
+  <div class="kicker"><b>// 14</b> · VORSCHAU SCOPE-ENTSCHEID 21.7.</div>
+  <h2>E4: Kunden-Geräte selbst managen? <span class="accent">Die Zahlen.</span></h2>
+  <div class="e4">
+    <div class="card"><h3>Was es uns kostet</h3>
+      <dl>
+        <dt>Lernpfad (1 Person, bis Oktober)</dt><dd><b>150-250 h</b> · MD-102 + Teile SC-300, 12-20 h/Woche</dd>
+        <dt>Laufender Betrieb (28 Geräte)</dt><dd><b>25-40 h/Monat</b> all-in inkl. Helpdesk (reine Pflege 8-15 h)</dd>
+        <dt>Haftung</dt><dd>Versicherung muss Managed Services <b>explizit</b> decken → Anfrage 6.1</dd>
+      </dl>
+    </div>
+    <div class="card"><span class="cnr tl"></span><span class="cnr br"></span><h3>Was es einbringt</h3>
+      <dl>
+        <dt>Marktpreis Managed Workplace</dt><dd><b>CHF 50-120</b> /User/Monat</dd>
+        <dt>Bei 28 Seats</dt><dd>≈ <b>CHF 2'520/Monat</b> wiederkehrend (effektiv CHF 63-100/h)</dd>
+        <dt>Lizenzbasis</dt><dd>Business Premium <b>CHF 17.80</b> /User/Mt · Preiserhöhung 1.7.26: neu ziehen!</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="reco"><b>Empfehlung Dossier E:</b> selbst, mit definiertem Support-Fenster (Mo-Fr 08-17, Reaktion 4 h) + Partner-Backstop für schwere Security-Incidents. Entscheid am 21.7. · wer dagegen ist, bringt eine Zahl mit, kein Bauchgefühl.</div>
+</section>
+
+<!-- ============ 19 · DIE 10 SÄTZE ============ -->
+<section class="slide" data-notes="T+52 · Nicht vorlesen! Sag: 'Das sind unsere zehn Standardsätze für den 5.8., sie stehen im Primer und im Hub. Jeder sucht sich JETZT zwei aus und sagt sie einmal laut in eigenen Worten.' 3 Minuten, reihum. Korrigiere nur, wenn ein Fakt kippt (z.B. wenn jemand 24/7-Pikett verspricht oder ISO behauptet). Das ist die halbe Miete für das Mock-Meeting S7.">
+  <div class="kicker"><b>// 15</b> · SPRECHFÄHIG WERDEN</div>
+  <h2>Zehn Sätze, die am 5.8. sitzen müssen. <span class="accent">Sucht euch zwei aus.</span></h2>
+  <div class="sents">
+    <div class="s"><b>01</b>Software- und Betriebsanbieter unserer Lösung; Büronetz + Endgeräte bleiben sauber abgegrenzt beim IT-Betrieb von vRv.</div>
+    <div class="s"><b>02</b>Öffentlich erreichbar ist genau ein Port: HTTPS. Admin nur mit Schlüssel von definierten Quellen.</div>
+    <div class="s"><b>03</b>EDR heisst: beobachtet, nicht nur gescannt. Auffälliges Verhalten wird erkannt, das Gerät kann isoliert werden.</div>
+    <div class="s"><b>04</b>Unsere Lösung braucht kein VPN: TLS + Anmeldung über Ihre Microsoft-Konten, Ihre MFA-Regeln gelten automatisch.</div>
+    <div class="s"><b>05</b>Fahren Ihre Geräte Always On VPN, läuft unsere Lösung transparent hindurch; das Setup bleibt bei Ihrem IT-Partner.</div>
+    <div class="s"><b>06</b>Für mobilen Zugriff positioniert Microsoft heute Zero Trust über Entra als Nachfolger des Voll-VPN.</div>
+    <div class="s"><b>07</b>Backup heisst 3-2-1 mit Kopie beim Zweitanbieter, und wir testen die Wiederherstellung, statt sie zu behaupten.</div>
+    <div class="s"><b>08</b>Ehrliche Zielwerte: max. 24 h Datenverlust im schlimmsten Fall, Wiederanlauf in Stunden, Überwachung 24/7 automatisiert.</div>
+    <div class="s"><b>09</b>Jede Aktion einem persönlichen Konto zugeordnet, Audit-Log, Nur-Lese-Rolle für die Revision.</div>
+    <div class="s"><b>10</b>Nicht ISO-zertifiziert, und wir behaupten es nicht; zertifiziert sind die Schweizer Rechenzentren, wir arbeiten nach BACS-Merkblatt.</div>
+  </div>
+</section>
+
+<!-- ============ 20 · HAUSAUFGABE ============ -->
+<section class="slide" data-notes="T+55 · Die Hausaufgabe verkaufen, nicht verordnen: 'Am 5.8. sagen wir, unsere Geräte sind verschlüsselt und MFA ist überall Pflicht. Das muss für jeden von uns STIMMEN. Also prüft es jeder an seinem eigenen Gerät und seinen eigenen Konten.' Ablauf zeigen: Handout im Hub (auch als PDF), Audit-Checkliste + 5 Begriffe am eigenen Beispiel, Extra freiwillig: Angriffs-Drehbuch auf uns selbst. Abgabe im Hub bei Modul 2 → Abgaben, Frist Mittwoch 15.7., 18:00. WICHTIG, zweimal sagen: Keine Passwörter oder Recovery-Codes auf Screenshots, vorher schwärzen. Und: Rote Ampeln sind erlaubt und erwünscht, ein geschöntes Audit ist wertlos. Claude kann diese Aufgabe nicht machen, er sieht eure Geräte nicht, und genau deshalb bringt sie was.">
+  <div class="kicker"><b>// 16</b> · HAUSAUFGABE</div>
+  <h2>Sicherheits-Audit: <span class="accent">an deinem eigenen Setup.</span></h2>
+  <div class="hw">
+    <div class="card"><span class="cnr tl"></span>
+      <h3 style="font-size:18px">Was zu tun ist (60-90 min)</h3>
+      <ol>
+        <li><b>Aufgabe A:</b> Audit deines Geräts + deiner 6 wichtigsten Konten (Checkliste im Handout, Ampel + Massnahme je Punkt, Screenshots als Beleg)</li>
+        <li><b>Aufgabe B:</b> 5 Begriffe erklärt, je 2-3 Sätze, zwingend am Beispiel aus DEINEM Audit</li>
+        <li><b>Extra (+30 min, freiwillig):</b> Angriffs-Drehbuch auf Automatisierbar aus Angreifer-Sicht</li>
+      </ol>
+      <p style="margin-top:14px"><span class="deadline-chip">ABGABE: MITTWOCH 15.7. · 18:00</span></p>
+      <p style="color:var(--muted);font-size:13.5px;margin-top:10px">Hub → Lernen → Modul 2 → <b style="color:var(--text)">Abgaben ansehen</b> → hochladen (PDF, Fotos, MD, TXT). Für alle vier sichtbar.</p>
+    </div>
+    <div>
+      <div class="warnbox"><b>⚠ Vor dem Hochladen:</b> Keine Passwörter, Recovery-Codes oder Kontonummern auf Screenshots. Vorher schwärzen. Es zählt der Nachweis der Einstellung ("FileVault: aktiviert"), nie der Inhalt.</div>
+      <div class="card" style="margin-top:14px"><h3 style="font-size:16px">Warum ohne Claude?</h3><p style="color:var(--muted);font-size:13.5px;line-height:1.55;margin-top:7px">Claude sieht weder deine Festplatten-Verschlüsselung noch deine Konten. Und: Die Audits fliessen real in unser Security-Antwortpaket ein. <b style="color:var(--text)">Was wir am 5.8. behaupten, muss bei uns vier stimmen.</b> Rote Ampeln sind erwünscht, geschönt ist wertlos.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 21 · QUIZ + Q&A [SKIP] ============ -->
+<section class="slide" data-notes="T+58 · [SKIP-KANDIDAT: nur zeigen, wenn Zeit bleibt.] Ausblick: Das Quiz zu diesem Modul steht im Hub (12 Fragen, Bestehensgrenze 10 von 12, plus 5 Transfer-Drills wie Bönis Server-brennt-Frage). Jeder macht es VOR der nächsten Session für sich. Und gleich im Anschluss an diese Session: die Scope-Entscheidungs-Session zu Dossier E, da kommen die E4-Zahlen von Folie 18 sofort ins Spiel. Offene Fragen jetzt, sonst in den Abgabe-Kommentaren im Hub.">
+  <div class="kicker"><b>// 17</b> · WIE ES WEITERGEHT</div>
+  <div class="grow">
+    <h2>Quiz im Hub, dann kommt der <span class="accent">Scope-Entscheid.</span></h2>
+    <div class="grid-3" style="margin-top:30px">
+      <div class="card term"><h3>1 · Quiz Modul 2</h3><p>12 Fragen + 5 Drills, im Hub unter Lernen. Bestehensgrenze: <b>10 von 12</b>. Vor der nächsten Session, jeder für sich.</p></div>
+      <div class="card term"><h3>2 · Hausaufgabe</h3><p>Sicherheits-Audit, Abgabe bis <b>Mi 15.7., 18:00</b> im Hub. Ampeln werden kurz besprochen, Details bleiben privat.</p></div>
+      <div class="card term"><span class="cnr br"></span><h3>3 · Scope-Session (21.7.)</h3><p>Dossier E, die E4-Entscheidung mit genau den Zahlen von vorhin. <b>Wer dagegen ist, bringt eine Zahl mit.</b></p></div>
+    </div>
+  </div>
+  <p class="footnote">Fragen jederzeit: in der Session, im Hub-Kommentar bei der Abgabe, oder an Joaquin direkt.</p>
+</section>
+
+<!-- ============ 22 · ENDE ============ -->
+<section class="slide" data-notes="T+60 · Schlusssatz, dann Schluss: 'Ihr könnt jetzt jede Sicherheitsfrage der Ausschreibung einordnen: Verantwortungsschichten, die vier Ringe, den Ernstfall. Der Rest ist Üben: zwei Sätze pro Person, das Quiz, das Audit. Am 5.8. sitzt da ein Prüfer, der testet, ob wir flunkern. Wir flunkern nicht, das ist unser Vorteil.' Danke, Übergang zur Scope-Session (falls sie heute stattfindet) oder Ende.">
+  <div class="cover-brand">
+    <span class="logo"><svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg"><rect width="500" height="500" rx="110" ry="110" fill="#15C97A"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <span><b>automatisierbar</b><span class="sub">// MODUL 2 · GESCHAFFT</span></span>
+  </div>
+  <div class="grow">
+    <p class="statement">Ihr könnt jetzt: die Verantwortung sauber abgrenzen, jeden Begriff der Ausschreibung erklären, und den Ernstfall als Geschichte erzählen. <em>Der Prüfer testet, ob wir flunkern. Wir flunkern nicht.</em></p>
+    <div class="cover-meta">
+      <span class="chip green"><span class="dot"></span>Audit-Abgabe: Mi 15.7., 18:00</span>
+      <span class="chip">Quiz: 10 von 12</span>
+      <span class="chip">Scope-Entscheid: 21.7.</span>
+    </div>
+  </div>
+  <p class="footnote">Material: Hub → Lernen → Modul 2 (Primer, Quiz, dieses Deck, Handout + PDF, Abgaben). Fragen-Bank Block E für die Schmid-Antworten.</p>
+</section>
+
+</div></div>
+
+<div id="hud"><div id="bar"></div></div>
+<div id="counter">1 / 22</div>
+<div id="navhint">← → blättern · N Notizen</div>
+<button class="navbtn" id="prev" aria-label="Zurück">‹</button>
+<button class="navbtn" id="next" aria-label="Weiter">›</button>
+<div id="notes"><div class="nt">// REFERENTENNOTIZEN</div><p id="notes-text"></p></div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=Math.min(Math.max(parseInt(location.hash.slice(1),10)||1,1),slides.length)-1;
+  var bar=document.getElementById('bar'),counter=document.getElementById('counter');
+  var notes=document.getElementById('notes'),notesText=document.getElementById('notes-text');
+  var navhint=document.getElementById('navhint');
+
+  function show(n){
+    i=Math.min(Math.max(n,0),slides.length-1);
+    slides.forEach(function(s,k){s.classList.toggle('active',k===i)});
+    bar.style.width=((i+1)/slides.length*100)+'%';
+    counter.textContent=(i+1)+' / '+slides.length;
+    notesText.textContent=slides[i].getAttribute('data-notes')||'(keine Notizen)';
+    navhint.classList.toggle('hidden',i!==0);
+    history.replaceState(null,'','#'+(i+1));
+  }
+  function next(){show(i+1)} function prev(){show(i-1)}
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();next()}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev()}
+    else if(e.key==='Home'){show(0)} else if(e.key==='End'){show(slides.length-1)}
+    else if(e.key==='n'||e.key==='N'){notes.classList.toggle('open')}
+  });
+  document.getElementById('next').addEventListener('click',next);
+  document.getElementById('prev').addEventListener('click',prev);
+
+  window.addEventListener('hashchange',function(){
+    var n=parseInt(location.hash.slice(1),10);
+    if(n>=1&&n<=slides.length&&n-1!==i)show(n-1);
+  });
+
+  var tx=null;
+  document.addEventListener('touchstart',function(e){tx=e.changedTouches[0].clientX},{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(tx===null)return;
+    var dx=e.changedTouches[0].clientX-tx;
+    if(Math.abs(dx)>60){dx<0?next():prev()}
+    tx=null;
+  },{passive:true});
+
+  var stage=document.getElementById('stage');
+  function fit(){
+    var s=Math.min(window.innerWidth/1280,window.innerHeight/720);
+    stage.style.transform='scale('+s+')';
+  }
+  window.addEventListener('resize',fit);
+  fit(); show(i);
+})();
+</script>
+</body>
+</html>

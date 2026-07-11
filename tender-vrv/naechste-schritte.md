@@ -32,6 +32,7 @@
 
 ## Alle zusammen
 
+- [ ] **Modul-2-Hausaufgabe: Sicherheits-Audit** ([Handout](upskilling/modul-2-handout.md)) machen und im Hub abgeben (Lernen → Modul 2 → Abgaben) **bis Mi 15.7., 18:00**
 - [ ] **21.7. Scope-Entscheid** (an Session 3): Was bieten wir selbst an, wo Partner? Vorbereitung: [Dossier E](research/dossier-e-machbarkeit.md) lesen
 - [ ] 1./2.8. [Probe-Meeting](meeting/mock-meeting-s7.md): Claude spielt die Kundenseite
 - [ ] 3./4.8. Generalprobe: Deck, Demo, Technik-Check

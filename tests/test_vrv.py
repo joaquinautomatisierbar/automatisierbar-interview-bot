@@ -443,9 +443,9 @@ def test_docs_manifest_shape_and_all_files_exist(client, monkeypatch):
     assert [s["id"] for s in sections] == [
         "lernen", "termin", "praesentation", "offerte", "vertraege", "wissen", "plan"]
     items = [item for s in sections for item in s["items"]]
-    assert len(items) == 40
+    assert len(items) == 43
     paths = [item["path"] for item in items]
-    assert len(set(paths)) == 40
+    assert len(set(paths)) == 43
     for item in items:
         assert item["title"] and item["desc"]
         assert item["kind"] in ("md", "pdf", "pptx", "html")
@@ -562,3 +562,134 @@ def test_parse_tasks_real_tasks_file(monkeypatch):
     assert len(parsed["milestones"]) >= 8
     assert any(m["emph"] and m["date"] == "5.8." for m in parsed["milestones"])
     assert parsed["stand"]
+
+
+def test_lernen_paths_follow_module_prefix_convention():
+    """The hub's renderLernen groups by 'upskilling/modul-N-<role>' prefix;
+    every lernen item except the fragen-bank must obey the convention."""
+    lernen = [s for s in docs.DOCS_MANIFEST if s["id"] == "lernen"][0]
+    pattern = re.compile(
+        r"^upskilling/modul-\d+-(primer|quiz|deck|handout)\.(md|html|pdf)$")
+    for item in lernen["items"]:
+        if "fragen-bank" in item["path"]:
+            continue
+        assert pattern.match(item["path"]), item["path"]
+
+
+# ---------------------------------------------------------------------------
+# Hub: homework uploads (Abgaben)
+# ---------------------------------------------------------------------------
+
+import io  # noqa: E402
+import re  # noqa: E402
+
+from vrv import uploads as vrv_uploads  # noqa: E402
+
+
+def _post_upload(client, *, modul="modul-2", who="Joaquin", comment="ok",
+                 content=b"\x89PNG fake", mime="image/png", name="beweis.png"):
+    return client.post("/api/vrv/uploads", data={
+        "modul": modul, "who": who, "comment": comment,
+        "file": (io.BytesIO(content), name, mime),
+    }, content_type="multipart/form-data")
+
+
+def test_uploads_fail_closed_and_reject_client_session(client, monkeypatch):
+    monkeypatch.delenv("VRV_PASSWORD", raising=False)
+    assert _post_upload(client).status_code == 401
+    assert client.get("/api/vrv/uploads").status_code == 401
+    assert client.get("/api/vrv/uploads/deadbeef/file").status_code == 401
+    assert client.delete("/api/vrv/uploads/deadbeef").status_code == 401
+    _client_session(client, monkeypatch)
+    assert _post_upload(client).status_code == 401
+    assert client.get("/api/vrv/uploads").status_code == 401
+    assert client.get("/api/vrv/uploads/deadbeef/file").status_code == 401
+    assert client.delete("/api/vrv/uploads/deadbeef").status_code == 401
+
+
+def test_upload_roundtrip(client, monkeypatch, data_dir):
+    _login(client, monkeypatch)
+    r = _post_upload(client)
+    assert r.status_code == 201
+    body = r.get_json()["upload"]
+    assert body["id"] and body["who"] == "Joaquin"
+    assert "stored" not in body                      # on-disk name never leaves
+    assert client.get("/api/vrv/uploads?modul=modul-2").get_json()["uploads"][0]["id"] == body["id"]
+    assert client.get("/api/vrv/uploads?modul=modul-1").get_json()["uploads"] == []
+    f = client.get(f"/api/vrv/uploads/{body['id']}/file")
+    assert f.status_code == 200
+    assert f.mimetype == "image/png"
+    assert f.headers["X-Content-Type-Options"] == "nosniff"
+    assert "attachment" not in (f.headers.get("Content-Disposition") or "")
+    assert client.delete(f"/api/vrv/uploads/{body['id']}").status_code == 200
+    assert client.get("/api/vrv/uploads").get_json()["uploads"] == []
+    leftovers = [p for p in os.listdir(os.path.join(data_dir, "uploads"))
+                 if not p.startswith(".")]
+    assert leftovers == []
+
+
+def test_upload_validation(client, monkeypatch):
+    _login(client, monkeypatch)
+    assert client.post("/api/vrv/uploads", data={"modul": "modul-2", "who": "Joaquin"},
+                       content_type="multipart/form-data").status_code == 400
+    assert _post_upload(client, content=b"").status_code == 400
+    assert _post_upload(client, who="Eve").status_code == 400
+    assert _post_upload(client, modul="hack").status_code == 400
+    assert _post_upload(client, comment="x" * 501).status_code == 400
+    assert _post_upload(client, mime="application/octet-stream",
+                        name="run.exe").status_code == 415
+    assert _post_upload(client, mime="text/html",
+                        name="evil.html").status_code == 415
+
+
+def test_upload_size_cap_and_413_json(client, monkeypatch):
+    _login(client, monkeypatch)
+    r = _post_upload(client, content=b"x" * (vrv_uploads.MAX_UPLOAD_BYTES + 1))
+    assert r.status_code == 413
+    assert r.get_json()["ok"] is False               # JSON body, not HTML page
+
+
+def test_upload_heic_md_and_filename_hygiene(client, monkeypatch):
+    _login(client, monkeypatch)
+    heic = _post_upload(client, mime="application/octet-stream", name="IMG_1.HEIC")
+    assert heic.status_code == 201
+    hid = heic.get_json()["upload"]["id"]
+    assert client.get(f"/api/vrv/uploads/{hid}/file").mimetype == "image/heic"
+    md = _post_upload(client, content=b"# audit <script>alert(1)</script>",
+                      mime="text/markdown", name="audit.md")
+    assert md.status_code == 201
+    mres = client.get(f"/api/vrv/uploads/{md.get_json()['upload']['id']}/file")
+    assert mres.mimetype == "text/plain"             # never rendered as html
+    weird = _post_upload(client, name="bö\"se\r\nname.png")
+    assert weird.status_code == 201
+    entry = weird.get_json()["upload"]
+    assert "\r" not in entry["orig_name"] and "\n" not in entry["orig_name"]
+    assert client.get(f"/api/vrv/uploads/{entry['id']}/file").status_code == 200
+
+
+def test_upload_unknown_id_404(client, monkeypatch):
+    _login(client, monkeypatch)
+    assert client.get("/api/vrv/uploads/deadbeefdeadbeef/file").status_code == 404
+    assert client.delete("/api/vrv/uploads/deadbeefdeadbeef").status_code == 404
+    assert client.get("/api/vrv/uploads/%2e%2e%2fetc/file").status_code == 404
+
+
+def test_uploads_index_corruption_recovers(client, monkeypatch, data_dir):
+    _login(client, monkeypatch)
+    with open(os.path.join(data_dir, "uploads.json"), "w") as fh:
+        fh.write("{broken")
+    assert client.get("/api/vrv/uploads").get_json()["uploads"] == []
+    assert os.path.exists(os.path.join(data_dir, "uploads.json.corrupt"))
+
+
+def test_uploads_dir_created_at_runtime(client, monkeypatch, data_dir):
+    _login(client, monkeypatch)
+    assert not os.path.exists(os.path.join(data_dir, "uploads"))
+    assert _post_upload(client).status_code == 201
+    assert os.path.isdir(os.path.join(data_dir, "uploads"))
+
+
+def test_upload_does_not_touch_state(client, monkeypatch, data_dir):
+    _login(client, monkeypatch)
+    assert _post_upload(client).status_code == 201
+    assert store.load_state()["answers"] == {}
