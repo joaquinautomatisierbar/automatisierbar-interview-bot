@@ -53,6 +53,35 @@ check("oldest_age_hours leer -> 0", fa.oldest_age_hours([], NOW) == 0.0)
 msg = fa.build_message([{"name": "Markus", "text": "geht nicht", "created_at": item(50)["created_at"]}],
                        {"reason": "test", "count": 1, "oldest_h": 50})
 check("build_message enthält Snippet", "Markus" in msg and "geht nicht" in msg)
+check("build_message nennt den Erledigen-Weg (#8)", "Erledigen" in msg and "Erledigt" in msg)
+
+# ── issue #8: reflect Notion/Hub triage into SQLite before alerting ──
+from spesen import notion_feedback as nf
+
+# fetch_resolved_app_ids without Notion env -> None (best-effort skip; alert keeps old behaviour)
+_saved = (os.environ.pop("NOTION_API_KEY", None), os.environ.pop("SPESEN_FEEDBACK_DB_ID", None))
+check("fetch_resolved_app_ids ohne Notion-Env -> None", nf.fetch_resolved_app_ids() is None)
+
+# sync_resolved_from_notion closes exactly the feedbacks Notion reports resolved
+_resolved_calls = []
+_orig = (nf.fetch_resolved_app_ids, fa.db.open_feedback, fa.db.resolve_feedback)
+nf.fetch_resolved_app_ids = lambda: {2, 3}
+fa.db.open_feedback = lambda: [{"id": i, "name": "n", "text": "t",
+                                "created_at": item(1)["created_at"]} for i in (1, 2, 3)]
+fa.db.resolve_feedback = lambda fid: (_resolved_calls.append(fid) or True)
+_n = fa.sync_resolved_from_notion()
+check("sync schliesst die in Notion erledigten (2,3)", _n == 2 and set(_resolved_calls) == {2, 3})
+
+# sync is a no-op when Notion is off (fetch returns None)
+_resolved_calls.clear()
+nf.fetch_resolved_app_ids = lambda: None
+check("sync No-op wenn Notion aus", fa.sync_resolved_from_notion() == 0 and _resolved_calls == [])
+
+nf.fetch_resolved_app_ids, fa.db.open_feedback, fa.db.resolve_feedback = _orig
+if _saved[0] is not None:
+    os.environ["NOTION_API_KEY"] = _saved[0]
+if _saved[1] is not None:
+    os.environ["SPESEN_FEEDBACK_DB_ID"] = _saved[1]
 
 if FAILS:
     print(f"\n{len(FAILS)} FAILED: {FAILS}")

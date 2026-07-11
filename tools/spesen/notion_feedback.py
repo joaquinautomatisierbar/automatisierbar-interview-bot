@@ -12,6 +12,51 @@ import os
 
 NOTION_VERSION = "2022-06-28"
 
+# Status values in the KnowSpesen-Feedback Notion DB that count as "handled". A feedback whose
+# Notion row carries one of these is triaged: it should stop driving the backlog alert. The Hub
+# mirrors this same DB inbound, so a Hub build marked done (once Hub->Notion writeback ships) or a
+# human resolving the Status in Notion both land here.
+RESOLVED_STATUSES = {"Erledigt", "Done", "Resolved", "Geschlossen", "Closed", "Abgelehnt", "Verworfen"}
+
+
+def fetch_resolved_app_ids() -> "set[int] | None":
+    """Query the KnowSpesen-Feedback Notion DB and return the App-ID (= the SQLite feedback id,
+    stored by mirror() as the 'App-ID' number) of every row whose Status is a resolved value.
+
+    Returns None when Notion is not configured or unreachable, so the caller leaves SQLite
+    untouched and the alert keeps its previous behaviour. Fully best-effort: never raises.
+    """
+    key = os.environ.get("NOTION_API_KEY", "")
+    db = os.environ.get("SPESEN_FEEDBACK_DB_ID", "")
+    if not key or not db:
+        return None
+    try:
+        import requests
+        headers = {"Authorization": f"Bearer {key}", "Notion-Version": NOTION_VERSION,
+                   "Content-Type": "application/json"}
+        resolved: set[int] = set()
+        payload: dict = {"page_size": 100}
+        while True:
+            r = requests.post(f"https://api.notion.com/v1/databases/{db}/query",
+                              headers=headers, json=payload, timeout=15)
+            if r.status_code not in (200, 201):
+                print(f"[spesen-feedback-notion] query HTTP {r.status_code}: {r.text[:200]}", flush=True)
+                return None
+            data = r.json()
+            for page in data.get("results", []):
+                props = page.get("properties", {})
+                status = (((props.get("Status") or {}).get("select")) or {}).get("name") or ""
+                app_id = (props.get("App-ID") or {}).get("number")
+                if status in RESOLVED_STATUSES and isinstance(app_id, (int, float)):
+                    resolved.add(int(app_id))
+            if not data.get("has_more"):
+                break
+            payload["start_cursor"] = data.get("next_cursor")
+        return resolved
+    except Exception as e:
+        print(f"[spesen-feedback-notion] query error={e!r}", flush=True)
+        return None
+
 
 def mirror(app_id: int, name: str, text: str, status: str = "Offen", datum_iso: str = "") -> bool:
     key = os.environ.get("NOTION_API_KEY", "")

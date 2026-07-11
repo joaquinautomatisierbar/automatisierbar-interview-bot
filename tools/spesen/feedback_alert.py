@@ -83,6 +83,8 @@ def build_message(open_list: list, decision: dict) -> str:
         lines.append(f"• {who}: {txt}")
     if len(open_list) > 3:
         lines.append(f"… und {len(open_list) - 3} weitere.")
+    lines.append("")
+    lines.append("Erledigen: Status im KnowSpesen-Feedback (Notion) auf Erledigt setzen oder im Hub unter /app/builds, dann verstummt der Alert.")
     return "\n".join(lines)
 
 
@@ -94,8 +96,37 @@ def _post_telegram(token: str, chat_id: str, text: str) -> bool:
     return r.ok
 
 
+def sync_resolved_from_notion() -> int:
+    """Pull resolved statuses from the shared KnowSpesen-Feedback Notion DB into SQLite.
+
+    That Notion DB is the operator's (and the Hub's) triage surface: the Hub mirrors it inbound,
+    and a human can set a row's Status to Erledigt there. Marking a build done in the Hub used to
+    silence nothing here because triage never reached this SQLite. Now, before the alert counts, any
+    feedback whose Notion row is resolved is closed in SQLite too, so a handled backlog stops nagging.
+    Best-effort: returns the number resolved (0 when Notion is off/unreachable), never raises.
+    """
+    try:
+        from . import notion_feedback
+    except ImportError:  # pragma: no cover
+        import notion_feedback
+    resolved_ids = notion_feedback.fetch_resolved_app_ids()
+    if not resolved_ids:
+        return 0
+    n = 0
+    for f in db.open_feedback():
+        fid = f.get("id")
+        if fid in resolved_ids and db.resolve_feedback(fid):
+            n += 1
+    if n:
+        print(f"[feedback-alert] {n} Feedback(s) via Notion-Status als erledigt synchronisiert")
+    return n
+
+
 def run(send: bool = True) -> dict:
     now = _now_utc()
+    # Reflect triage done on the shared Notion feedback DB (the Hub's / operator's surface) BEFORE
+    # counting, so a feedback already handled there no longer drives the alert (issue #8).
+    sync_resolved_from_notion()
     open_list = db.open_feedback()
     decision = evaluate(open_list, db.meta_get(META_KEY) or "", now)
     print(f"[feedback-alert] open={decision['count']} oldest={decision['oldest_h']:.0f}h "
