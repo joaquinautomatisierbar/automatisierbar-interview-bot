@@ -33,6 +33,7 @@
 ## Alle zusammen
 
 - [ ] **Modul-2-Hausaufgabe: Sicherheits-Audit** ([Handout](upskilling/modul-2-handout.md)) machen und im Hub abgeben (Lernen → Modul 2 → Abgaben) **bis Mi 15.7., 18:00**
+- [ ] **Modul-5-Hausaufgabe (nach Session 30.7.): Statusreport über die eigene Woche + CR + Generalprobe-Kriterien** ([Handout](upskilling/modul-5-handout.md)) im Hub abgeben (Lernen → Modul 5 → Abgaben) **bis So 2.8., 18:00**; die Reports werden am 3.8. zu Beginn der Generalprobe gelesen
 - [ ] **21.7. Scope-Entscheid** (an Session 3): Was bieten wir selbst an, wo Partner? Vorbereitung: [Dossier E](research/dossier-e-machbarkeit.md) lesen
 - [ ] 1./2.8. [Probe-Meeting](meeting/mock-meeting-s7.md): Claude spielt die Kundenseite
 - [ ] 3./4.8. Generalprobe: Deck, Demo, Technik-Check

@@ -47,6 +47,9 @@ DOCS_MANIFEST = [
         _i("upskilling/modul-6-quiz.md", "Modul 6 · Quiz", "Selbsttest nach Session 5"),
         _i("upskilling/modul-5-primer.md", "Modul 5 · Projektleitung & Offerten", "Session 6 · Joaquin erklärt: Phasenmodell, RACI, Change Requests"),
         _i("upskilling/modul-5-quiz.md", "Modul 5 · Quiz", "Selbsttest nach Session 6"),
+        _i("upskilling/modul-5-deck.html", "Modul 5 · Präsentation (60 min)", "Session 6 · Foliensatz mit Klick-Builds + Referentennotizen (Taste N)", kind="html"),
+        _i("upskilling/modul-5-handout.md", "Modul 5 · Handout & Hausaufgabe", "Spickzettel + Statusreport-Übung · Abgabe So 2.8., 18:00"),
+        _i("upskilling/modul-5-handout.pdf", "Modul 5 · Handout (PDF)", "Druckfassung mit ausfüllbaren Vorlagen", kind="pdf"),
         _i("upskilling/fragen-bank-schmid.md", "Fragen-Bank: Was Schmid fragen wird", "50 Prüfer-Fragen mit ehrlichen Musterantworten, Drill in S7"),
     ]},
     {"id": "termin", "title": "Termin 5.8.", "items": [

@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A0D13">
+<title>Modul 5 · Projektleitung + Offerten</title>
+<!--
+  Modul-5-Lehrdeck (Session 6, Owner Joaquin, Do 30.7.2026). Skelett v3.
+  51 Lehr-Folien (60 min) + 17 Entscheidungs-Folien (3 Dossiers, nach dem Lehrteil) + 5 Anhang = 73.
+  NEU in v3 (nach Joaquin-Feedback, Vorbild seiner Matura-Präsentation):
+  - Morph-Übergänge via View-Transitions-API: wiederkehrende Elemente (Phasen-Karte, Werkzeugkasten,
+    Frage-Kacheln, Personen) wandern/verwandeln sich zwischen Folien. Fallback: weicher Crossfade.
+  - Klick-Builds: .frag-Elemente erscheinen schrittweise pro Pfeiltaste INNERHALB der Folie.
+    Pfeil vorwärts deckt erst alle Frags auf, dann wechselt die Folie. Rückwärts umgekehrt.
+    Sprung per Hash/Home/End zeigt die Folie voll aufgebaut. Print zeigt alles aufgedeckt.
+  - Aurora-Glass-Look statt Terminal-Code: dunkler Grund, Aurora-Verläufe, Glas-Karten, Inter-Typografie.
+  Bedienung: Pfeiltasten/Leertaste/Swipe = weiter (Build-Schritt oder Folie) · N = Referentennotizen
+  (Joaquins komplettes Sprech-Skript; Notizen nennen die Klick-Anzahl der Folie) · Home/End.
+  Notfall-Skip bei Zeitnot: Folie 33 (P1-P4-Detail, steht in Anhang A2). Anhang ist NICHT Teil der 60 min.
+  Öffnen: Hub -> Lernen -> Modul 5 -> Präsentation (Beamer-Gerät VORHER im Hub einloggen).
+  Quellen: modul-5-primer.md, modul-5-quiz.md, sla-baukasten.md, projekthandbuch-vorlagen.md,
+  offerten-skelett.md, ablauf-drehbuch.md, fragen-bank-schmid.md, Dossier E, MASTERPLAN 5.3.
+-->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Crect width='500' height='500' rx='110' ry='110' fill='%2315C97A'/%3E%3Cpolyline points='100,250 175,250 215,155 285,345 325,250 400,250' fill='none' stroke='white' stroke-width='30' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0D13; --bg-2:#0D1119;
+    --text:#EDF1F7; --muted:#9AA6B5; --dim:#5E6877;
+    --green:#17CD82; --green-soft:#7FE9BC; --green-deep:#0C9B60;
+    --violet:#8B7CF6; --blue:#4EA1FF;
+    --amber:#F0BB4F; --amber-soft:rgba(240,187,79,.16);
+    --red:#EF6A5A; --red-soft:rgba(239,106,90,.15);
+    --glass:rgba(255,255,255,.05); --glass-2:rgba(255,255,255,.085);
+    --border:rgba(255,255,255,.10); --border-2:rgba(255,255,255,.19);
+    --paper:#F2F5F9; --paper-ink:#18232F; --paper-mut:#5B6A7A;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow:hidden}
+  ::selection{background:rgba(23,205,130,.28);color:#fff}
+
+  #viewport{position:fixed;inset:0;display:grid;place-items:center;overflow:hidden;background:var(--bg)}
+  /* Aurora */
+  #aurora{position:absolute;inset:-20%;pointer-events:none;filter:blur(70px);opacity:.55;
+    background:
+      radial-gradient(38% 30% at 18% 22%, rgba(23,205,130,.30), transparent 70%),
+      radial-gradient(34% 28% at 82% 16%, rgba(139,124,246,.24), transparent 70%),
+      radial-gradient(40% 34% at 70% 86%, rgba(78,161,255,.16), transparent 70%);
+    animation:drift 46s ease-in-out infinite alternate}
+  @keyframes drift{from{transform:translate3d(-2%,-1%,0) rotate(-1.5deg)}to{transform:translate3d(2%,2%,0) rotate(1.5deg)}}
+  #stage{width:1280px;height:720px;position:relative;transform-origin:center center}
+  .slide{position:absolute;inset:0;padding:58px 78px;display:none;flex-direction:column}
+  .slide.active{display:flex}
+  .slide::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(90% 70% at 50% 118%, rgba(0,0,0,.42), transparent 60%)}
+  .slide>*{position:relative;z-index:1}
+
+  /* Frags */
+  .frag{opacity:0;transform:translateY(16px);transition:opacity .5s ease,transform .5s cubic-bezier(.2,.7,.2,1)}
+  .frag.on{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){
+    #aurora{animation:none}
+    .frag{transition:none}
+  }
+
+  /* Typo */
+  .kicker{font-size:13px;letter-spacing:2.2px;font-weight:700;color:var(--green-soft);
+    text-transform:uppercase;margin-bottom:16px}
+  .kicker span{color:var(--dim);font-weight:600}
+  h1{font-size:56px;font-weight:900;letter-spacing:-1.8px;line-height:1.05;max-width:24ch}
+  h1 .accent{background:linear-gradient(92deg,var(--green-soft),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+  h2{font-size:38px;font-weight:850;letter-spacing:-1.2px;line-height:1.1;max-width:30ch}
+  h2 .accent{color:var(--green-soft)}
+  .lead{color:var(--muted);font-size:19px;line-height:1.55;margin-top:14px;max-width:62ch}
+  .lead b{color:var(--text)}
+  .statement{font-size:27px;font-weight:650;letter-spacing:-.4px;line-height:1.45;max-width:44ch}
+  .statement em{color:var(--green-soft);font-style:normal}
+  .grow{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .footnote{color:var(--dim);font-size:13.5px;line-height:1.5;margin-top:auto;padding-top:16px;max-width:104ch}
+  .footnote b{color:var(--muted);font-weight:600}
+
+  /* Glas-Bausteine */
+  .card{background:var(--glass);border:1px solid var(--border);border-radius:20px;padding:20px 24px;
+    backdrop-filter:blur(12px);box-shadow:0 18px 46px rgba(0,0,0,.30)}
+  .card.hot{border-color:rgba(23,205,130,.45);box-shadow:0 18px 46px rgba(0,0,0,.30),0 0 34px rgba(23,205,130,.12)}
+  .chip{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;letter-spacing:1.1px;
+    text-transform:uppercase;color:var(--muted);border:1px solid var(--border-2);border-radius:999px;padding:6px 14px;
+    background:var(--glass)}
+  .chip.green{color:var(--green-soft);border-color:rgba(23,205,130,.45)}
+  .chip.amber{color:var(--amber);border-color:rgba(240,187,79,.5)}
+  .chip.red{color:#F6A99E;border-color:rgba(239,106,90,.55)}
+  .chip.violet{color:#BBB1FA;border-color:rgba(139,124,246,.5)}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .chip.amber .dot{background:var(--amber)} .chip.red .dot{background:var(--red)} .chip.violet .dot{background:var(--violet)}
+  .slide>.chip,.slide>.badge{align-self:flex-start}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+
+  .deutsch{border-left:3px solid var(--green);background:var(--glass);border-radius:0 14px 14px 0;
+    padding:14px 20px;margin-top:18px;font-size:18px;line-height:1.55;max-width:102ch;backdrop-filter:blur(10px)}
+  .deutsch::before{content:"Auf Deutsch";display:block;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;
+    font-weight:800;color:var(--green-soft);margin-bottom:5px}
+  .deutsch b{color:var(--green-soft)}
+  .saytext{margin-top:auto;border:1px dashed rgba(23,205,130,.5);background:rgba(23,205,130,.07);border-radius:14px;
+    padding:12px 18px;font-size:15px;line-height:1.5;color:var(--text)}
+  .saytext::before{content:"So sagst du es am 5.8.";display:block;font-size:10.5px;letter-spacing:1.6px;
+    text-transform:uppercase;font-weight:800;color:var(--green-soft);margin-bottom:5px}
+  .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:800;letter-spacing:.8px;
+    text-transform:uppercase;border-radius:10px;padding:9px 15px;margin-top:18px}
+  .badge.stop{color:#062015;background:linear-gradient(92deg,var(--green),var(--green-soft))}
+  .badge.warn{color:var(--amber);border:1.5px dashed rgba(240,187,79,.6);background:var(--amber-soft)}
+
+  /* Teil-Trenner */
+  .tpart{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
+  .tpart .tno{font-size:14px;letter-spacing:4px;color:var(--green-soft);font-weight:800;text-transform:uppercase;margin-bottom:14px}
+  .tpart h1{font-size:64px}
+  .tpart .sub{color:var(--muted);font-size:21px;margin-top:16px;max-width:56ch;line-height:1.5}
+  .tpart .sub b{color:var(--text)}
+
+  /* Cover */
+  .cover-brand{display:flex;align-items:center;gap:14px}
+  .logo{width:46px;height:46px;border-radius:13px;overflow:hidden;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 10px 30px rgba(23,205,130,.25)}
+  .logo svg{width:100%;height:100%;display:block}
+  .cover-brand b{font-size:19px;font-weight:800;letter-spacing:-.2px;display:block}
+  .cover-brand .sub{color:var(--dim);font-size:12px;letter-spacing:1.4px;text-transform:uppercase;font-weight:600;margin-top:2px}
+  .cover-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+
+  /* Personen */
+  .people{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:24px}
+  .person{background:var(--glass);border:1px solid var(--border);border-radius:18px;padding:18px 16px;text-align:center;backdrop-filter:blur(10px)}
+  .person .ava{width:58px;height:58px;border-radius:50%;margin:0 auto 10px;display:grid;place-items:center;font-size:26px;
+    background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.04));border:1px solid var(--border-2)}
+  .person h3{font-size:16.5px;font-weight:800;letter-spacing:-.2px}
+  .person .role{color:var(--dim);font-size:11.5px;letter-spacing:.8px;text-transform:uppercase;font-weight:700;margin-top:2px}
+  .person p{color:var(--muted);font-size:13px;margin-top:8px;line-height:1.45}
+  .person p b{color:var(--amber)}
+
+  /* Frage-Kacheln */
+  .qa{display:flex;flex-direction:column;gap:12px;margin-top:20px}
+  .qa .q{border:1px solid var(--border-2);border-radius:16px;background:var(--glass);padding:14px 20px;backdrop-filter:blur(10px)}
+  .qa .q .qt{font-size:19px;font-weight:750;letter-spacing:-.3px;line-height:1.35}
+  .qa .q .qt::before{content:"» ";color:var(--red)}
+  .qa .q .ans{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-2);font-size:15.5px;color:var(--muted);line-height:1.5}
+  .qa .q .ans::before{content:"Unsere Antwort · ";font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;color:var(--green-soft)}
+  .qa .q .ans b{color:var(--text)}
+  .qa .q.dach{border-color:rgba(240,187,79,.55);background:var(--amber-soft)}
+  .qa .q.dach .qt::before{color:var(--amber)}
+
+  /* Agenda */
+  .agenda{display:flex;flex-direction:column;gap:11px;margin-top:24px}
+  .agenda .st{display:flex;gap:16px;align-items:center;border:1px solid var(--border);border-radius:14px;background:var(--glass);padding:13px 20px;backdrop-filter:blur(8px)}
+  .agenda .st .n{font-weight:900;color:var(--green-soft);font-size:17px;width:26px;flex:none}
+  .agenda .st h3{font-size:18px;font-weight:750;letter-spacing:-.2px}
+  .agenda .st span{color:var(--dim);font-size:12px;margin-left:auto;letter-spacing:1px;text-transform:uppercase;font-weight:700}
+
+  /* Story-Bühne (SVG-Szenen) */
+  .scene-stage{margin-top:20px;border-radius:22px;overflow:hidden;border:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));box-shadow:0 22px 60px rgba(0,0,0,.38)}
+  .scene-stage svg{display:block;width:100%;height:auto}
+  .scap{display:flex;gap:12px;align-items:baseline;margin-top:14px}
+  .scap p{color:var(--muted);font-size:16.5px;line-height:1.5;max-width:80ch}
+  .scap p b{color:var(--text)}
+
+  /* Anfrage-Zitat (Dokument-Feel) */
+  .quoteline{font-family:var(--mono);font-size:16px;color:var(--paper-ink);background:var(--paper);
+    border-radius:12px;padding:14px 20px;margin-top:20px;display:inline-block;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+  .quoteline small{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;color:var(--paper-mut);margin-top:7px}
+
+  /* Papier-Attrappen (Screenshots unserer Artefakte) */
+  .paper{background:var(--paper);color:var(--paper-ink);border-radius:14px;box-shadow:0 26px 64px rgba(0,0,0,.5);overflow:hidden}
+  .paper .phead{padding:11px 18px;border-bottom:2px solid #E1E7EE;display:flex;justify-content:space-between;align-items:baseline}
+  .paper .phead b{font-size:13.5px;letter-spacing:.2px}
+  .paper .phead span{font-size:10px;color:var(--paper-mut);letter-spacing:1.2px;text-transform:uppercase;font-weight:700}
+  .paper .pbody{padding:14px 18px}
+  .paper .row{display:flex;gap:10px;align-items:baseline;padding:7px 10px;border-radius:8px;font-size:13px;color:#33414F;line-height:1.4}
+  .paper .row b{color:var(--paper-ink)}
+  .paper .row.hl{background:#E4F7EE;outline:2px solid #17CD82;font-weight:600}
+  .paper .row .no{font-weight:800;color:#8795A4;width:18px;flex:none}
+  .paper .field{border:1.5px solid #D5DDE6;border-radius:8px;padding:8px 12px;font-size:12.5px;color:#5B6A7A;margin-top:8px}
+  .paper .field b{color:var(--paper-ink)}
+
+  /* Phasen-Karte (wiederkehrend, morpht) */
+  .phases{display:flex;align-items:center;gap:0;margin-top:26px}
+  .ph{flex:1;border:1.5px solid var(--border-2);border-radius:18px;background:var(--glass);padding:18px 16px;text-align:center;backdrop-filter:blur(10px)}
+  .ph .pn{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;font-weight:800;color:var(--dim);margin-bottom:6px}
+  .ph h4{font-size:18px;font-weight:800;letter-spacing:-.3px}
+  .ph .price{margin-top:10px;display:inline-block;font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+    color:#062015;background:linear-gradient(92deg,var(--green),var(--green-soft));border-radius:8px;padding:5px 10px}
+  .ph .own{color:var(--muted);font-size:12.5px;margin-top:9px;line-height:1.4}
+  .ph.on{border-color:var(--green);box-shadow:0 0 30px rgba(23,205,130,.18)}
+  .gate{width:74px;flex:none;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .gate .dia{width:34px;height:34px;transform:rotate(45deg);border:2px solid var(--amber);border-radius:8px;background:var(--amber-soft);
+    display:grid;place-items:center}
+  .gate .dia span{transform:rotate(-45deg);font-size:14px}
+  .gate small{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;font-weight:800;color:var(--amber)}
+
+  /* Werkzeugkasten (wiederkehrend, morpht) */
+  .toolbox{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}
+  .tool{border:1.5px solid var(--border);border-radius:16px;background:var(--glass);padding:14px 14px;display:flex;gap:11px;align-items:center;backdrop-filter:blur(8px)}
+  .tool .ti{font-size:22px;flex:none}
+  .tool h4{font-size:14.5px;font-weight:800;letter-spacing:-.2px}
+  .tool small{display:block;color:var(--dim);font-size:11px;margin-top:2px;letter-spacing:.4px}
+  .tool.done{border-color:rgba(23,205,130,.4)} .tool.done h4{color:var(--green-soft)}
+  .tool.big{grid-column:1/-1;padding:18px 20px}
+  .toolbox.mini .tool{padding:9px 11px} .toolbox.mini .tool .ti{font-size:17px} .toolbox.mini .tool h4{font-size:12.5px}
+
+  /* Pro/Contra + Optionen (Entscheidungs-Dossiers) */
+  .opt{border:1.5px solid var(--border-2);border-radius:18px;background:var(--glass);padding:18px 20px;backdrop-filter:blur(10px)}
+  .opt h3{font-size:17.5px;font-weight:850;letter-spacing:-.3px;display:flex;align-items:center;gap:10px}
+  .opt h3 .tagopt{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;font-weight:800;color:var(--violet);
+    border:1px solid rgba(139,124,246,.5);border-radius:6px;padding:3px 8px;white-space:nowrap;flex:none}
+  .opt.reco{border-color:rgba(23,205,130,.55);box-shadow:0 0 26px rgba(23,205,130,.10)}
+  .opt.reco h3 .tagopt{color:var(--green-soft);border-color:rgba(23,205,130,.5)}
+  .pc{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-top:12px}
+  .pc p{font-size:13.5px;color:var(--muted);line-height:1.45;display:flex;gap:8px}
+  .pc p b{color:var(--text);font-weight:650}
+  .pc .pro::before{content:"+";font-weight:900;color:var(--green-soft);flex:none}
+  .pc .con::before{content:"−";font-weight:900;color:var(--red);flex:none}
+  .krit{margin-top:16px;border:1px solid rgba(139,124,246,.45);background:rgba(139,124,246,.09);border-radius:14px;padding:12px 18px;font-size:15px;line-height:1.5}
+  .krit::before{content:"Entscheidungskriterium";display:block;font-size:10.5px;letter-spacing:1.6px;text-transform:uppercase;font-weight:800;color:#BBB1FA;margin-bottom:5px}
+  .fliesst{margin-top:12px;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--dim)}
+  .fliesst b{color:var(--green-soft)}
+
+  /* Tabellen (glasig) */
+  table.tbl{border-collapse:collapse;width:100%;margin-top:20px}
+  table.tbl th{font-size:11px;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;text-align:left;padding:10px 14px;border-bottom:1.5px solid var(--border-2);font-weight:800}
+  table.tbl td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:14.5px;color:var(--muted);vertical-align:top}
+  table.tbl td:first-child{color:var(--text);font-weight:700;white-space:nowrap}
+  table.tbl td b{color:var(--green-soft)}
+  table.tbl tr.hl td{background:rgba(23,205,130,.07)}
+
+  /* Zehn Sätze */
+  .sents{display:flex;flex-direction:column;gap:11px;margin-top:20px}
+  .sents .s{display:flex;gap:14px;font-size:16.5px;line-height:1.5;color:var(--text);border:1px solid var(--border);border-radius:14px;padding:12px 18px;background:var(--glass);backdrop-filter:blur(8px)}
+  .sents .s b{color:var(--green-soft);flex:none;font-size:15px;font-weight:900;padding-top:1px}
+
+  /* Hausaufgabe */
+  .hw{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;margin-top:20px}
+  .hw ol{margin:10px 0 0 20px;display:flex;flex-direction:column;gap:9px}
+  .hw li{font-size:15.5px;color:var(--muted);line-height:1.5}
+  .hw li b{color:var(--text)}
+  .warnbox{border:1.5px dashed rgba(239,106,90,.6);background:var(--red-soft);border-radius:14px;padding:13px 16px;font-size:13.5px;line-height:1.5;color:var(--text)}
+  .warnbox b{color:#F6A99E}
+  .deadline-chip{display:inline-flex;font-weight:800;font-size:13px;letter-spacing:.6px;color:#062015;
+    background:linear-gradient(92deg,var(--green),var(--green-soft));border-radius:10px;padding:8px 15px;text-transform:uppercase}
+
+  /* Timeline */
+  .tline{margin-top:40px;position:relative;height:150px}
+  .tline .axis{position:absolute;top:64px;left:0;right:0;height:2px;background:var(--border-2)}
+  .tline .ev{position:absolute;top:0;text-align:center;transform:translateX(-50%)}
+  .tline .ev .dot{width:15px;height:15px;border-radius:50%;margin:56px auto 9px;background:var(--bg-2);border:3px solid var(--green)}
+  .tline .ev.big .dot{width:21px;height:21px;margin-top:53px;border-color:var(--amber);box-shadow:0 0 22px rgba(240,187,79,.35)}
+  .tline .ev .lb{font-size:14.5px;font-weight:800}
+  .tline .ev .sub{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+
+  /* Decode */
+  .decode{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+  .decode .row{display:flex;gap:14px;align-items:center;border:1px solid var(--border);border-radius:14px;background:var(--glass);padding:11px 16px;backdrop-filter:blur(8px)}
+  .decode .row .ok{color:var(--green-soft);font-weight:900;font-size:17px;flex:none}
+  .decode .row q{font-family:var(--mono);font-size:13.5px;color:var(--text);quotes:"«" "»";line-height:1.4}
+  .decode .row .where{margin-left:auto;flex:none;font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:var(--green-soft);
+    border:1px solid rgba(23,205,130,.4);border-radius:7px;padding:4px 9px;white-space:nowrap}
+  .decode .row .where.amber{color:var(--amber);border-color:rgba(240,187,79,.5)}
+
+  /* HUD + Notes + Print */
+  #hud{position:fixed;left:0;right:0;bottom:0;z-index:10;pointer-events:none}
+  #bar{height:3px;background:linear-gradient(90deg,var(--green),var(--blue));width:0%;transition:width .3s ease;box-shadow:0 0 10px rgba(23,205,130,.4)}
+  #counter{position:fixed;right:18px;bottom:14px;font-size:12px;color:var(--dim);letter-spacing:1px;font-weight:700}
+  #navhint{position:fixed;left:18px;bottom:12px;font-size:11px;color:var(--dim);letter-spacing:.6px;opacity:.85;transition:opacity .3s ease;font-weight:600}
+  #navhint.hidden{opacity:0}
+  .navbtn{position:fixed;bottom:34px;z-index:11;width:40px;height:40px;border-radius:50%;border:1px solid var(--border-2);
+    background:rgba(13,17,25,.85);color:var(--muted);font-size:17px;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(8px)}
+  .navbtn:hover{border-color:var(--green);color:var(--green-soft)}
+  #prev{right:110px} #next{right:60px}
+  #notes{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(10,13,19,.97);border-top:1px solid var(--border-2);
+    backdrop-filter:blur(12px);padding:16px 26px 22px;display:none;max-height:38vh;overflow:auto}
+  #notes.open{display:block}
+  #notes .nt{font-size:11px;color:var(--green-soft);letter-spacing:1.6px;margin-bottom:8px;font-weight:800;text-transform:uppercase}
+  #notes p{color:var(--muted);font-size:14.5px;line-height:1.6;max-width:110ch}
+
+  /* View-Transition-Feintuning */
+  @media (prefers-reduced-motion:no-preference){
+    ::view-transition-old(root){animation:vtOut .26s ease both}
+    ::view-transition-new(root){animation:vtIn .34s ease both}
+  }
+  @keyframes vtOut{to{opacity:0}}
+  @keyframes vtIn{from{opacity:0}}
+
+  @media print{
+    html,body{overflow:visible;background:#0A0D13}
+    #viewport{position:static;display:block}
+    #aurora{display:none}
+    #stage{width:1280px;height:auto;transform:none !important}
+    .slide{display:flex;position:relative;width:1280px;height:720px;page-break-after:always;margin:0 auto;background:#0A0D13}
+    .frag{opacity:1 !important;transform:none !important}
+    #hud,#counter,#navhint,.navbtn,#notes{display:none !important}
+  }
+</style>
+</head>
+<body>
+<div id="viewport"><div id="aurora"></div><div id="stage">
+<!-- ============ TEIL 0 · WARUM KAUFT MAN FÜHRUNG (F1-F6) ============ -->
+
+<!-- F1 · Cover -->
+<section class="slide" data-notes="[T+0 · 0 Klicks] Willkommen zur letzten Session. Sag es so: Heute geht es nicht um Technik, sondern um die Frage, wie man ein Projekt so führt, dass es nicht entgleist, und wie daraus in sechs Tagen unsere Offerte wird. Neu heute: die Präsentation baut sich an vielen Stellen pro Klick auf, und am Ende fällen WIR drei Entscheide, die Unterlagen dafür stecken im Deck. Taste N zeigt mein Skript, jede Notiz nennt die Klick-Anzahl. Weiter: warum dieses Thema das wichtigste der ganzen Vorbereitung ist.">
+  <div class="cover-brand">
+    <div class="logo"><svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg"><rect width="500" height="500" rx="110" ry="110" fill="#17CD82"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><b>automatisierbar</b><span class="sub">Modul 5 · Session 6 · Do 30.7.2026</span></div>
+  </div>
+  <div class="grow">
+    <h1>Wie man ein Projekt führt,<br><span class="accent">das nicht entgleist.</span></h1>
+    <p class="lead">Projektleitung + Offerten: das letzte Modul vor dem 5.8. In 60 Minuten weisst du, wie unser Phasenmodell funktioniert, welche sechs Dokumente ein Projekt zusammenhalten, und was in unserer Offerte stehen wird. <b>Danach entscheiden wir drei Dinge.</b></p>
+    <div class="cover-meta">
+      <span class="chip green"><span class="dot"></span>60 Minuten Lehrteil</span>
+      <span class="chip violet"><span class="dot"></span>+ 3 Team-Entscheide</span>
+      <span class="chip">Taste N = Sprech-Skript</span>
+    </div>
+  </div>
+  <p class="footnote">Klicks bauen die Bilder auf. Anhang zum Nachschlagen am Ende, nicht Teil der Session.</p>
+</section>
+
+<!-- F2 · Kontext -->
+<section class="slide" data-notes="[T+1 · 3 Klicks] Kurz einordnen, wo wir stehen. Klick 1: fünf Sessions liegen hinter uns, Branche, Microsoft-Welt, Sicherheit, Compliance, Integration. Ihr habt das Vokabular. Klick 2: in sechs Tagen, am Mittwoch 5.8., sitzen wir in Solothurn bei der vR verwaltungen ag. Klick 3: und eine Woche später liegt unsere Offerte auf Schmids Tisch. Heute schliessen wir die letzte Lücke: Wie führen wir das Projekt, und wie verkaufen wir diese Führung? Weiter.">
+  <div class="kicker">Teil 0 · Warum kauft man Führung <span>// Standort</span></div>
+  <h2>Die letzte Session. Dann wird es ernst.</h2>
+  <div class="tline" style="margin-top:64px">
+    <div class="axis"></div>
+    <div class="ev frag" style="left:12%"><div class="dot"></div><div class="lb">5 Sessions gelernt</div><div class="sub">Branche · Microsoft · Sicherheit<br>Compliance · Integration</div></div>
+    <div class="ev big frag" style="left:47%"><div class="dot"></div><div class="lb">Mi 5.8. · Solothurn</div><div class="sub">Vor-Ort-Termin bei<br>vR verwaltungen ag</div></div>
+    <div class="ev frag" style="left:82%" data-frag="g3"><div class="dot"></div><div class="lb">~19.8. · Die Offerte</div><div class="sub">präsentiert in 45 Minuten</div></div>
+  </div>
+  <div class="statement frag" style="margin-top:44px" data-frag="g3">Heute schliessen wir die letzte Lücke: <em>Wie führen wir das Projekt, und wie verkaufen wir diese Führung?</em></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F3 · Die Zeile aus der Anfrage -->
+<section class="slide" data-notes="[T+2 · 1 Klick] Warum ist das überhaupt ein eigenes Modul? Weil es wörtlich in der Anfrage steht. Klick: die Zeile erscheint. Lies sie laut: Rolle Lösungsanbieter, erstellen Architektur und Projektleitung. Das heisst: vRv kauft nicht nur eine Software. Sie kaufen jemanden, der das Ganze FÜHRT. Und Führung kann man nicht behaupten, man muss zeigen, wie sie konkret aussieht. Genau das lernt ihr heute. Weiter: wer diese Führung prüfen wird.">
+  <div class="kicker">Teil 0 · Warum kauft man Führung <span>// Der Auftrag</span></div>
+  <h2>Es steht wörtlich in ihrer Anfrage.</h2>
+  <div class="grow">
+    <div class="quoteline frag" style="font-size:20px;padding:20px 28px">«Rolle Lösungsanbieter: erstellen Architektur und Projektleitung»<small>Wörtlich aus der Anfrage der vR verwaltungen ag, Juli 2026</small></div>
+    <div class="statement" style="margin-top:30px">Sie kaufen nicht nur Software. <em>Sie kaufen Führung.</em></div>
+  </div>
+  <p class="footnote">Führung kann man nicht behaupten. Man muss zeigen, wie sie Woche für Woche konkret aussieht. Genau darum geht es heute.</p>
+</section>
+
+<!-- F4 · Wer sitzt am Tisch -->
+<section class="slide" data-notes="[T+3 · 4 Klicks] Kurze Erinnerung, wer uns am 5.8. gegenübersitzt, ein Klick pro Person. Klick 1: Rolf Schmid, Geschäftsführer und gelernter Wirtschaftsprüfer. Er fragt nach Preis, Haftung und was passiert, wenn es schiefgeht. Klick 2: Mirjam Böni, sie führt die Buchhaltung und kennt jeden Prozessschritt. Ihre Sorge: wie viel Arbeit macht uns das, und was passiert mit meinem Job. Klick 3: Ivan Guldimann, Leiter Immobilien, der Alltagsmensch: funktioniert das bei uns wirklich? Klick 4: Florian Kunz, Leiter Hauswartung, seine Leute müssen die App freiwillig benutzen wollen. Merkt euch die Gesichter, die Fragen heute kommen von genau diesen vier. Weiter.">
+  <div class="kicker">Teil 0 · Warum kauft man Führung <span>// Die Gegenseite</span></div>
+  <h2>Wer die Führung prüfen wird.</h2>
+  <div class="people">
+    <div class="person frag" style="view-transition-name:vtp1"><div class="ava">👤</div><h3>Rolf Schmid</h3><div class="role">Geschäftsführer</div><p><b>Wirtschaftsprüfer:</b> fragt Preis, Haftung, «was, wenn es schiefgeht?»</p></div>
+    <div class="person frag" style="view-transition-name:vtp2"><div class="ava">👩</div><h3>Mirjam Böni</h3><div class="role">Zentrale Dienste</div><p>Pflegt die Buchhaltung persönlich: <b>«Wie viel Arbeit macht uns das?»</b></p></div>
+    <div class="person frag" style="view-transition-name:vtp3"><div class="ava">🧔</div><h3>Ivan Guldimann</h3><div class="role">Leiter Immobilien</div><p>Der Alltagsmensch: <b>«Funktioniert das bei uns wirklich?»</b></p></div>
+    <div class="person frag" style="view-transition-name:vtp4"><div class="ava">🧢</div><h3>Florian Kunz</h3><div class="role">Leiter Hauswartung</div><p>Seine Leute müssen die App <b>freiwillig</b> nutzen wollen.</p></div>
+  </div>
+  <p class="footnote">Alle Prüfer-Fragen in dieser Session stammen aus unserer Fragen-Bank, zugeordnet zu genau diesen vier Personen.</p>
+</section>
+
+<!-- F5 · Die Klammer: 4 Fragen -->
+<section class="slide" data-notes="[T+4 · 4 Klicks] Und das hier sind die Fragen, an denen sich heute alles entscheidet. Klick 1, die Dachfrage, die GARANTIERT kommt: Was kostet uns das Ganze? Dann drei Fragen darunter, je ein Klick: Warum kein Festpreis für das Gesamtprojekt? Was passiert, wenn das Projekt teurer wird als offeriert? Und: Wenn wir nach dem Konzept nicht mit Ihnen weitermachen wollen? Das Versprechen wie immer: am Ende der Stunde kommen genau diese Kacheln zurück, mit Antworten, die ihr in einem Satz geben könnt. Weiter: der Fahrplan.">
+  <div class="kicker">Teil 0 · Warum kauft man Führung <span>// Die Klammer</span></div>
+  <h2>Vier Fragen. Am Ende beantwortest du sie.</h2>
+  <div class="qa">
+    <div class="q dach frag" style="view-transition-name:vtq0"><div class="qt">Was kostet uns das Ganze?</div></div>
+    <div class="q frag" style="view-transition-name:vtq1"><div class="qt">Warum kein Festpreis für das Gesamtprojekt?</div></div>
+    <div class="q frag" style="view-transition-name:vtq2"><div class="qt">Was passiert, wenn das Projekt teurer wird als offeriert?</div></div>
+    <div class="q frag" style="view-transition-name:vtq3"><div class="qt">Und wenn wir nach dem Konzept nicht mit Ihnen weitermachen wollen?</div></div>
+  </div>
+  <p class="footnote">Die erste ist die einzige <b>garantierte</b> Frage des 5.8. Die Kacheln kehren am Ende zurück.</p>
+</section>
+
+<!-- F6 · Agenda -->
+<section class="slide" data-notes="[T+5 · 0 Klicks] Der Fahrplan, zehn Sekunden pro Station: Erst schauen wir zu, wie ein typisches Projekt stirbt, eine Geschichte in fünf Szenen. Dann das Fundament: unser Phasenmodell als Vertragslogik. Dann der Werkzeugkasten: sechs Dokumente, die genau die Todesursachen aus der Geschichte verhindern. Dann der Vertrag mit Zahlen, die Servicestufen. Dann die Offerte selbst. Und NACH dem Lehrteil, als eigener Block: drei Entscheide, für die alle Unterlagen im Deck bereitliegen, plus zehn Minuten Durchsicht der Vorlagen. Los.">
+  <div class="kicker">Teil 0 · Warum kauft man Führung <span>// Der Fahrplan</span></div>
+  <h2>Der Weg heute.</h2>
+  <div class="agenda">
+    <div class="st"><span class="n">1</span><h3>Wie Projekte wirklich sterben</h3><span>Geschichte · 10 min</span></div>
+    <div class="st"><span class="n">2</span><h3>Drei Phasen, drei Verträge</h3><span>Fundament · 9 min</span></div>
+    <div class="st"><span class="n">3</span><h3>Der Werkzeugkasten: sechs Dokumente</h3><span>Herzstück · 15 min</span></div>
+    <div class="st"><span class="n">4</span><h3>Der Vertrag mit Zahlen: Servicestufen</h3><span>8 min</span></div>
+    <div class="st"><span class="n">5</span><h3>Die Offerte + zurück zu den vier Fragen</h3><span>12 min</span></div>
+    <div class="st" style="border-color:rgba(139,124,246,.5)"><span class="n" style="color:#BBB1FA">→</span><h3>Danach: drei Team-Entscheide</h3><span style="color:#BBB1FA">Eigener Block · Dossiers liegen bereit</span></div>
+  </div>
+  <p class="footnote"></p>
+</section>
+
+<!-- ============ TEIL 1 · WIE PROJEKTE WIRKLICH STERBEN (F7-F14) ============ -->
+
+<!-- F7 · Trenner -->
+<section class="slide" data-notes="[T+7 · 0 Klicks] Teil 1. Sag es so: IT-Projekte scheitern selten an böser Absicht und selten an der Technik. Sie sterben an fehlender Struktur. Ich erzähle euch jetzt, wie das typischerweise abläuft, eine erfundene Geschichte, aber sie ist aus echten Fällen zusammengesetzt, und Schmid hat als Wirtschaftsprüfer genau solche Projekte gesehen. Fünf Szenen. Szene 1.">
+  <div class="kicker">Teil 1 von 5</div>
+  <div class="tpart">
+    <div class="tno">Teil 1</div>
+    <h1>Wie Projekte wirklich sterben.</h1>
+    <p class="sub">Selten an der Technik. Selten an böser Absicht. <b>Sie sterben an fehlender Struktur.</b> Eine Geschichte in fünf Szenen, erfunden, aber typisch.</p>
+  </div>
+</section>
+
+<!-- F8 · Szene 1: Der Handschlag -->
+<section class="slide" data-notes="[T+8 · 3 Klicks] Szene 1. Eine Verwaltung, irgendwo in der Schweiz, will digitalisieren. Ein Anbieter kommt, zwei gute Gespräche, man versteht sich. Dann der Handschlag. Klick 1: ein Gesamtfestpreis für das ganze Projekt, nach zwei Gesprächen, ohne dass irgendjemand die Prozesse analysiert hat. Klick 2: wer was macht? Steht nirgends. Man wird sich schon einig. Klick 3: und einen Ausstiegspunkt gibt es auch nicht, der Vertrag bindet beide bis zum Ende. Alle sind guter Dinge. Merkt euch dieses Bild. Szene 2.">
+  <div class="kicker">Teil 1 · Die Geschichte</div>
+  <span class="chip red"><span class="dot"></span>Szene 1 · Der Handschlag</span>
+  <h2 style="margin-top:12px">Ein Preis, kein Plan.</h2>
+  <div class="scene-stage" style="view-transition-name:vtscene">
+    <svg viewBox="0 0 1120 330" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="330" cy="120" r="34" fill="#C6D2DE"/>
+      <rect x="288" y="160" width="84" height="120" rx="26" fill="#8FA3B8"/>
+      <circle cx="790" cy="120" r="34" fill="#C6D2DE"/>
+      <rect x="748" y="160" width="84" height="120" rx="26" fill="#6E8296"/>
+      <rect x="372" y="196" width="376" height="16" rx="8" fill="#AEBBC9"/>
+      <text x="560" y="66" text-anchor="middle" font-size="21" font-weight="700" fill="#EDF1F7">«Wird schon. Wir verstehen uns ja.»</text>
+      <g class="frag">
+        <rect x="440" y="230" width="240" height="76" rx="10" fill="#F2F5F9"/>
+        <text x="560" y="262" text-anchor="middle" font-size="17" font-weight="800" fill="#18232F">GESAMT-FESTPREIS</text>
+        <text x="560" y="288" text-anchor="middle" font-size="14" fill="#B3432F" font-weight="700">nach 2 Gesprächen, ohne Analyse</text>
+      </g>
+      <g class="frag">
+        <rect x="80" y="236" width="200" height="60" rx="12" fill="rgba(239,106,90,.14)" stroke="#EF6A5A" stroke-width="1.5" stroke-dasharray="6 5"/>
+        <text x="180" y="262" text-anchor="middle" font-size="14.5" font-weight="700" fill="#F6A99E">Wer macht was?</text>
+        <text x="180" y="283" text-anchor="middle" font-size="14.5" font-weight="800" fill="#F6A99E">Steht nirgends.</text>
+      </g>
+      <g class="frag">
+        <rect x="850" y="236" width="200" height="60" rx="12" fill="rgba(239,106,90,.14)" stroke="#EF6A5A" stroke-width="1.5" stroke-dasharray="6 5"/>
+        <text x="950" y="262" text-anchor="middle" font-size="14.5" font-weight="700" fill="#F6A99E">Ausstieg?</text>
+        <text x="950" y="283" text-anchor="middle" font-size="14.5" font-weight="800" fill="#F6A99E">Gibt es nicht.</text>
+      </g>
+    </svg>
+  </div>
+  <div class="scap"><p>Zwei gute Gespräche, ein Handschlag, <b>ein Preis für alles</b>. Niemand hat die Prozesse gesehen.</p></div>
+</section>
+
+<!-- F9 · Szene 2: Der schleichende Umfang -->
+<section class="slide" data-notes="[T+10 · 3 Klicks] Szene 2, die Wochen danach. Das Projekt läuft, und es kommen Wünsche. Klick 1: Können Sie noch schnell die Auswertung ergänzen? Klar, machen wir. Klick 2: Ach, und der Export, und die zweite Liegenschaftsgruppe, und, und, und. Vierzehn solcher Wünsche, alle mündlich, alle freundlich, nichts davon steht irgendwo. Klick 3: und leise, ganz leise, rutscht der Liefertermin nach hinten. Niemand sagt es laut, denn niemand hat es gemessen. Szene 3.">
+  <div class="kicker">Teil 1 · Die Geschichte</div>
+  <span class="chip red"><span class="dot"></span>Szene 2 · Die Wochen danach</span>
+  <h2 style="margin-top:12px">«Können Sie noch schnell…»</h2>
+  <div class="scene-stage" style="view-transition-name:vtscene">
+    <svg viewBox="0 0 1120 330" xmlns="http://www.w3.org/2000/svg">
+      <rect x="470" y="150" width="180" height="130" rx="14" fill="#8FA3B8"/>
+      <text x="560" y="222" text-anchor="middle" font-size="16" font-weight="800" fill="#0D1119">DAS PROJEKT</text>
+      <g class="frag">
+        <rect x="120" y="60" width="290" height="46" rx="22" fill="#F2F5F9"/>
+        <text x="265" y="89" text-anchor="middle" font-size="15" font-weight="600" fill="#18232F">«…die Auswertung ergänzen?»</text>
+      </g>
+      <g class="frag">
+        <rect x="180" y="118" width="250" height="46" rx="22" fill="#F2F5F9" opacity=".85"/>
+        <text x="305" y="147" text-anchor="middle" font-size="15" font-weight="600" fill="#18232F">«…den Export dazu?»</text>
+        <rect x="700" y="70" width="290" height="46" rx="22" fill="#F2F5F9"/>
+        <text x="845" y="99" text-anchor="middle" font-size="15" font-weight="600" fill="#18232F">«…die zweite Liegenschaftsgruppe?»</text>
+        <rect x="720" y="128" width="180" height="46" rx="22" fill="#F2F5F9" opacity=".85"/>
+        <text x="810" y="157" text-anchor="middle" font-size="15" font-weight="700" fill="#18232F">×14, alle mündlich</text>
+      </g>
+      <g class="frag">
+        <line x1="240" y1="292" x2="880" y2="292" stroke="#5E6877" stroke-width="2"/>
+        <path d="M 420 280 l 12 12 l -12 12" fill="none" stroke="#EDF1F7" stroke-width="2.5"/>
+        <rect x="430" y="268" width="4" height="48" fill="#17CD82"/>
+        <text x="432" y="258" text-anchor="middle" font-size="12.5" font-weight="700" fill="#7FE9BC">Termin (geplant)</text>
+        <rect x="720" y="268" width="4" height="48" fill="#EF6A5A"/>
+        <text x="722" y="258" text-anchor="middle" font-size="12.5" font-weight="700" fill="#F6A99E">Termin (real, sagt niemand)</text>
+        <path d="M 460 292 q 130 -34 250 0" fill="none" stroke="#EF6A5A" stroke-width="2" stroke-dasharray="7 6"/>
+      </g>
+    </svg>
+  </div>
+  <div class="scap"><p><b>Vierzehn Wünsche, alle mündlich.</b> Und der Termin rutscht leise nach hinten, niemand misst es.</p></div>
+</section>
+
+<!-- F10 · Szene 3: Monat 4 -->
+<section class="slide" data-notes="[T+11 · 2 Klicks] Szene 3, Monat vier. Die erste grosse Abnahme steht an, und plötzlich knallt es. Klick 1: der Kunde sagt, die Offline-Funktion war doch von Anfang an vereinbart! Der Anbieter: nein, das haben wir nie so besprochen. Klick 2: und jetzt die entscheidende Frage: wer hat recht? Niemand weiss es. Es gibt kein Protokoll, kein Log, keinen Beschluss, nirgends. Beide erinnern sich ehrlich unterschiedlich. Genau dieser Satz, das haben wir nie so besprochen, ist der teuerste Satz der IT-Branche. Szene 4.">
+  <div class="kicker">Teil 1 · Die Geschichte</div>
+  <span class="chip red"><span class="dot"></span>Szene 3 · Monat 4</span>
+  <h2 style="margin-top:12px">«Das haben wir nie so besprochen.»</h2>
+  <div class="scene-stage" style="view-transition-name:vtscene">
+    <svg viewBox="0 0 1120 330" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="270" cy="150" r="34" fill="#C6D2DE"/>
+      <rect x="228" y="190" width="84" height="110" rx="26" fill="#6E8296"/>
+      <circle cx="850" cy="150" r="34" fill="#C6D2DE"/>
+      <rect x="808" y="190" width="84" height="110" rx="26" fill="#8FA3B8"/>
+      <g class="frag">
+        <rect x="120" y="46" width="330" height="52" rx="24" fill="#F2F5F9"/>
+        <text x="285" y="78" text-anchor="middle" font-size="15.5" font-weight="700" fill="#18232F">«Das war von Anfang an vereinbart!»</text>
+        <rect x="660" y="46" width="350" height="52" rx="24" fill="#F2F5F9"/>
+        <text x="835" y="78" text-anchor="middle" font-size="15.5" font-weight="700" fill="#B3432F">«Das haben wir nie so besprochen.»</text>
+      </g>
+      <g class="frag">
+        <rect x="470" y="150" width="180" height="140" rx="12" fill="#F2F5F9" opacity=".95"/>
+        <text x="560" y="196" text-anchor="middle" font-size="15" font-weight="800" fill="#18232F">Protokoll?</text>
+        <text x="560" y="230" text-anchor="middle" font-size="34" font-weight="900" fill="#B3432F">∅</text>
+        <text x="560" y="266" text-anchor="middle" font-size="13.5" font-weight="600" fill="#5B6A7A">Niemand hat je etwas</text>
+        <text x="560" y="284" text-anchor="middle" font-size="13.5" font-weight="600" fill="#5B6A7A">aufgeschrieben.</text>
+      </g>
+    </svg>
+  </div>
+  <div class="scap"><p>Beide erinnern sich <b>ehrlich</b> unterschiedlich. Es gibt kein Gedächtnis, also gewinnt niemand.</p></div>
+</section>
+
+<!-- F11 · Szene 4: Die Rechnung -->
+<section class="slide" data-notes="[T+12 · 2 Klicks] Szene 4. All die schnellen Wünsche aus Szene 2 waren natürlich nie gratis, sie wurden nur nie beziffert. Jetzt kommt die Abrechnung der Zusatzaufwände. Klick 1: die Rechnung liegt 80 Prozent über dem Handschlag-Preis. Klick 2: der Anbieter will nachverhandeln, denn er hat die Arbeit ja wirklich geleistet. Der Kunde fühlt sich erpresst, denn ihm hat nie jemand einen Preis VOR der Umsetzung gezeigt. Beide haben irgendwie recht, und genau das ist das Problem. Szene 5, das Ende.">
+  <div class="kicker">Teil 1 · Die Geschichte</div>
+  <span class="chip red"><span class="dot"></span>Szene 4 · Die Abrechnung</span>
+  <h2 style="margin-top:12px">Plus 80 Prozent.</h2>
+  <div class="scene-stage" style="view-transition-name:vtscene">
+    <svg viewBox="0 0 1120 330" xmlns="http://www.w3.org/2000/svg">
+      <rect x="430" y="40" width="260" height="260" rx="12" fill="#F2F5F9"/>
+      <text x="560" y="78" text-anchor="middle" font-size="16" font-weight="800" fill="#18232F">RECHNUNG</text>
+      <rect x="470" y="100" width="180" height="12" rx="6" fill="#D5DDE6"/>
+      <rect x="470" y="122" width="140" height="12" rx="6" fill="#D5DDE6"/>
+      <rect x="470" y="144" width="160" height="12" rx="6" fill="#D5DDE6"/>
+      <rect x="470" y="190" width="90" height="52" rx="8" fill="#17CD82" opacity=".85"/>
+      <text x="515" y="222" text-anchor="middle" font-size="14" font-weight="800" fill="#062015">Offeriert</text>
+      <g class="frag">
+        <rect x="470" y="150" width="90" height="92" rx="8" fill="#EF6A5A" transform="translate(90 0)"/>
+        <text x="605" y="185" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">+80%</text>
+        <text x="605" y="205" text-anchor="middle" font-size="11.5" font-weight="700" fill="#fff">«Zusätze»</text>
+      </g>
+      <g class="frag">
+        <rect x="90" y="120" width="270" height="64" rx="24" fill="rgba(239,106,90,.16)" stroke="#EF6A5A" stroke-width="1.5"/>
+        <text x="225" y="147" text-anchor="middle" font-size="14.5" font-weight="700" fill="#F6A99E">Anbieter: «Die Arbeit war real,</text>
+        <text x="225" y="168" text-anchor="middle" font-size="14.5" font-weight="700" fill="#F6A99E">wir müssen nachverhandeln.»</text>
+        <rect x="760" y="120" width="270" height="64" rx="24" fill="rgba(239,106,90,.16)" stroke="#EF6A5A" stroke-width="1.5"/>
+        <text x="895" y="147" text-anchor="middle" font-size="14.5" font-weight="700" fill="#F6A99E">Kunde: «Mir hat NIE jemand</text>
+        <text x="895" y="168" text-anchor="middle" font-size="14.5" font-weight="700" fill="#F6A99E">vorher einen Preis gezeigt.»</text>
+      </g>
+      <text x="560" y="280" text-anchor="middle" font-size="14" font-weight="700" fill="#5B6A7A">14 Wünsche · 0 schriftliche Preise</text>
+    </svg>
+  </div>
+  <div class="scap"><p>Beide haben irgendwie recht. <b>Genau das ist das Problem:</b> es gab nie einen Preis vor der Umsetzung.</p></div>
+</section>
+
+<!-- F12 · Szene 5: Der Streit -->
+<section class="slide" data-notes="[T+14 · 3 Klicks] Szene 5, das Ende. Klick 1: der Anbieter erklärt das Projekt für fertig. Der Kunde sagt: das ist nicht fertig, die Hälfte fehlt. Woran misst man fertig? Hat nie jemand definiert. Klick 2: inzwischen sind drei Firmen beteiligt, der Anbieter, der IT-Partner, der Software-Hersteller, und bei jedem Problem zeigen alle aufeinander. Klick 3: das Projekt versandet. Der Kunde hat viel Geld bezahlt, der Anbieter viel gearbeitet, und beide hassen sich. Niemand hat gelogen, niemand war böse. Es fehlte nur Struktur. Weiter: die Diagnose.">
+  <div class="kicker">Teil 1 · Die Geschichte</div>
+  <span class="chip red"><span class="dot"></span>Szene 5 · Das Ende</span>
+  <h2 style="margin-top:12px">Alle zeigen aufeinander.</h2>
+  <div class="scene-stage" style="view-transition-name:vtscene">
+    <svg viewBox="0 0 1120 330" xmlns="http://www.w3.org/2000/svg">
+      <g class="frag">
+        <rect x="90" y="60" width="250" height="52" rx="24" fill="#F2F5F9"/>
+        <text x="215" y="92" text-anchor="middle" font-size="15" font-weight="700" fill="#18232F">Anbieter: «Fertig.»</text>
+        <rect x="780" y="60" width="250" height="52" rx="24" fill="#F2F5F9"/>
+        <text x="905" y="92" text-anchor="middle" font-size="15" font-weight="700" fill="#B3432F">Kunde: «Die Hälfte fehlt!»</text>
+      </g>
+      <circle cx="330" cy="200" r="30" fill="#C6D2DE"/><rect x="294" y="234" width="72" height="70" rx="22" fill="#6E8296"/>
+      <circle cx="560" cy="180" r="30" fill="#C6D2DE"/><rect x="524" y="214" width="72" height="70" rx="22" fill="#8FA3B8"/>
+      <circle cx="790" cy="200" r="30" fill="#C6D2DE"/><rect x="754" y="234" width="72" height="70" rx="22" fill="#6E8296"/>
+      <text x="330" y="322" text-anchor="middle" font-size="12.5" font-weight="700" fill="#9AA6B5">ANBIETER</text>
+      <text x="560" y="322" text-anchor="middle" font-size="12.5" font-weight="700" fill="#9AA6B5">IT-PARTNER</text>
+      <text x="790" y="322" text-anchor="middle" font-size="12.5" font-weight="700" fill="#9AA6B5">HERSTELLER</text>
+      <g class="frag">
+        <path d="M 380 220 L 500 200" stroke="#EF6A5A" stroke-width="3" marker-end="none"/><path d="M 490 194 l 14 5 l -10 11" fill="none" stroke="#EF6A5A" stroke-width="3"/>
+        <path d="M 610 200 L 730 220" stroke="#EF6A5A" stroke-width="3"/><path d="M 718 212 l 15 7 l -13 8" fill="none" stroke="#EF6A5A" stroke-width="3"/>
+        <path d="M 740 250 L 400 250" stroke="#EF6A5A" stroke-width="3"/><path d="M 412 242 l -14 8 l 14 8" fill="none" stroke="#EF6A5A" stroke-width="3"/>
+      </g>
+      <g class="frag">
+        <text x="560" y="140" text-anchor="middle" font-size="19" font-weight="900" fill="#F6A99E">Das Projekt versandet.</text>
+      </g>
+    </svg>
+  </div>
+  <div class="scap"><p>Niemand hat gelogen, niemand war böse. <b>Es fehlte nur Struktur.</b></p></div>
+</section>
+
+<!-- F13 · Diagnose -->
+<section class="slide" data-notes="[T+15 · 5 Klicks] Die Diagnose, fünf Todesursachen, ein Klick pro Ursache, und ihr kennt jetzt jede aus der Geschichte: Klick 1, der Blind-Preis: ein Gesamtfestpreis ohne Analyse. Klick 2, Umfang nur mündlich: vierzehn Wünsche, nichts schriftlich. Klick 3, kein Gedächtnis: kein Protokoll, keine Entscheide festgehalten. Klick 4, der Kosten-Schock: Preise kamen NACH der Arbeit statt davor. Klick 5, niemand verantwortlich: keine Rollen, kein Fertig-Massstab, alle zeigen aufeinander. Und jetzt der wichtigste Satz von Teil 1: gegen jede dieser fünf Ursachen gibt es ein Werkzeug. Genau die bauen wir heute. Weiter: Schmid kennt diese Geschichte auch.">
+  <div class="kicker">Teil 1 · Die Diagnose</div>
+  <h2>Fünf Todesursachen. Alle vermeidbar.</h2>
+  <div class="grid-3" style="grid-template-columns:repeat(5,1fr);gap:12px;margin-top:26px">
+    <div class="card frag" style="text-align:center;padding:18px 10px"><div style="font-size:30px">🤝</div><h3 style="font-size:14.5px;font-weight:800;margin-top:8px">Blind-Preis</h3><p style="color:var(--muted);font-size:12px;margin-top:5px;line-height:1.4">Gesamtfestpreis ohne Analyse</p></div>
+    <div class="card frag" style="text-align:center;padding:18px 10px"><div style="font-size:30px">💬</div><h3 style="font-size:14.5px;font-weight:800;margin-top:8px">Umfang mündlich</h3><p style="color:var(--muted);font-size:12px;margin-top:5px;line-height:1.4">14 Wünsche, nichts schriftlich</p></div>
+    <div class="card frag" style="text-align:center;padding:18px 10px"><div style="font-size:30px">🧠</div><h3 style="font-size:14.5px;font-weight:800;margin-top:8px">Kein Gedächtnis</h3><p style="color:var(--muted);font-size:12px;margin-top:5px;line-height:1.4">Entscheide nirgends festgehalten</p></div>
+    <div class="card frag" style="text-align:center;padding:18px 10px"><div style="font-size:30px">💸</div><h3 style="font-size:14.5px;font-weight:800;margin-top:8px">Kosten-Schock</h3><p style="color:var(--muted);font-size:12px;margin-top:5px;line-height:1.4">Preis kam nach der Arbeit</p></div>
+    <div class="card frag" style="text-align:center;padding:18px 10px"><div style="font-size:30px">👉</div><h3 style="font-size:14.5px;font-weight:800;margin-top:8px">Niemand schuld</h3><p style="color:var(--muted);font-size:12px;margin-top:5px;line-height:1.4">Keine Rollen, kein Fertig-Massstab</p></div>
+  </div>
+  <div class="statement" style="margin-top:34px">Gegen jede dieser fünf Ursachen gibt es <em>ein Werkzeug.</em> Die bauen wir jetzt.</div>
+  <p class="footnote">Ab jetzt trägt jedes Werkzeug ein Schild: welche Szene es verhindert hätte.</p>
+</section>
+
+<!-- F14 · D1 -->
+<section class="slide" data-notes="[T+16 · 1 Klick] Bevor wir bauen, noch eine Warnung. Schmid ist Wirtschaftsprüfer. Er hat solche Projekte nicht nur gehört, er hat sie GEPRÜFT. Klick: seine Frage, wörtlich aus unserer Fragen-Bank. Lies sie vor: Und wenn das Projekt am Ende doppelt so teuer wird wie offeriert? Kenne ich alles. Und jetzt der Kern: auf diese Frage darfst du NICHT mit einer Beteuerung antworten, kein Bei-uns-ist-das-anders, kein Versprechen. Die Antwort ist Mechanik: Strukturen, die das Doppelt-so-teuer technisch unmöglich machen, ohne dass der Kunde viermal schriftlich ja gesagt hat. Diese Mechanik bauen wir in den nächsten 25 Minuten. Teil 2.">
+  <div class="kicker">Teil 1 · Warum das uns betrifft</div>
+  <h2>Schmid kennt diese Geschichte. Beruflich.</h2>
+  <div class="grow">
+    <div class="card hot frag" style="max-width:860px;padding:26px 30px">
+      <div style="display:flex;gap:18px;align-items:center">
+        <div class="ava" style="width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font-size:26px;flex:none;background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.04));border:1px solid var(--border-2)">👤</div>
+        <div>
+          <p style="font-size:22px;font-weight:750;line-height:1.4">«Und wenn das Projekt am Ende doppelt so teuer wird wie offeriert? <span style="color:var(--green-soft)">Kenne ich alles.</span>»</p>
+          <p style="color:var(--dim);font-size:12.5px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;margin-top:8px">Rolf Schmid · Drill D1 aus unserer Fragen-Bank</p>
+        </div>
+      </div>
+    </div>
+    <div class="statement" style="margin-top:28px">Die Antwort ist keine Beteuerung. <em>Die Antwort ist Mechanik.</em></div>
+  </div>
+  <p class="footnote">Genau diese Mechanik bauen wir jetzt: erst das Fundament (Teil 2), dann die Werkzeuge (Teil 3).</p>
+</section>
+
+<!-- ============ TEIL 2 · DREI PHASEN, DREI VERTRÄGE (F15-F20) ============ -->
+
+<!-- F15 · Phasen-Karte -->
+<section class="slide" data-notes="[T+17 · 5 Klicks] Teil 2, das Fundament. Unser Gegenmodell zum Handschlag-Projekt baut sich jetzt vor euch auf. Klick 1: Phase 1, das Detailkonzept. Klick 2: dann ein Tor, ein bewusster Haltepunkt. Klick 3: Phase 2, der Pilot. Klick 4: wieder ein Tor. Klick 5: Phase 3, Rollout und Betrieb. Drei Phasen, und das ist der Kern: jede wird EINZELN beauftragt, jede hat einen eigenen Preis, jede liefert etwas, das für sich allein Wert hat. Kein Gesamt-Blindpreis, keine Bindung bis zum Ende. Wir gehen die drei jetzt einzeln durch.">
+  <div class="kicker">Teil 2 · Drei Phasen, drei Verträge <span>// Das Fundament</span></div>
+  <h2>Nicht ein Vertrag. Drei.</h2>
+  <div class="phases" style="margin-top:44px">
+    <div class="ph frag" style="view-transition-name:vtph1"><div class="pn">Phase 1</div><h4>Detailkonzept</h4><span class="price">Festpreis</span><div class="own">Analyse, Architektur, Anforderungen</div></div>
+    <div class="gate frag" style="view-transition-name:vtg1"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph frag" style="view-transition-name:vtph2"><div class="pn">Phase 2</div><h4>Pilot</h4><span class="price">Festpreis / Kostendach</span><div class="own">Ein echter Teilprozess, gemessen</div></div>
+    <div class="gate frag" style="view-transition-name:vtg2"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph frag" style="view-transition-name:vtph3"><div class="pn">Phase 3</div><h4>Rollout + Betrieb</h4><span class="price">Etappen + Pauschale</span><div class="own">Ausweitung, Migration, Servicevertrag</div></div>
+  </div>
+  <div class="statement" style="margin-top:40px">Jede Phase: <em>einzeln beauftragt, eigener Preis, eigener Wert.</em></div>
+  <p class="footnote">Das Gegenmodell zu Szene 1: kein Blind-Preis, keine Bindung bis zum Ende.</p>
+</section>
+
+<!-- F16 · Phase 1 -->
+<section class="slide" data-notes="[T+19 · 2 Klicks] Phase 1, das Detailkonzept, zum Festpreis. Was drinsteckt, Klick 1: wir dokumentieren die Ist-Prozesse, entwerfen die Architektur, schreiben den priorisierten Anforderungskatalog, erheben das Mengengerüst und klären die pebe-Schnittstellen schriftlich. Klick 2, und das ist der Satz, der Vertrauen schafft: das fertige Konzept GEHÖRT vRv. Es ist so geschrieben, dass auch ein anderer Umsetzer damit bauen könnte. Damit ist Schmids Frage beantwortet, was passiert, wenn sie nach dem Konzept nicht mit uns weitermachen wollen: dann besitzen sie ein präzises Pflichtenheft für jede Anbieterwahl. Der Sprechsatz unten ist Satz 3 von zehn, einmal laut. Phase 2.">
+  <div class="kicker">Teil 2 · Drei Phasen <span>// Phase 1</span></div>
+  <h2>Das Detailkonzept: ein Dokument mit eigenem Wert.</h2>
+  <div class="phases" style="margin-top:18px">
+    <div class="ph on" style="view-transition-name:vtph1"><div class="pn">Phase 1</div><h4>Detailkonzept</h4><span class="price">Festpreis</span></div>
+    <div class="gate" style="view-transition-name:vtg1;opacity:.45"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph" style="view-transition-name:vtph2;opacity:.45"><div class="pn">Phase 2</div><h4>Pilot</h4></div>
+    <div class="gate" style="view-transition-name:vtg2;opacity:.45"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph" style="view-transition-name:vtph3;opacity:.45"><div class="pn">Phase 3</div><h4>Rollout + Betrieb</h4></div>
+  </div>
+  <div class="grid-2" style="margin-top:18px">
+    <div class="card frag"><h3 style="font-size:16px;font-weight:800">📋 Was drinsteckt</h3><p style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:7px">Ist-Prozesse dokumentiert · Architektur · priorisierter Anforderungskatalog · Mengengerüst · pebe-Klärung <b style="color:var(--text)">schriftlich</b></p></div>
+    <div class="card hot frag"><h3 style="font-size:16px;font-weight:800">🎁 Wem es gehört</h3><p style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:7px"><b style="color:var(--green-soft)">vRv.</b> So geschrieben, dass auch ein anderer Umsetzer damit bauen könnte. Ein Pflichtenheft für <b style="color:var(--text)">jede</b> Anbieterwahl, auch gegen uns.</p></div>
+  </div>
+  <p class="saytext">Das Detailkonzept gehört Ihnen, auch wenn Sie danach mit jemand anderem bauen. Wir verdienen die nächste Phase mit der Qualität der laufenden.</p>
+</section>
+
+<!-- F17 · Phase 2 -->
+<section class="slide" data-notes="[T+20 · 2 Klicks] Phase 2, der Pilot. Klick 1: ein echter Teilprozess mit echten Nutzern, bewusst klein geschnitten, zum Beispiel zwei bis drei Hauswarte. Und entscheidend: die Messkriterien, woran wir Erfolg messen, werden VORHER definiert, nicht hinterher verhandelt, die konkreten Kriterien kommen in Teil 3. Klick 2, die Preisform: Festpreis oder Kostendach. Kostendach heisst, kurz erklärt: abgerechnet nach Aufwand, aber nie mehr als eine vereinbarte Obergrenze, das Risiko nach oben liegt bei uns. Und das Sicherheitsnetz: der heutige Prozess von vRv läuft parallel weiter, bis die Kriterien erfüllt sind. Niemand springt ins kalte Wasser. Phase 3.">
+  <div class="kicker">Teil 2 · Drei Phasen <span>// Phase 2</span></div>
+  <h2>Der Pilot: klein, echt, gemessen.</h2>
+  <div class="phases" style="margin-top:18px">
+    <div class="ph" style="view-transition-name:vtph1;opacity:.45"><div class="pn">Phase 1</div><h4>Detailkonzept</h4></div>
+    <div class="gate" style="view-transition-name:vtg1"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph on" style="view-transition-name:vtph2"><div class="pn">Phase 2</div><h4>Pilot</h4><span class="price">Festpreis / Kostendach</span></div>
+    <div class="gate" style="view-transition-name:vtg2;opacity:.45"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph" style="view-transition-name:vtph3;opacity:.45"><div class="pn">Phase 3</div><h4>Rollout + Betrieb</h4></div>
+  </div>
+  <div class="grid-2" style="margin-top:18px">
+    <div class="card frag"><h3 style="font-size:16px;font-weight:800">🧪 Klein und echt</h3><p style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:7px">Ein echter Teilprozess, echte Nutzer (z.&#8202;B. 2-3 Hauswarte). <b style="color:var(--text)">Messkriterien vorher definiert</b>, nicht hinterher verhandelt. Der heutige Prozess läuft <b style="color:var(--text)">parallel weiter</b>: das Netz.</p></div>
+    <div class="card frag"><h3 style="font-size:16px;font-weight:800">💰 Kostendach, auf Deutsch</h3><p style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:7px">Abgerechnet nach Aufwand, <b style="color:var(--green-soft)">aber nie mehr als die vereinbarte Obergrenze</b>. Das Risiko nach oben liegt bei uns, nicht bei vRv.</p></div>
+  </div>
+  <p class="footnote"><b>Guldimanns Frage</b> («Woher wissen wir vor dem grossen Umbau, dass es funktioniert?») ist damit strukturell beantwortet: durch Messen statt Glauben.</p>
+</section>
+
+<!-- F18 · Phase 3 -->
+<section class="slide" data-notes="[T+22 · 2 Klicks] Phase 3, Rollout und Betrieb. Klick 1: die Ausweitung auf alle Bereiche läuft in Etappen, jede Etappe wieder mit eigenem Festpreis und eigener Abnahme, dazu Datenübernahme und Schulung. Klick 2: danach der Betrieb, als Monatspauschale mit Servicevertrag. Kurzer Rückgriff auf Modul 2: SLA, ihr erinnert euch, das ist der Vertragsteil mit zugesagten Reaktionszeiten und Verfügbarkeit. Welche Zahlen da drinstehen, schauen wir in Teil 4 an, und validieren sie HEUTE im Entscheidungs-Block. Jetzt zum wichtigsten Bauteil des Modells: dem Tor.">
+  <div class="kicker">Teil 2 · Drei Phasen <span>// Phase 3</span></div>
+  <h2>Rollout in Etappen. Betrieb als Vertrag.</h2>
+  <div class="phases" style="margin-top:18px">
+    <div class="ph" style="view-transition-name:vtph1;opacity:.45"><div class="pn">Phase 1</div><h4>Detailkonzept</h4></div>
+    <div class="gate" style="view-transition-name:vtg1;opacity:.45"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph" style="view-transition-name:vtph2;opacity:.45"><div class="pn">Phase 2</div><h4>Pilot</h4></div>
+    <div class="gate" style="view-transition-name:vtg2"><div class="dia"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph on" style="view-transition-name:vtph3"><div class="pn">Phase 3</div><h4>Rollout + Betrieb</h4><span class="price">Etappen + Pauschale</span></div>
+  </div>
+  <div class="grid-2" style="margin-top:18px">
+    <div class="card frag"><h3 style="font-size:16px;font-weight:800">🚀 Rollout</h3><p style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:7px">Ausweitung <b style="color:var(--text)">in Etappen</b>, jede mit eigenem Festpreis und eigener Abnahme. Dazu Datenübernahme + Schulung.</p></div>
+    <div class="card frag"><h3 style="font-size:16px;font-weight:800">🔧 Betrieb</h3><p style="color:var(--muted);font-size:14px;line-height:1.55;margin-top:7px"><b style="color:var(--text)">Monatspauschale + Servicevertrag</b> (SLA, aus Modul 2: zugesagte Reaktionszeiten und Verfügbarkeit). Die Zahlen: Teil 4, validiert HEUTE.</p></div>
+  </div>
+  <p class="footnote">Am Ende besitzt vRv das produktive System plus einen Servicevertrag. Kein «fertig und tschüss».</p>
+</section>
+
+<!-- F19 · Das Tor -->
+<section class="slide" data-notes="[T+23 · 1 Klick] Das Tor. Nach jeder Phase hält das Projekt bewusst an, und vRv entscheidet: weiter mit uns, oder aussteigen, MIT Gegenwert in der Hand, dem Konzept, dem gemessenen Piloten. Klick: und jetzt dreh das Argument um, das ist der Verkaufs-Twist. Ein Tor klingt nach Risiko für UNS, in Wahrheit ist es unser stärkstes Verkaufsargument: es beweist, dass wir die nächste Phase mit Qualität verdienen wollen statt mit Vertragsbindung. Ein Wirtschaftsprüfer versteht diese Anreizlogik sofort, sie macht uns glaubwürdiger als jedes Versprechen. Und damit zur Formel, die alles zusammenfasst.">
+  <div class="kicker">Teil 2 · Drei Phasen <span>// Das Tor</span></div>
+  <h2>Der Ausstieg ist eingebaut. Absichtlich.</h2>
+  <div class="phases" style="margin-top:18px">
+    <div class="ph" style="view-transition-name:vtph1;opacity:.55"><div class="pn">Phase 1</div><h4>Detailkonzept</h4></div>
+    <div class="gate" style="view-transition-name:vtg1;transform:scale(1.25)"><div class="dia" style="box-shadow:0 0 26px rgba(240,187,79,.35)"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph" style="view-transition-name:vtph2;opacity:.55"><div class="pn">Phase 2</div><h4>Pilot</h4></div>
+    <div class="gate" style="view-transition-name:vtg2;transform:scale(1.25)"><div class="dia" style="box-shadow:0 0 26px rgba(240,187,79,.35)"><span>🚪</span></div><small>Tor</small></div>
+    <div class="ph" style="view-transition-name:vtph3;opacity:.55"><div class="pn">Phase 3</div><h4>Rollout + Betrieb</h4></div>
+  </div>
+  <div class="card hot frag" style="margin-top:22px;max-width:900px">
+    <p style="font-size:18px;line-height:1.55"><b style="color:var(--green-soft)">Der Twist:</b> Das Tor klingt nach Risiko für uns. In Wahrheit ist es das stärkste Verkaufsargument: <b>wir verdienen die nächste Phase mit Qualität, nicht mit Vertragsbindung.</b> Ein Prüfer versteht diese Anreizlogik sofort.</p>
+  </div>
+  <span class="badge stop">✂ Verhindert Szene 1 · kein Vertrag ohne Ausstieg</span>
+  <p class="footnote"></p>
+</section>
+
+<!-- F20 · Die Formel -->
+<section class="slide" data-notes="[T+25 · 2 Klicks] Und alles zusammen in einer Formel, die ihr auswendig können müsst, denn die Evaluations-Frage von vRv lautet wörtlich: Festpreis, Dienstleistungsangebot oder agil? Klick 1, die Formel: Festpreis im Rahmen, agil im Inhalt. Festpreis pro Phase gibt Kostensicherheit, innerhalb der Phase arbeiten wir in kurzen Zyklen mit sichtbaren Zwischenständen. Klick 2, und warum kein Gesamtfestpreis, auswendig: er wäre entweder mit Angst-Reserve überteuert oder unseriös knapp kalkuliert, beides zulasten des Kunden. Das sind die Sprechsätze 1 und 2. Damit steht das Fundament. Jetzt der Werkzeugkasten, der es im Alltag zusammenhält.">
+  <div class="kicker">Teil 2 · Drei Phasen <span>// Die Formel</span></div>
+  <h2>Ihre Frage, wörtlich: «Festpreis vs. Dienstleistungsangebot vs. Agil»</h2>
+  <div class="grow">
+    <div class="statement frag" style="font-size:40px;max-width:34ch;font-weight:850">«<em>Festpreis im Rahmen,<br>agil im Inhalt.</em>»</div>
+    <div class="card frag" style="margin-top:26px;max-width:880px">
+      <p style="font-size:16px;color:var(--muted);line-height:1.6"><b style="color:var(--text)">Warum kein Gesamtfestpreis?</b> Er wäre entweder mit Angst-Reserve <b style="color:var(--text)">überteuert</b> oder unseriös <b style="color:var(--text)">knapp</b> kalkuliert. Beides ginge zulasten des Kunden.</p>
+    </div>
+  </div>
+  <p class="saytext">Ihre Frage Festpreis, Dienstleistung oder agil beantworten wir so: Festpreis im Rahmen, agil im Inhalt, pro Phase, mit einem Ausstiegspunkt nach jeder.</p>
+</section>
+
+<!-- ============ TEIL 3 · DER WERKZEUGKASTEN (F21-F31) ============ -->
+
+<!-- F21 · Werkzeugkasten-Übersicht -->
+<section class="slide" data-notes="[T+26 · 6 Klicks] Teil 3, das Herzstück. Das Phasenmodell ist der Vertrag, aber im Alltag halten sechs Dokumente das Projekt zusammen, unser Projekthandbuch. Sechs Klicks, sechs Fächer: der Projektplan. Der Statusreport, eine Seite pro Woche. Das Entscheidungs-Log. Die Verantwortungstabelle, RACI, erkläre ich gleich. Das Change-Request-Formular. Und das Abnahmeprotokoll. Der Massstab dafür, sag ihn laut: mehr Papier wäre Theater, weniger wäre fahrlässig. Jedes dieser sechs verhindert genau eine Todesursache aus der Geschichte. Wir gehen sie durch, das Fach fliegt jeweils gross nach oben.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Übersicht</span></div>
+  <h2>Sechs Dokumente halten das Projekt zusammen.</h2>
+  <div class="toolbox">
+    <div class="tool frag" style="view-transition-name:vtt1"><span class="ti">🗓️</span><div><h4>Projektplan</h4><small>Meilensteine + kritischer Pfad</small></div></div>
+    <div class="tool frag" style="view-transition-name:vtt2"><span class="ti">📄</span><div><h4>Statusreport</h4><small>1 Seite, jede Woche</small></div></div>
+    <div class="tool frag" style="view-transition-name:vtt3"><span class="ti">🧠</span><div><h4>Entscheidungs-Log</h4><small>das Projektgedächtnis</small></div></div>
+    <div class="tool frag" style="view-transition-name:vtt4"><span class="ti">🧭</span><div><h4>Verantwortungstabelle</h4><small>wer macht was, wer verantwortet</small></div></div>
+    <div class="tool frag" style="view-transition-name:vtt5"><span class="ti">✍️</span><div><h4>Change Request</h4><small>Änderungen mit Preis, vorher</small></div></div>
+    <div class="tool frag" style="view-transition-name:vtt6"><span class="ti">✅</span><div><h4>Abnahmeprotokoll</h4><small>«fertig» als Messwert</small></div></div>
+  </div>
+  <div class="statement" style="margin-top:30px">«Mehr Papier wäre Theater. <em>Weniger wäre fahrlässig.</em>»</div>
+  <p class="footnote">Jedes Werkzeug verhindert genau eine Todesursache aus Teil 1. Die Schilder zeigen welche.</p>
+</section>
+
+<!-- F22 · Projektplan -->
+<section class="slide" data-notes="[T+28 · 2 Klicks] Werkzeug 1, der Projektplan. Kein Gantt-Monster, sondern nur Meilensteine, die eine Abnahme oder einen Entscheid bedeuten. Klick 1: das Muster, echte Meilensteine aus unserem Vorlagen-Set: Kickoff mit bestätigten Zugängen, Ist-Prozesse dokumentiert UND reviewt, die pebe-Formatklärung schriftlich, die Phasen-Abnahme als Tor. Der rote Balken markiert den kritischen Pfad, das ist die Kette von Aufgaben, bei der jede Verzögerung sofort das Ende verschiebt. Klick 2, die Regel: ein Datum ändert sich NIE stillschweigend. Neue Planung heisst: altes Datum durchgestrichen, neues daneben, Grund im Statusreport. Erinnert euch an Szene 2, den leise rutschenden Termin: genau der ist damit unmöglich. Werkzeug 2.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Werkzeug 1 von 6</span></div>
+  <div class="tool big" style="view-transition-name:vtt1;margin-top:2px"><span class="ti">🗓️</span><div><h4 style="font-size:19px">Der Projektplan</h4><small style="font-size:12.5px">Nur Meilensteine mit Abnahme- oder Entscheid-Charakter · wöchentlich nachgeführt</small></div></div>
+  <div class="paper frag" style="max-width:760px;margin-top:16px">
+    <div class="phead"><b>Projektplan · Auszug</b><span>wöchentlich nachgeführt</span></div>
+    <div class="pbody">
+      <div class="row"><span class="no">M1</span><p><b>Kickoff:</b> Zugänge + Ansprechpartner bestätigt</p></div>
+      <div class="row hl"><span class="no">M2</span><p><b>Ist-Prozesse dokumentiert + reviewt</b> · kritischer Pfad</p></div>
+      <div class="row"><span class="no">M3</span><p><b>pebe-Formatklärung schriftlich</b> (extern: pebe AG)</p></div>
+      <div class="row"><span class="no">M4</span><p><b>Phasen-Abnahme</b> = Tor: vRv entscheidet über die nächste Phase</p></div>
+    </div>
+  </div>
+  <div class="card frag" style="margin-top:14px;max-width:760px;padding:13px 20px"><p style="font-size:15px;line-height:1.5"><b style="color:var(--green-soft)">Die Regel:</b> Ein Datum ändert sich nie stillschweigend. Neu geplant heisst: alt durchgestrichen, neu daneben, Grund im Statusreport.</p></div>
+  <span class="badge stop">✂ Verhindert Szene 2 · der Termin kann nicht mehr leise rutschen</span>
+</section>
+
+<!-- F23 · Statusreport -->
+<section class="slide" data-notes="[T+30 · 2 Klicks] Werkzeug 2, der Statusreport, und das ist das wichtigste der sechs. Jede Woche EINE Seite, nie mehr, hier ist sie. Klick 1: die Seite baut sich auf: erledigt, maximal fünf Punkte. Nächste Schritte, mit wer. Risiken, mit Ampel. Und dann, Klick 2, der Block, der uns schützt, deshalb leuchtet er: Entscheide, die wir von vRv brauchen, MIT FRIST. Warum ist das der wichtigste Block? Weil er Verzögerungen sichtbar macht, BEVOR sie unsere Schuld werden. Wenn vRv drei Wochen lang einen Entscheid nicht fällt, steht das dreimal schwarz auf weiss da. Kein Schuld-Pingpong wie in Szene 4 möglich. Dazu unten: Kulanz-Arbeiten stehen als ohne Verrechnung erledigt drin, sichtbar, nicht heimlich. Sprechsatz 4, einmal laut. Werkzeug 3.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Werkzeug 2 von 6 · das wichtigste</span></div>
+  <div class="tool big" style="view-transition-name:vtt2;margin-top:2px"><span class="ti">📄</span><div><h4 style="font-size:19px">Der Statusreport</h4><small style="font-size:12.5px">Jede Woche · genau eine Seite · auch wenn wenig passiert ist</small></div></div>
+  <div style="display:grid;grid-template-columns:1.25fr 1fr;gap:18px;margin-top:14px">
+    <div class="paper frag">
+      <div class="phead"><b>Statusreport KW 41</b><span>1 Seite, nie mehr</span></div>
+      <div class="pbody">
+        <div class="row"><span class="no">1</span><p><b>Erledigt</b> (max. 5, Ergebnisse statt Tätigkeiten)</p></div>
+        <div class="row"><span class="no">2</span><p><b>Nächste Schritte</b> (max. 5, mit «wer»)</p></div>
+        <div class="row"><span class="no">3</span><p><b>Risiken</b> mit Ampel + Gegenmassnahme</p></div>
+        <div class="row hl"><span class="no">4</span><p><b>Entscheide, die wir von Ihnen brauchen · mit Frist</b></p></div>
+        <div class="row"><span class="no">5</span><p><b>Ohne Verrechnung erledigt</b> (Kulanz, sichtbar)</p></div>
+      </div>
+    </div>
+    <div class="card hot frag" style="align-self:start"><p style="font-size:15.5px;line-height:1.6"><b style="color:var(--green-soft)">Warum Block 4 uns schützt:</b> Er macht Verzögerungen sichtbar, <b>bevor</b> sie unsere Schuld werden. Ein offener Kunden-Entscheid steht jede Woche schwarz auf weiss da, mit Frist.</p></div>
+  </div>
+  <span class="badge stop">✂ Verhindert Szene 2 + 4 · Abweichungen werden wöchentlich sichtbar</span>
+  <p class="saytext">Sie bekommen jede Woche eine Seite: erledigt, nächste Schritte, Risiken, und welche Entscheide wir von Ihnen brauchen, mit Frist.</p>
+</section>
+
+<!-- F24 · Entscheidungs-Log -->
+<section class="slide" data-notes="[T+32 · 1 Klick] Werkzeug 3, das Entscheidungs-Log, das Gedächtnis des Projekts. Jeder Entscheid, der Geld, Termin oder Umfang bewegt, wird innert 24 Stunden eingetragen: Datum, Entscheid, wer, Begründung, und welche Alternativen verworfen wurden. Klick: so sieht das aus. Und jetzt zurück zu Szene 3, dem teuersten Satz der Branche: das haben wir nie so besprochen. Mit diesem Log gibt es den Satz nicht mehr, es gibt nur noch: schauen wir nach, Eintrag vom 14. Oktober, gemeinsam beschlossen, hier die Begründung. Der Kunde kann jederzeit reinschauen. Streit über Erinnerungen wird durch Nachschlagen ersetzt. Werkzeug 4, das gegen das Fingerzeigen.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Werkzeug 3 von 6</span></div>
+  <div class="tool big" style="view-transition-name:vtt3;margin-top:2px"><span class="ti">🧠</span><div><h4 style="font-size:19px">Das Entscheidungs-Log</h4><small style="font-size:12.5px">Jeder Entscheid mit Geld-/Termin-/Umfang-Wirkung · innert 24 h eingetragen · Kunde kann jederzeit einsehen</small></div></div>
+  <div class="paper frag" style="max-width:860px;margin-top:16px">
+    <div class="phead"><b>Entscheidungs-Log · Auszug</b><span>geteilt mit vRv</span></div>
+    <div class="pbody">
+      <div class="row"><p><b>14.10.</b> · Offline-Modus Hauswart-App: <b>ja, Teil von Etappe 2</b> · beschlossen mit M. Böni · Grund: Keller-Funklöcher · verworfen: nur-online (zu fehleranfällig)</p></div>
+      <div class="row"><p><b>21.10.</b> · Zweite Liegenschaftsgruppe: <b>später (Etappe 3)</b> · beschlossen mit R. Schmid · Grund: Pilot klein halten</p></div>
+    </div>
+  </div>
+  <div class="statement" style="margin-top:22px">«Das haben wir nie so besprochen» wird ersetzt durch: <em>«Schauen wir nach.»</em></div>
+  <span class="badge stop">✂ Verhindert Szene 3 · das Projekt hat ein Gedächtnis</span>
+</section>
+
+<!-- F25 · RACI -->
+<section class="slide" data-notes="[T+33 · 2 Klicks] Werkzeug 4, die Verantwortungstabelle. Das Fachwort ist RACI, vier Buchstaben, ganz einfach: R wie Responsible, macht die Arbeit. A wie Accountable, verantwortet das Ergebnis. C wie Consulted, wird vorher einbezogen. I wie Informed, wird informiert. Klick 1: die vier Buchstaben. Klick 2: eine echte Zeile aus unserer Vorlage, und ich habe absichtlich diese gewählt: die Import-Freigabe im laufenden Betrieb. Schaut hin: da steht die BUCHHALTUNG VON vRv auf R und A, nicht wir! Frau Böni behält den Kontrollpunkt über ihre Buchhaltung, das steht vertraglich in der Tabelle. Das ist die Antwort auf ihre stille Sorge, wegrationalisiert zu werden. Nächste Folie: die eiserne Regel dieser Tabelle.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Werkzeug 4 von 6</span></div>
+  <div class="tool big" style="view-transition-name:vtt4;margin-top:2px"><span class="ti">🧭</span><div><h4 style="font-size:19px">Die Verantwortungstabelle (RACI)</h4><small style="font-size:12.5px">Bei Projektstart vereinbart · Bestandteil der Offerte · bei Umfangs-Änderung nachgeführt</small></div></div>
+  <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px">
+    <div class="card frag" style="text-align:center;padding:14px 10px" data-frag="g1"><div style="font-size:26px;font-weight:900;color:var(--green-soft)">R</div><p style="font-size:13px;color:var(--muted);margin-top:4px"><b style="color:var(--text)">Responsible</b><br>macht die Arbeit</p></div>
+    <div class="card frag" style="text-align:center;padding:14px 10px" data-frag="g1"><div style="font-size:26px;font-weight:900;color:var(--green-soft)">A</div><p style="font-size:13px;color:var(--muted);margin-top:4px"><b style="color:var(--text)">Accountable</b><br>verantwortet das Ergebnis</p></div>
+    <div class="card frag" style="text-align:center;padding:14px 10px" data-frag="g1"><div style="font-size:26px;font-weight:900;color:var(--green-soft)">C</div><p style="font-size:13px;color:var(--muted);margin-top:4px"><b style="color:var(--text)">Consulted</b><br>wird vorher einbezogen</p></div>
+    <div class="card frag" style="text-align:center;padding:14px 10px" data-frag="g1"><div style="font-size:26px;font-weight:900;color:var(--green-soft)">I</div><p style="font-size:13px;color:var(--muted);margin-top:4px"><b style="color:var(--text)">Informed</b><br>wird informiert</p></div>
+  </div>
+  <div class="paper frag" style="max-width:860px;margin-top:16px">
+    <div class="phead"><b>RACI · eine echte Zeile aus unserer Vorlage</b><span>Volltabelle: Anhang A1</span></div>
+    <div class="pbody"><div class="row hl"><p><b>Import-Freigabe im laufenden Betrieb</b> → Wir: I · <b>vRv-Buchhaltung: R + A</b> · Frau Böni behält den Kontrollpunkt, vertraglich.</p></div></div>
+  </div>
+  <p class="footnote">Bönis stille Sorge («werde ich wegrationalisiert?») beantwortet diese eine Zeile besser als jede Beteuerung.</p>
+</section>
+
+<!-- F26 · RACI-Regel -->
+<section class="slide" data-notes="[T+35 · 1 Klick] Die eiserne Regel der Tabelle, und sie ist der direkte Gegengift zu Szene 5: Klick: pro Zeile gibt es genau EIN A. Eine Aufgabe, eine verantwortliche Stelle, nie zwei. Wenn etwas schiefgeht, zeigt die Tabelle wohin, nicht der Finger. Drei Firmen, die aufeinander zeigen, kann es strukturell nicht mehr geben, denn für jede Aufgabe steht VOR Vertragsschluss fest, wer sie verantwortet. Sprechsatz 5, einmal laut lesen. Und als Nächstes beziffern wir ehrlich, was vRv selbst beitragen muss.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Die eiserne Regel</span></div>
+  <div class="tool big" style="view-transition-name:vtt4;margin-top:2px"><span class="ti">🧭</span><div><h4 style="font-size:19px">Die Verantwortungstabelle (RACI)</h4><small style="font-size:12.5px">Die Regel, die Szene 5 unmöglich macht</small></div></div>
+  <div class="grow">
+    <div class="statement frag" style="font-size:38px;max-width:30ch;font-weight:850" data-frag="g1">Pro Zeile genau <em>ein A.</em> Nie zwei.</div>
+    <div class="card frag" style="margin-top:24px;max-width:840px" data-frag="g1"><p style="font-size:17px;line-height:1.6;color:var(--muted)">Für jede Aufgabe steht <b style="color:var(--text)">vor Vertragsschluss</b> fest, wer sie verantwortet, auch über Firmengrenzen (wir, vRv, pebe AG, IT-Partner). Streit über Zuständigkeit wird durch Nachschauen ersetzt.</p></div>
+  </div>
+  <span class="badge stop">✂ Verhindert Szene 5 · niemand kann mehr aufeinander zeigen</span>
+  <p class="saytext">In unserer Verantwortungstabelle hat jede Aufgabe genau einen Verantwortlichen. Wenn etwas schiefgeht, zeigt die Tabelle wohin, nicht der Finger.</p>
+</section>
+
+<!-- F27 · Mitarbeit vRv -->
+<section class="slide" data-notes="[T+36 · 4 Klicks] Ein Projekt ist keine Lieferung, es ist Zusammenarbeit, und wer die Mitarbeit des Kunden verschweigt, produziert den ersten Konflikt selbst. Also beziffern wir sie ehrlich, vier Klicks: Klick 1: ein Ansprechpartner pro Bereich. Klick 2: in der Konzeptphase ein bis zwei Stunden pro Woche für Rückfragen, das ist weniger als heute durch Zettelwirtschaft verloren geht. Klick 3: im Pilot machen zwei bis drei Hauswarte aktiv mit. Klick 4: Entscheidungswege unter einer Woche, sonst stauen sich die Block-4-Entscheide. Das ist die Antwort auf Bönis Frage, wie viel Arbeit auf ihr Team zukommt: ehrlich, beziffert, ohne abzuschrecken. Sprechsatz 8. Weiter: das Werkzeug gegen den Kosten-Schock.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Was vRv beiträgt</span></div>
+  <h2>Bönis Frage: «Wie viel Aufwand kommt auf mein Team zu?»</h2>
+  <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px">
+    <div class="card frag" style="text-align:center;padding:20px 12px" data-frag="g1"><div style="font-size:30px;font-weight:900;color:var(--green-soft)">1</div><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.45"><b style="color:var(--text)">Ansprechpartner</b><br>pro Bereich</p></div>
+    <div class="card frag" style="text-align:center;padding:20px 12px" data-frag="g2"><div style="font-size:30px;font-weight:900;color:var(--green-soft)">1-2 h</div><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.45"><b style="color:var(--text)">pro Woche</b><br>in der Konzeptphase</p></div>
+    <div class="card frag" style="text-align:center;padding:20px 12px" data-frag="g3"><div style="font-size:30px;font-weight:900;color:var(--green-soft)">2-3</div><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.45"><b style="color:var(--text)">Hauswarte</b><br>machen im Pilot mit</p></div>
+    <div class="card frag" style="text-align:center;padding:20px 12px" data-frag="g4"><div style="font-size:30px;font-weight:900;color:var(--green-soft)">&lt; 1 Wo</div><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.45"><b style="color:var(--text)">Entscheidungswege</b><br>für Block-4-Entscheide</p></div>
+  </div>
+  <div class="card frag" style="margin-top:20px;max-width:900px" data-frag="g4"><p style="font-size:15px;color:var(--muted);line-height:1.55"><b style="color:var(--text)">Einordnung für Böni:</b> 1-2 Stunden pro Woche ist weniger, als heute durch Zettelwirtschaft und Doppelerfassung verloren geht. Und der Pilot ist bewusst klein geschnitten.</p></div>
+  <p class="saytext">Was wir von Ihnen brauchen, steht beziffert in der Offerte: ein Ansprechpartner pro Bereich, ein bis zwei Stunden pro Woche in der Konzeptphase, zwei bis drei Hauswarte im Pilot.</p>
+</section>
+
+<!-- F28 · Change Request -->
+<section class="slide" data-notes="[T+38 · 2 Klicks] Werkzeug 5, das Change-Request-Formular, kurz CR, das Gegengift zu Szene 2 und 4. Ein Change Request ist ein Änderungswunsch, alles, was NICHT im abgenommenen Anforderungskatalog der Phase steht. Klick 1: das Formular, eine halbe Seite: Beschreibung, Nutzen, Aufwand MIT Preis, Auswirkung auf den Termin, und der Entscheid von vRv: ja, nein, später. Klick 2, die Grundregel, auswendig: kein Mehraufwand ohne schriftlichen CR VOR der Umsetzung. Die vierzehn mündlichen Können-Sie-noch-schnell aus Szene 2? Jedes davon wäre ein halbseitiges Formular MIT Preisschild gewesen, ENTSCHIEDEN vom Kunden, BEVOR gearbeitet wird. Ein Plus-80-Prozent-Schock ist damit strukturell unmöglich. Und die menschliche Seite: Kleinigkeiten unter zwei Stunden machen wir ohne Formular, aber sie stehen im Statusreport als ohne Verrechnung erledigt, Kulanz sichtbar statt heimlich. Sprechsatz 6. Werkzeug 6.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Werkzeug 5 von 6</span></div>
+  <div class="tool big" style="view-transition-name:vtt5;margin-top:2px"><span class="ti">✍️</span><div><h4 style="font-size:19px">Der Change Request (CR)</h4><small style="font-size:12.5px">Jeder Änderungswunsch = eine halbe Seite, entschieden BEVOR gearbeitet wird</small></div></div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:18px;margin-top:14px">
+    <div class="paper frag">
+      <div class="phead"><b>Change Request Nr. 7</b><span>eine halbe Seite</span></div>
+      <div class="pbody">
+        <div class="field"><b>Beschreibung:</b> Auswertung nach Liegenschaftsgruppe</div>
+        <div class="field"><b>Nutzen:</b> Quartalsreport für Eigentümer</div>
+        <div class="field"><b>Aufwand + Preis:</b> 6 h · CHF …</div>
+        <div class="field"><b>Auswirkung Termin:</b> +3 Arbeitstage auf M3</div>
+        <div class="field" style="border-color:#17CD82;background:#E4F7EE"><b>Entscheid vRv:</b> ☐ ja &nbsp; ☐ nein &nbsp; ☐ später</div>
+      </div>
+    </div>
+    <div>
+      <div class="card hot frag"><p style="font-size:15.5px;line-height:1.55"><b style="color:var(--green-soft)">Die Grundregel:</b> Kein Mehraufwand ohne schriftlichen CR <b>vor</b> der Umsetzung. Keine Überraschung auf der Rechnung, nie.</p></div>
+      <div class="card" style="margin-top:12px"><p style="font-size:13.5px;color:var(--muted);line-height:1.5"><b style="color:var(--text)">Menschlich bleiben:</b> Kleinigkeiten unter ~2 h ohne Formular, aber sichtbar im Statusreport («ohne Verrechnung erledigt»).</p></div>
+    </div>
+  </div>
+  <span class="badge stop">✂ Verhindert Szene 2 + 4 · «+80%» gibt es nur mit 14 unterschriebenen Preisen</span>
+  <p class="saytext">Mehraufwand gibt es nur mit schriftlichem Change Request vor der Umsetzung: Beschreibung, Preis, Terminwirkung, Ihr Entscheid. Nie eine Überraschung auf der Rechnung.</p>
+</section>
+
+<!-- F29 · Abnahmeprotokoll -->
+<section class="slide" data-notes="[T+39 · 3 Klicks] Werkzeug 6, das Abnahmeprotokoll, gegen den Fertig-Streit aus Szene 5. Der Kernsatz, Klick 1: Fertig ist ein Messwert, kein Gefühl. Jede Phase und jede Etappe wird gegen vorher definierte Kriterien abgenommen, beidseitig unterschrieben. Klick 2: gefundene Mängel werden klassiert: A blockierend, wird vor der Abnahme behoben. B wesentlich, bekommt eine Frist. C kosmetisch, kommt ins nächste Release. So blockiert nicht jede Kleinigkeit die Abnahme, und nichts Wichtiges wird schöngeredet. Klick 3, die Klausel, die Projekte vor dem Einschlafen rettet: der Kunde hat eine definierte Prüf-Frist, zum Beispiel zehn Arbeitstage. Und danach gilt: Schweigen heisst NICHT abgenommen, Schweigen heisst offene Punkte. Niemand kann eine Abnahme aussitzen, in keine Richtung. Und wie so eine Messlatte konkret aussieht: nächste Folie, am Piloten.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Werkzeug 6 von 6</span></div>
+  <div class="tool big" style="view-transition-name:vtt6;margin-top:2px"><span class="ti">✅</span><div><h4 style="font-size:19px">Das Abnahmeprotokoll</h4><small style="font-size:12.5px">Je Phase und Etappe · Messkriterien vorab · beidseitig visiert · vertragsrelevant</small></div></div>
+  <div class="statement frag" style="margin-top:20px;font-size:30px" data-frag="g1">«Fertig» ist ein <em>Messwert</em>, kein Gefühl.</div>
+  <div class="grid-3" style="margin-top:18px">
+    <div class="card frag" style="padding:16px 18px" data-frag="g2"><h3 style="font-size:15px;font-weight:800;color:#F6A99E">Mangel A · blockierend</h3><p style="font-size:13px;color:var(--muted);margin-top:5px;line-height:1.45">wird <b style="color:var(--text)">vor</b> der Abnahme behoben</p></div>
+    <div class="card frag" style="padding:16px 18px" data-frag="g2"><h3 style="font-size:15px;font-weight:800;color:var(--amber)">Mangel B · wesentlich</h3><p style="font-size:13px;color:var(--muted);margin-top:5px;line-height:1.45">bekommt eine <b style="color:var(--text)">Frist</b></p></div>
+    <div class="card frag" style="padding:16px 18px" data-frag="g2"><h3 style="font-size:15px;font-weight:800;color:var(--green-soft)">Mangel C · kosmetisch</h3><p style="font-size:13px;color:var(--muted);margin-top:5px;line-height:1.45">kommt ins <b style="color:var(--text)">nächste Release</b></p></div>
+  </div>
+  <div class="card hot frag" style="margin-top:14px;max-width:900px;padding:13px 20px" data-frag="g3"><p style="font-size:14.5px;line-height:1.5"><b style="color:var(--green-soft)">Die Anti-Einschlaf-Klausel:</b> Prüf-Frist z.&#8202;B. 10 Arbeitstage. Danach gilt Schweigen als <b>offene Punkte</b>, nicht als Abnahme. Niemand kann eine Abnahme aussitzen.</p></div>
+  <span class="badge stop">✂ Verhindert Szene 5 · den Fertig-Streit gibt es nicht mehr</span>
+</section>
+
+<!-- F30 · Pilot-Messkriterien -->
+<section class="slide" data-notes="[T+40 · 3 Klicks] Und so sieht eine echte Messlatte aus, am Beispiel unseres Piloten, das ist gleichzeitig die Munition für Guldimanns Frage. Drei Kriterien, drei Klicks: Klick 1: die Erfassungsquote: der definierte Anteil der Regieleistungen im Pilotbereich wird über die App erfasst, nicht auf Zetteln. Klick 2: die Durchlaufzeit von der Leistung bis zur Rechnung halbiert sich. Klick 3, mein Lieblingskriterium: die Hauswarte benutzen die App in Woche 4 noch FREIWILLIG. Werkzeug-Akzeptanz kann man nicht verordnen, also messen wir sie. Und das Netz darunter: der heutige Prozess läuft parallel, bis alle Kriterien erfüllt sind. Sprechsatz 7. Jetzt der grosse Zusammenzug: die D1-Antwort.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Die Messlatte am Beispiel Pilot</span></div>
+  <h2>Guldimanns Frage: «Woher wissen wir, dass es funktioniert?»</h2>
+  <div class="grid-3" style="margin-top:24px">
+    <div class="card frag" style="text-align:center;padding:24px 16px"><div style="font-size:34px">📲</div><h3 style="font-size:16px;font-weight:800;margin-top:10px">Erfassungsquote</h3><p style="font-size:13.5px;color:var(--muted);margin-top:7px;line-height:1.5">Regieleistungen im Pilotbereich laufen <b style="color:var(--text)">über die App</b>, Ziel vorab definiert</p></div>
+    <div class="card frag" style="text-align:center;padding:24px 16px"><div style="font-size:34px">⏱️</div><h3 style="font-size:16px;font-weight:800;margin-top:10px">Zeit bis Rechnung</h3><p style="font-size:13.5px;color:var(--muted);margin-top:7px;line-height:1.5">Von Leistung bis Rechnung: <b style="color:var(--text)">halbiert</b></p></div>
+    <div class="card frag" style="text-align:center;padding:24px 16px"><div style="font-size:34px">🙋</div><h3 style="font-size:16px;font-weight:800;margin-top:10px">Freiwillige Nutzung</h3><p style="font-size:13.5px;color:var(--muted);margin-top:7px;line-height:1.5">Hauswarte nutzen die App <b style="color:var(--text)">in Woche 4 freiwillig</b> weiter</p></div>
+  </div>
+  <p class="saytext">Der Pilot hat vorher definierte Messkriterien; Ihr heutiger Prozess läuft parallel weiter und bleibt das Netz, bis die Kriterien erfüllt sind.</p>
+</section>
+
+<!-- F31 · D1-Payoff -->
+<section class="slide" data-notes="[T+41 · 5 Klicks] Zurück zu Schmids Frage vom Anfang von Teil 1: und wenn es doppelt so teuer wird? Kenne ich alles. Jetzt stapeln wir die Antwort, vier Klicks: Klick 1: Festpreis oder Kostendach je Phase, das Risiko nach oben liegt bei uns. Klick 2: Mehraufwand nur per schriftlichem CR mit Preis, VOR der Umsetzung, die Kostenkontrolle liegt bei Ihnen. Klick 3: nach jeder Phase ein Tor mit Ausstieg und Gegenwert. Klick 4: und der Wochenreport macht jede Abweichung sichtbar, solange sie klein ist. Klick 5, die Pointe, wörtlich aus unserer Drill-Vorbereitung: Doppelt so teuer setzt voraus, dass Sie viermal schriftlich ja gesagt haben. Diese eine Zeile ist die beste Antwort des ganzen Tages. Damit ist der Werkzeugkasten voll. Teil 4: der Vertrag mit Zahlen.">
+  <div class="kicker">Teil 3 · Der Werkzeugkasten <span>// Die D1-Antwort</span></div>
+  <h2>«Und wenn es doppelt so teuer wird?»</h2>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-top:20px;max-width:880px">
+    <div class="card frag" style="padding:13px 20px"><p style="font-size:15px"><b style="color:var(--green-soft)">1 ·</b> Festpreis / Kostendach <b>je Phase</b>: Risiko nach oben bei uns</p></div>
+    <div class="card frag" style="padding:13px 20px"><p style="font-size:15px"><b style="color:var(--green-soft)">2 ·</b> Mehraufwand nur per <b>schriftlichem CR mit Preis, vor Umsetzung</b>: Kontrolle bei Ihnen</p></div>
+    <div class="card frag" style="padding:13px 20px"><p style="font-size:15px"><b style="color:var(--green-soft)">3 ·</b> Nach jeder Phase ein <b>Tor</b>: Ausstieg mit Gegenwert</p></div>
+    <div class="card frag" style="padding:13px 20px"><p style="font-size:15px"><b style="color:var(--green-soft)">4 ·</b> Der <b>Wochenreport</b> zeigt jede Abweichung, solange sie klein ist</p></div>
+  </div>
+  <div class="statement frag" style="margin-top:24px;font-size:29px;max-width:42ch">«Doppelt so teuer setzt voraus, dass Sie <em>viermal schriftlich ja gesagt haben.</em>»</div>
+  <p class="footnote">Mechanik statt Beteuerung. Genau das wollte D1 hören.</p>
+</section>
+
+<!-- ============ TEIL 4 · DER VERTRAG MIT ZAHLEN: SLA (F32-F37) ============ -->
+
+<!-- F32 · SLA-Einstieg -->
+<section class="slide" data-notes="[T+43 · 2 Klicks] Teil 4. Nach dem Rollout beginnt der Betrieb, und der braucht Zahlen im Vertrag. Klick 1: die Zeile aus der Anfrage, wörtlich: SLAs, Reaktionszeiten, Lösungszeiten, Verfügbarkeiten. Klick 2, kurzer Rückgriff auf Modul 2: ihr wisst schon, dass unsere Überwachung rund um die Uhr automatisch läuft und dass wir ehrliche Zahlen versprechen statt Fantasie-Werte. Heute bauen wir daraus das konkrete Support-Versprechen. Und Achtung, wichtigster Rahmen: die Zahlen der nächsten Folien sind unser VORSCHLAG, ihr validiert sie heute im Entscheidungs-Block. Weiter.">
+  <div class="kicker">Teil 4 · Der Vertrag mit Zahlen <span>// Einstieg</span></div>
+  <h2>Der Betrieb braucht Zahlen im Vertrag.</h2>
+  <div class="quoteline frag" style="margin-top:26px">«SLAs: Reaktionszeiten, Lösungszeiten, Verfügbarkeiten»<small>Wörtlich aus der Anfrage der vR verwaltungen ag</small></div>
+  <div class="grid-2 frag" style="margin-top:22px">
+    <div class="card"><h3 style="font-size:15.5px;font-weight:800">📟 Aus Modul 2 im Rucksack</h3><p style="font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.5">Überwachung läuft <b style="color:var(--text)">24/7 automatisch</b> mit Alarm aufs Telefon; Menschen reagieren zu Servicezeiten. Ehrliche Zahlen statt Fantasie.</p></div>
+    <div class="card" style="border-color:rgba(240,187,79,.5)"><h3 style="font-size:15.5px;font-weight:800;color:var(--amber)">⚠ Status dieser Zahlen</h3><p style="font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.5"><b style="color:var(--text)">Vorschlag, kein Beschluss.</b> Ihr validiert sie HEUTE im Entscheidungs-Block gegen unsere Uni-Kapazität.</p></div>
+  </div>
+  <p class="footnote">Ein SLA (Service Level Agreement) = der Vertragsteil mit zugesagten Reaktionszeiten und Verfügbarkeit, kennt ihr aus Modul 2.</p>
+</section>
+
+<!-- F33 · P1-P4 [NOTFALL-SKIP] -->
+<section class="slide" data-notes="[T+44 · 4 Klicks · NOTFALL-SKIP: bei Zeitnot überspringen, Kurzform steht auf der nächsten Folie, Volltabelle in Anhang A2] Bevor Zahlen Sinn ergeben, braucht es Störungsklassen, denn nicht jedes Problem ist gleich dringend. Vier Klicks: P1, kritisch: die Plattform ist für alle unbenutzbar oder Datenverlust droht, Beispiel: kein Hauswart kann erfassen. P2, hoch: eine wesentliche Funktion ist gestört, aber es gibt einen Umweg. P3, mittel: eine einzelne Funktion oder Person betroffen, der Prozess läuft. P4, tief: Fragen, Kleinanpassungen, Kosmetik. Wichtig: die Einstufung macht zuerst der Melder, verbindlich machen wir sie innert der Reaktionszeit, bei Uneinigkeit gilt bis zur Klärung die höhere. Weiter zu den Stufen.">
+  <div class="kicker">Teil 4 · Der Vertrag mit Zahlen <span>// Störungsklassen · bei Zeitnot überspringen</span></div>
+  <h2>Nicht jedes Problem ist gleich dringend.</h2>
+  <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px">
+    <div class="card frag" style="padding:18px 14px"><h3 style="font-size:17px;font-weight:900;color:#F6A99E">P1 · kritisch</h3><p style="font-size:13px;color:var(--muted);margin-top:7px;line-height:1.5">Für <b style="color:var(--text)">alle</b> unbenutzbar oder Datenverlust droht.<br><span style="color:var(--dim)">Bsp: kein Hauswart kann erfassen.</span></p></div>
+    <div class="card frag" style="padding:18px 14px"><h3 style="font-size:17px;font-weight:900;color:var(--amber)">P2 · hoch</h3><p style="font-size:13px;color:var(--muted);margin-top:7px;line-height:1.5">Wesentliche Funktion gestört, <b style="color:var(--text)">Umweg existiert</b>.<br><span style="color:var(--dim)">Bsp: Export defekt, Erfassung läuft.</span></p></div>
+    <div class="card frag" style="padding:18px 14px"><h3 style="font-size:17px;font-weight:900;color:var(--blue)">P3 · mittel</h3><p style="font-size:13px;color:var(--muted);margin-top:7px;line-height:1.5">Einzelne Funktion/Person betroffen, <b style="color:var(--text)">Prozess läuft</b>.<br><span style="color:var(--dim)">Bsp: ein Foto-Upload hakt.</span></p></div>
+    <div class="card frag" style="padding:18px 14px"><h3 style="font-size:17px;font-weight:900;color:var(--green-soft)">P4 · tief</h3><p style="font-size:13px;color:var(--muted);margin-top:7px;line-height:1.5">Frage, Kleinanpassung, <b style="color:var(--text)">Kosmetik</b>.<br><span style="color:var(--dim)">Bsp: Spalte umbenennen.</span></p></div>
+  </div>
+  <p class="footnote"><b>Einstufung:</b> zuerst durch den Melder, verbindlich durch uns innert der Reaktionszeit; bei Uneinigkeit gilt bis zur Klärung die höhere Priorität.</p>
+</section>
+
+<!-- F34 · Die drei Stufen -->
+<section class="slide" data-notes="[T+46 · 3 Klicks] Unser Angebot hat drei Servicestufen, drei Klicks: Bronze, das Basisangebot: Support werktags, auf kritische Störungen, also P1, reagieren wir innert acht Arbeitsstunden, Verfügbarkeitsziel 99.0 Prozent. Silber, unsere Empfehlung: gleiche Servicezeiten, aber P1-Reaktion innert VIER Arbeitsstunden, 99.5 Prozent, plus Telefon-Support und monatlicher Report. Gold: erweiterte Servicezeiten Montag bis Samstag, P1 in zwei Stunden, 99.7, und auf Wunsch Pikett ausserhalb der Zeiten, separat bepreist. In allen Stufen enthalten, ohne Aufpreis: die 24/7-Überwachung, tägliche Backups mit geübter Wiederherstellung, kritische Sicherheitslücken innert 48 Stunden. Und nochmal: der amber Chip heisst HEUTE VALIDIEREN, das ist Entscheid 2. Weiter: was garantiert ist und was Ziel.">
+  <div class="kicker">Teil 4 · Der Vertrag mit Zahlen <span>// Die drei Stufen</span></div>
+  <h2>Bronze, Silber, Gold.</h2>
+  <div class="grid-3" style="margin-top:20px">
+    <div class="opt frag"><h3>Bronze <span class="tagopt">Basis</span></h3><p style="font-size:13.5px;color:var(--muted);margin-top:10px;line-height:1.6">Servicezeiten <b style="color:var(--text)">Mo-Fr 08-17</b><br>Reaktion P1: <b style="color:var(--text)">8 Arbeitsstunden</b><br>Verfügbarkeitsziel: <b style="color:var(--text)">99.0%</b><br>Kanal: E-Mail · Report quartalsweise</p></div>
+    <div class="opt reco frag"><h3>Silber <span class="tagopt">Empfehlung</span></h3><p style="font-size:13.5px;color:var(--muted);margin-top:10px;line-height:1.6">Servicezeiten <b style="color:var(--text)">Mo-Fr 08-17</b><br>Reaktion P1: <b style="color:var(--green-soft)">4 Arbeitsstunden</b> · P2: 8 h<br>Verfügbarkeitsziel: <b style="color:var(--green-soft)">99.5%</b><br>E-Mail + Telefon · Report monatlich</p></div>
+    <div class="opt frag"><h3>Gold <span class="tagopt">Erweitert</span></h3><p style="font-size:13.5px;color:var(--muted);margin-top:10px;line-height:1.6">Servicezeiten <b style="color:var(--text)">Mo-Sa 07-19</b><br>Reaktion P1: <b style="color:var(--text)">2 Stunden</b><br>Verfügbarkeitsziel: <b style="color:var(--text)">99.7%</b><br>+ Pikett-Zusatz, separat bepreist</p></div>
+  </div>
+  <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+    <span class="chip green"><span class="dot"></span>In allen Stufen: 24/7-Überwachung · tägliche Backups + geübter Restore · Sicherheits-Patches 48 h</span>
+    <span class="chip amber"><span class="dot"></span>Heute zu validieren · Entscheid 2</span>
+  </div>
+  <p class="footnote">P1 = alles steht · P3 = eine Person betroffen (Details vorige Folie, Volltabelle Anhang A2). Preise je Stufe folgen aus Entscheid 3.</p>
+</section>
+
+<!-- F35 · Garantiert vs. Ziel -->
+<section class="slide" data-notes="[T+47 · 2 Klicks] Jetzt der Satz, der uns vor Übermut schützt, und der bei Prüfern Vertrauen schafft, weil er ehrlich ist. Klick 1: garantiert sind zwei Dinge: die REAKTIONSZEITEN und das Verfügbarkeitsziel, mit Gutschrift, wenn wir es reissen. Lösungszeiten dagegen sind Ziele, keine Garantien, denn niemand kann seriös versprechen, jeden unbekannten Fehler in X Stunden zu LÖSEN. Wer das doch tut, lügt. Klick 2: und was heisst Reaktionszeit? Antwort PLUS Arbeitsbeginn, nicht Anwesenheit im Büro. Das Monitoring weckt uns, wir melden uns qualifiziert und beginnen die Arbeit, egal ob vom Campus oder von zu Hause. Diese zwei Begriffe sauber zu trennen ist die halbe D5-Antwort, und die kommt jetzt.">
+  <div class="kicker">Teil 4 · Der Vertrag mit Zahlen <span>// Ehrlichkeit als System</span></div>
+  <h2>Was garantiert ist. Und was ein Ziel.</h2>
+  <div class="grid-2" style="margin-top:24px">
+    <div class="card hot frag" data-frag="g1"><h3 style="font-size:16.5px;font-weight:800;color:var(--green-soft)">✓ Garantiert</h3><p style="font-size:15px;color:var(--muted);margin-top:8px;line-height:1.6"><b style="color:var(--text)">Reaktionszeiten</b> + <b style="color:var(--text)">Verfügbarkeitsziel</b>, mit Gutschrift bei Verfehlung. Darauf kann sich vRv vertraglich verlassen.</p></div>
+    <div class="card frag" data-frag="g1"><h3 style="font-size:16.5px;font-weight:800;color:var(--amber)">◎ Ziele</h3><p style="font-size:15px;color:var(--muted);margin-top:8px;line-height:1.6"><b style="color:var(--text)">Lösungszeiten.</b> Niemand kann seriös versprechen, jeden unbekannten Fehler in X Stunden zu <b style="color:var(--text)">lösen</b>. Wer es doch tut, lügt.</p></div>
+  </div>
+  <div class="statement frag" style="margin-top:28px;font-size:25px;max-width:52ch" data-frag="g2">Reaktionszeit heisst: <em>Antwort + Beginn der Arbeit.</em> Nicht: Anwesenheit im Büro.</div>
+  <p class="footnote">Das Monitoring alarmiert, wir melden uns qualifiziert und beginnen, vom Campus oder von zu Hause. Diese Trennung ist die halbe Antwort auf die nächste Folie.</p>
+</section>
+
+<!-- F36 · D5 -->
+<section class="slide" data-notes="[T+48 · 2 Klicks] Die zweite gefürchtete Schmid-Frage des Tages, Klick 1, wörtlich: Ihre Reaktionszeiten klingen gut. Wer von Ihnen sitzt denn um 8 Uhr morgens wirklich da, wenn Sie an der Uni sind? Nicht ausweichen, das ist die Regel. Klick 2, die Antwort in drei Schritten: Erstens, vier Personen tragen den Support-Kanal gemeinsam, er ist nie an eine einzelne Vorlesung gebunden. Zweitens, das Monitoring alarmiert automatisch aufs Telefon, und Reaktionszeit heisst Antwort plus Arbeitsbeginn, nicht Bürostuhl. Drittens, der Schlusspunkt, wörtlich aus unserer Vorbereitung: wir versprechen lieber ehrliche vier Stunden als dreissig Minuten, die wir nicht halten können. Und genau DESHALB validieren wir die Zahlen heute, mit Uni-Kalender auf dem Tisch. Weiter: die Teillose.">
+  <div class="kicker">Teil 4 · Der Vertrag mit Zahlen <span>// Die Kapazitätsfrage</span></div>
+  <h2>Die Frage hinter den Zahlen.</h2>
+  <div class="card hot frag" style="margin-top:18px;max-width:880px;padding:22px 26px">
+    <div style="display:flex;gap:16px;align-items:center">
+      <div style="width:54px;height:54px;border-radius:50%;display:grid;place-items:center;font-size:24px;flex:none;background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.04));border:1px solid var(--border-2)">👤</div>
+      <p style="font-size:20px;font-weight:750;line-height:1.45">«Ihre Reaktionszeiten klingen gut. <span style="color:var(--green-soft)">Wer von Ihnen sitzt denn um 8 Uhr morgens wirklich da, wenn Sie an der Uni sind?</span>»</p>
+    </div>
+  </div>
+  <div class="grid-3 frag" style="margin-top:18px">
+    <div class="card" style="padding:15px 16px"><p style="font-size:13.5px;color:var(--muted);line-height:1.5"><b style="color:var(--green-soft)">1 ·</b> <b style="color:var(--text)">Vier Personen</b> tragen den Kanal, er hängt nie an einer einzelnen Vorlesung.</p></div>
+    <div class="card" style="padding:15px 16px"><p style="font-size:13.5px;color:var(--muted);line-height:1.5"><b style="color:var(--green-soft)">2 ·</b> Das <b style="color:var(--text)">Monitoring alarmiert automatisch</b>; Reaktion = Antwort + Arbeitsbeginn.</p></div>
+    <div class="card" style="padding:15px 16px"><p style="font-size:13.5px;color:var(--muted);line-height:1.5"><b style="color:var(--green-soft)">3 ·</b> Und die Zahlen wurden <b style="color:var(--text)">gegen den Uni-Kalender validiert</b>: heute, von uns.</p></div>
+  </div>
+  <p class="saytext">Lieber ehrliche vier Stunden als versprochene dreissig Minuten, die wir nicht halten können.</p>
+</section>
+
+<!-- F37 · Teillose -->
+<section class="slide" data-notes="[T+50 · 2 Klicks] Letztes Stück von Teil 4: was ist mit den Blöcken, die wir nicht selbst liefern, zum Beispiel dem Büro-Netzwerk vor Ort? Klick 1: dafür arbeiten wir mit spezialisierten Partnern, aber in GETRENNTEN Losen: eigener Vertrag, eigene Versicherung, eigene Verantwortung, nach unserem Pflichtenheft, und wir halten als Gesamtkoordinator das Bild zusammen. Klick 2: warum getrennt statt alles aus einer Hand? Kein Durchlaufumsatz, keine Haftungs-Durchreiche, und vRv sieht jeden Franken dort, wo er hingehört. Transparenz ist wörtlich eines ihrer Bewertungskriterien. Und gegen das Aufeinander-Zeigen aus Szene 5: jedes Los hat sein A in der Tabelle. Sprechsatz 9. Damit zum letzten Lehrteil: der Offerte.">
+  <div class="kicker">Teil 4 · Der Vertrag mit Zahlen <span>// Partner-Lose</span></div>
+  <h2>Was wir nicht selbst liefern: getrennte Lose.</h2>
+  <div class="grid-3 frag" style="margin-top:22px">
+    <div class="card" style="text-align:center;padding:18px 14px"><div style="font-size:26px">🧩</div><h3 style="font-size:15px;font-weight:800;margin-top:7px">Los: Plattform</h3><p style="font-size:12.5px;color:var(--muted);margin-top:5px">Wir · eigener Vertrag + SLA</p></div>
+    <div class="card" style="text-align:center;padding:18px 14px"><div style="font-size:26px">🔌</div><h3 style="font-size:15px;font-weight:800;margin-top:7px">Los: Netzwerk vor Ort</h3><p style="font-size:12.5px;color:var(--muted);margin-top:5px">Partner · nach unserem Pflichtenheft</p></div>
+    <div class="card hot" style="text-align:center;padding:18px 14px"><div style="font-size:26px">🎼</div><h3 style="font-size:15px;font-weight:800;margin-top:7px">Wir: Gesamtkoordination</h3><p style="font-size:12.5px;color:var(--muted);margin-top:5px">ein Bild, eine Eskalation, ein A pro Los</p></div>
+  </div>
+  <div class="card frag" style="margin-top:18px;max-width:900px"><p style="font-size:15px;color:var(--muted);line-height:1.55"><b style="color:var(--text)">Warum getrennt statt «alles aus einer Hand»?</b> Kein Durchlaufumsatz, keine Haftungs-Durchreiche, volle Transparenz, und <b style="color:var(--green-soft)">«Transparenz» ist wörtlich eines ihrer Bewertungskriterien.</b></p></div>
+  <span class="badge stop">✂ Verhindert Szene 5 · jedes Los hat sein A</span>
+  <p class="saytext">Für Blöcke wie das Netzwerk vor Ort arbeiten wir mit spezialisierten Partnern in getrennten Losen, nach unserem Pflichtenheft, mit uns als Gesamtkoordinator. Sie sehen jeden Franken dort, wo er hingehört.</p>
+</section>
+
+<!-- ============ TEIL 5 · DIE OFFERTE (F38-F43) ============ -->
+
+<!-- F38 · Grundierung -->
+<section class="slide" data-notes="[T+52 · 1 Klick] Teil 5, die Offerte. Vielleicht denkst du: die schreibt doch Joaquin, was geht sie mich an? Falsch gedacht, Klick: die Offerte ist unsere schriftliche Prüfung, und am 5.8. macht JEDER von uns mündliche Zusagen, die nachher schwarz auf weiss darin stehen müssen. Wer am Tisch etwas verspricht, was die Offerte nicht hält, oder umgekehrt, ruiniert die Glaubwürdigkeit. Deshalb müsst ihr alle vier wissen, wie sie gebaut ist und was drinsteht. Vier Prinzipien, dann der Fahrplan.">
+  <div class="kicker">Teil 5 von 5 · Die Offerte</div>
+  <div class="tpart">
+    <div class="tno">Teil 5</div>
+    <h1>Die Offerte: unsere schriftliche Prüfung.</h1>
+    <p class="sub frag">Am 5.8. macht <b>jeder von uns</b> mündliche Zusagen. Die Offerte muss sie halten, Wort für Wort. Darum musst du wissen, wie sie gebaut ist: <b>vier Prinzipien.</b></p>
+  </div>
+</section>
+
+<!-- F39 · Prinzip 1: Ihre Kapitel -->
+<section class="slide" data-notes="[T+53 · 2 Klicks] Prinzip 1: die Offerte folgt nicht UNSERER Lieblingsstruktur, sondern exakt IHREN Kapiteln, der Liste gewünschte Informationen aus der Anfrage. Klick 1: die Abdeckungs-Matrix, unser internes Kontrollblatt: jede gewünschte Information bekommt ihr Kapitel und ihren Haken. Erst wenn jede Zeile abgehakt ist, geht die Offerte raus. Klick 2: warum? Denk an den Leser: Schmid prüft beruflich. Ein Prüfer liest mit einer Checkliste, und wir geben ihm ein Dokument, das seine Checkliste IST. Nichts überlesen, nichts vergessen, keine Rückfragen-Schleife. Prinzip 2.">
+  <div class="kicker">Teil 5 · Die Offerte <span>// Prinzip 1</span></div>
+  <h2>Ihre Kapitel, nicht unsere.</h2>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:18px;margin-top:18px">
+    <div class="paper frag">
+      <div class="phead"><b>Abdeckungs-Matrix · Auszug</b><span>internes Kontrollblatt</span></div>
+      <div class="pbody">
+        <div class="row"><p>☑ «Firma, Team, Ansprechpartner» → <b>Kap. 3</b></p></div>
+        <div class="row"><p>☑ «Datensicherheit: Organisation, Notfallkonzept …» → <b>Kap. 8</b></p></div>
+        <div class="row"><p>☑ «SLAs: Reaktionszeiten, Lösungszeiten …» → <b>Kap. 10.4</b></p></div>
+        <div class="row"><p>☑ «Festpreis vs. Dienstleistungsangebot vs. Agil» → <b>Kap. 11.3</b></p></div>
+        <div class="row hl"><p><b>Regel: Offerte geht erst raus, wenn JEDE Zeile abgehakt ist.</b></p></div>
+      </div>
+    </div>
+    <div class="card hot frag" style="align-self:start"><p style="font-size:15.5px;line-height:1.6"><b style="color:var(--green-soft)">Warum?</b> Schmid prüft beruflich. Ein Prüfer liest mit Checkliste, und wir geben ihm ein Dokument, <b>das seine Checkliste ist.</b></p></div>
+  </div>
+  <p class="footnote">Die komplette Kapitelliste (0-15) steht in Anhang A3.</p>
+</section>
+
+<!-- F40 · Prinzip 2: Drei Varianten -->
+<section class="slide" data-notes="[T+54 · 3 Klicks] Prinzip 2: wir offerieren nicht EINE Lösung, sondern drei Varianten, ehrlich verglichen, drei Klicks: Variante A, der Microsoft-Ausbau: maximal viel mit ihren bestehenden Werkzeugen. Variante B, die massgeschneiderte Plattform: unser eigener Bau. Variante C, hybrid: die Plattform für die Kernprozesse, tief in die Microsoft-Welt integriert, unser Empfehlungskandidat. Und entscheidend: alle drei stehen mit einem 3-Jahres-Kostenvergleich NEBENEINANDER, nicht nur der Kaufpreis, sondern was es über drei Jahre wirklich kostet, inklusive Lizenzen und Betrieb. Wer drei Wege ehrlich rechnet, hat nichts zu verstecken. Prinzip 3.">
+  <div class="kicker">Teil 5 · Die Offerte <span>// Prinzip 2</span></div>
+  <h2>Drei Varianten, ein ehrlicher Vergleich.</h2>
+  <div class="grid-3" style="margin-top:22px">
+    <div class="opt frag" data-frag="g1"><h3>A · Microsoft-Ausbau <span class="tagopt">Variante</span></h3><p style="font-size:13.5px;color:var(--muted);margin-top:9px;line-height:1.55">Maximal viel mit den <b style="color:var(--text)">bestehenden</b> Microsoft-Werkzeugen von vRv.</p></div>
+    <div class="opt frag" data-frag="g2"><h3>B · Eigene Plattform <span class="tagopt">Variante</span></h3><p style="font-size:13.5px;color:var(--muted);margin-top:9px;line-height:1.55">Massgeschneiderter Bau für die <b style="color:var(--text)">Kernprozesse</b>.</p></div>
+    <div class="opt reco frag" data-frag="g3"><h3>C · Hybrid <span class="tagopt">Empfehlung</span></h3><p style="font-size:13.5px;color:var(--muted);margin-top:9px;line-height:1.55">Plattform für die Kernprozesse, <b style="color:var(--green-soft)">tief in die Microsoft-Welt integriert</b>.</p></div>
+  </div>
+  <div class="card frag" style="margin-top:20px;max-width:880px" data-frag="g3"><p style="font-size:15px;color:var(--muted);line-height:1.55">Alle drei mit <b style="color:var(--text)">3-Jahres-Kostenvergleich nebeneinander</b>: nicht der Kaufpreis, sondern was es über drei Jahre wirklich kostet (Lizenzen, Betrieb, Zusatzkosten). <b style="color:var(--green-soft)">Wer drei Wege ehrlich rechnet, hat nichts zu verstecken.</b></p></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F41 · Prinzip 3: Ehrliche Zahlen -->
+<section class="slide" data-notes="[T+55 · 3 Klicks] Prinzip 3, die Ehrlichkeitsregeln, drei Klicks: Klick 1: jede Zahl in der Offerte trägt ihre Herkunft, aus dem Termin, aus der pebe-Antwort, aus dem Portal-Preis. Keine Zahl aus dem Bauch. Klick 2: Piloten heissen Piloten. Unsere Referenzen sind junge Projekte, und genau so nennen wir sie, denn Schmid merkt Aufgeblasenes sofort, und ein ertappter Superlativ kostet mehr als zehn ehrliche Pilot-Labels. Klick 3: und zwei Wörter sind am 5.8. und in der Offerte VERBOTEN: gratis und kostenlos. Wir sind nicht die Billig-Option, wir sind die Premium-Option mit ehrlichen Zahlen. Wenn Schmid mit seinem Lächeln fragt, ob wir beim Preis entgegenkommen, weil wir ja Referenzen brauchen: kein Rabatt-Reflex. Substanz zeigen, nicht Preis senken. Prinzip 4.">
+  <div class="kicker">Teil 5 · Die Offerte <span>// Prinzip 3</span></div>
+  <h2>Ehrliche Zahlen. Ohne Ausnahme.</h2>
+  <div class="grid-3" style="margin-top:24px">
+    <div class="card frag" data-frag="g1" style="padding:20px 18px"><div style="font-size:28px">🔍</div><h3 style="font-size:15.5px;font-weight:800;margin-top:8px">Jede Zahl mit Herkunft</h3><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">«aus dem Termin» · «pebe-Antwort» · «Portal-Preis». Keine Zahl aus dem Bauch.</p></div>
+    <div class="card frag" data-frag="g2" style="padding:20px 18px"><div style="font-size:28px">🏷️</div><h3 style="font-size:15.5px;font-weight:800;margin-top:8px">Piloten heissen Piloten</h3><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">Ein ertappter Superlativ kostet mehr als zehn ehrliche Labels.</p></div>
+    <div class="card frag" data-frag="g3" style="padding:20px 18px;border-color:rgba(239,106,90,.5)"><div style="font-size:28px">🚫</div><h3 style="font-size:15.5px;font-weight:800;margin-top:8px;color:#F6A99E">Verbotene Wörter</h3><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5"><b style="color:#F6A99E">«gratis», «kostenlos»</b>: wir sind die Premium-Option, nicht die Billig-Option.</p></div>
+  </div>
+  <div class="card frag" style="margin-top:18px;max-width:900px" data-frag="g3"><p style="font-size:14.5px;color:var(--muted);line-height:1.55"><b style="color:var(--text)">Wenn Schmid lächelnd fragt:</b> «Sie brauchen doch Referenzen, da können Sie uns beim Preis sicher entgegenkommen.» → <b style="color:var(--green-soft)">Kein Rabatt-Reflex.</b> Substanz zeigen (Live-Demo unserer Systeme), nicht den Preis senken.</p></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F42 · Prinzip 4: Präsentiert, nicht gemailt -->
+<section class="slide" data-notes="[T+56 · 2 Klicks] Prinzip 4, und das ist Verkaufspsychologie: die Offerte wird nicht gemailt und dann hoffen wir. Klick 1: sie wird PRÄSENTIERT, 45 Minuten, persönlich oder online. Ein Dokument, das man vorstellt, wird diskutiert; ein Dokument im Postfach wird gestapelt. Klick 2: und der Termin dafür wird nicht irgendwann vereinbart, sondern AM 5.8., im Raum, bevor wir gehen. Nico wird wörtlich sagen: Lassen Sie uns jetzt gleich den Termin fixieren, an dem wir sie Ihnen präsentieren. Kein Wir-melden-uns, das ist die Regel. Sprechsatz 10 unten. Und damit zum Fahrplan der nächsten Tage.">
+  <div class="kicker">Teil 5 · Die Offerte <span>// Prinzip 4</span></div>
+  <h2>Präsentiert. Nicht gemailt.</h2>
+  <div class="grow">
+    <div class="grid-2" style="margin-top:10px">
+      <div class="card frag"><h3 style="font-size:16px;font-weight:800">📬 Gemailt</h3><p style="font-size:14px;color:var(--muted);margin-top:7px;line-height:1.55">landet im Stapel, wird quergelesen, Rückfragen versanden. <b style="color:var(--text)">Hoffnung als Strategie.</b></p></div>
+      <div class="card hot frag"><h3 style="font-size:16px;font-weight:800">🗣️ Präsentiert · 45 min</h3><p style="font-size:14px;color:var(--muted);margin-top:7px;line-height:1.55">wird diskutiert, Einwände kommen sofort auf den Tisch, Entscheid rückt näher. <b style="color:var(--green-soft)">Und der Termin dafür wird am 5.8. im Raum fixiert, bevor wir gehen.</b></p></div>
+    </div>
+  </div>
+  <p class="saytext">Die Offerte präsentieren wir Ihnen in 45 Minuten persönlich; den Termin dafür haben wir ja bereits fixiert.</p>
+</section>
+
+<!-- F43 · Countdown -->
+<section class="slide" data-notes="[T+57 · 3 Klicks] Der Fahrplan bis zur Offerte, drei Klicks: Klick 1, vor dem Termin: eure Hausaufgabe bis Sonntag 2.8. um 18 Uhr, dazu die Probe-Termine am 1. und 2.8., wo Claude die Kundenseite spielt, und die Generalprobe am 3. und 4.8. Klick 2, der Termin selbst, Mittwoch 5.8. in Solothurn, und dort die Zusage, wörtlich: Sie erhalten die Offerte mit drei durchgerechneten Varianten und einem 3-Jahres-Kostenvergleich bis zirka 19.8. Klick 3, danach der Offerten-Sprint: am 6.8. die Auswertung des Termins plus die Mail an die pebe AG, am 7. und 8. die Kosten und das Summary, dann Review und die Präsentation. So hängt alles zusammen. Jetzt zurück zu den vier Fragen vom Anfang.">
+  <div class="kicker">Teil 5 · Die Offerte <span>// Der Fahrplan</span></div>
+  <h2>Die nächsten drei Wochen.</h2>
+  <div class="tline" style="margin-top:70px">
+    <div class="axis"></div>
+    <div class="ev frag" style="left:7%" data-frag="g1"><div class="dot"></div><div class="lb">Heute 30.7.</div><div class="sub">diese Session<br>+ 3 Entscheide</div></div>
+    <div class="ev frag" style="left:22%" data-frag="g1"><div class="dot"></div><div class="lb">1.-2.8. Probe</div><div class="sub">Claude spielt<br>die Kundenseite</div></div>
+    <div class="ev frag" style="left:36%" data-frag="g1"><div class="dot"></div><div class="lb">So 2.8., 18:00</div><div class="sub">Hausaufgabe<br>im Hub</div></div>
+    <div class="ev frag" style="left:50%" data-frag="g1"><div class="dot"></div><div class="lb">3.-4.8.</div><div class="sub">Generalprobe</div></div>
+    <div class="ev big frag" style="left:65%" data-frag="g2"><div class="dot"></div><div class="lb">Mi 5.8. · Termin</div><div class="sub">Zusage: Offerte in<br>3 Varianten + 3-Jahres-Vergleich</div></div>
+    <div class="ev frag" style="left:80%" data-frag="g3"><div class="dot"></div><div class="lb">6.-8.8. Sprint</div><div class="sub">Auswertung · pebe-Mail<br>Kosten · Summary</div></div>
+    <div class="ev frag" style="left:93%" data-frag="g3"><div class="dot"></div><div class="lb">~19.8.</div><div class="sub">Offerte präsentiert<br>45 min</div></div>
+  </div>
+  <p class="footnote" style="margin-top:60px">Alles hängt an allem: eure Hausaufgabe koordiniert die Schlusswoche, der Termin füttert die Offerte, die Entscheide von heute stehen morgen im Text.</p>
+</section>
+
+<!-- ============ TEIL 6 · DECODE + WO WIR STEHEN (F44-F47) ============ -->
+
+<!-- F44 · Decode -->
+<section class="slide" data-notes="[T+58 · 1 Klick] Zurück zur Anfrage. Das sind die Zeilen, um die es heute ging, wörtlich zitiert, Klick: und jede hat jetzt einen Ort in eurem Kopf. Geh sie durch: Rolle Lösungsanbieter, Architektur und Projektleitung: das ganze Modul. Festpreis, Dienstleistung oder agil: unsere Formel. Verantwortlichkeiten und Leistungsabgrenzungen: die RACI-Tabelle plus Teillose. Mitarbeit vRv: beziffert. Zusatzkosten Setup, Migration, Schulung: stehen einzeln in Kapitel 13, versteckte Kosten gibt es bei uns als Kategorie nicht. SLAs: Teil 4 plus Entscheid 2 heute. Weiter: die vier Fragen.">
+  <div class="kicker">Teil 6 · Zurück zur Anfrage <span>// Decode</span></div>
+  <h2>Die Original-Zeilen. Alles bekannt.</h2>
+  <div class="decode frag">
+    <div class="row"><span class="ok">✓</span><q>Rolle Lösungsanbieter: erstellen Architektur und Projektleitung</q><span class="where">Das ganze Modul</span></div>
+    <div class="row"><span class="ok">✓</span><q>Festpreis vs. Dienstleistungsangebot vs. Agil</q><span class="where">Die Formel · Teil 2</span></div>
+    <div class="row"><span class="ok">✓</span><q>Verantwortlichkeiten, Leistungsabgrenzungen (Wer ist für was verantwortlich?)</q><span class="where">RACI + Teillose</span></div>
+    <div class="row"><span class="ok">✓</span><q>Mitarbeit/Unterstützung vRv</q><span class="where">Beziffert · Teil 3</span></div>
+    <div class="row"><span class="ok">✓</span><q>Zusatzkosten: Setup/Customizing, Datenmigration und Schulung</q><span class="where">Kap. 13 · einzeln</span></div>
+    <div class="row"><span class="ok">✓</span><q>SLAs: Reaktionszeiten, Lösungszeiten, Verfügbarkeiten</q><span class="where">Teil 4 + Entscheid 2</span></div>
+  </div>
+  <p class="footnote">«Welche versteckten Kosten kommen auf uns zu?» (Böni): Die Kategorie existiert bei uns nicht, alles steht einzeln in Kapitel 13.</p>
+</section>
+
+<!-- F45 · Die vier Fragen, beantwortet -->
+<section class="slide" data-notes="[T+59 · 4 Klicks] Das Versprechen von Folie 5, die Kacheln kommen zurück, jetzt mit Antworten, vier Klicks. Lies jede Frage vor und lass jemanden zuerst selbst antworten. Die Dachfrage, was kostet das Ganze: Heute existieren Struktur und Herleitung, die durchgerechneten Zahlen bekommen Sie mit der Offerte bis zirka 19.8., in drei Varianten mit 3-Jahres-Vergleich. Ehrlich UND souverän: die perfekte Antwort existiert, obwohl die Preise noch offen sind. Warum kein Festpreis: Festpreis im Rahmen, agil im Inhalt, ein Gesamtfestpreis wäre überteuert oder unseriös knapp. Teurer als offeriert: nur mit schriftlichen CRs, doppelt so teuer heisst viermal schriftlich ja gesagt. Nach dem Konzept weg: dann gehört Ihnen das Konzept als Pflichtenheft, wir verdienen die nächste Phase mit Qualität. Alle vier Antworten: nur Wörter von heute. Weiter: unsere ehrliche Flanke.">
+  <div class="kicker">Teil 6 · Zurück zur Anfrage <span>// Das Versprechen von Folie 5</span></div>
+  <h2>Die vier Fragen. Jetzt mit Antworten.</h2>
+  <div class="qa" style="gap:9px">
+    <div class="q dach frag" style="view-transition-name:vtq0;padding:11px 18px"><div class="qt" style="font-size:16.5px">Was kostet uns das Ganze?</div><div class="ans" style="font-size:13.5px">Heute: Struktur + Herleitung. <b>Die durchgerechneten Zahlen erhalten Sie mit der Offerte bis ~19.8., in drei Varianten mit 3-Jahres-Vergleich.</b></div></div>
+    <div class="q frag" style="view-transition-name:vtq1;padding:11px 18px"><div class="qt" style="font-size:16.5px">Warum kein Festpreis für das Gesamtprojekt?</div><div class="ans" style="font-size:13.5px"><b>Festpreis im Rahmen, agil im Inhalt.</b> Ein Gesamtfestpreis wäre mit Angst-Reserve überteuert oder unseriös knapp, beides zu Ihren Lasten.</div></div>
+    <div class="q frag" style="view-transition-name:vtq2;padding:11px 18px"><div class="qt" style="font-size:16.5px">Was passiert, wenn das Projekt teurer wird als offeriert?</div><div class="ans" style="font-size:13.5px">Mehraufwand nur per schriftlichem CR vor der Umsetzung: <b>«Doppelt so teuer» setzt voraus, dass Sie viermal schriftlich ja gesagt haben.</b></div></div>
+    <div class="q frag" style="view-transition-name:vtq3;padding:11px 18px"><div class="qt" style="font-size:16.5px">Und wenn wir nach dem Konzept nicht mit Ihnen weitermachen wollen?</div><div class="ans" style="font-size:13.5px">Dann <b>gehört Ihnen das Detailkonzept</b> als Pflichtenheft für jede Anbieterwahl. Wir verdienen die nächste Phase mit Qualität.</div></div>
+  </div>
+  <p class="footnote"><b>Der Clou:</b> Alle vier Antworten benutzen nur Bausteine von heute.</p>
+</section>
+
+<!-- F46 · Ehrlichkeit Q43 -->
+<section class="slide" data-notes="[T+60 · 2 Klicks] Eine Frage bleibt, unsere ehrliche Flanke. Klick 1, Schmid: Wer leitet das Projekt bei Ihnen? Haben Sie so etwas schon geführt? Klick 2, die Antwort, und sie lügt nicht: Projektführung mit genau diesen Werkzeugen praktizieren wir intern jeden Tag, Statusdisziplin, Entscheidungs-Log, Wochenrhythmus. Als formales KUNDENmandat ist es unser erstes, und deshalb führt ein benannter Gründer mit Stellvertretung, mit genau einem Ansprechpartner für vRv, nach dem Handbuch, das ihr heute gesehen habt. Und der Schlusssatz aus der Fragen-Bank: keine Projektleiter-Rotation wie beim Systemhaus, sondern Leute, die es sich nicht leisten können, dass es schiefgeht. Ehrlich plus Struktur schlägt aufgeblasen. Letzte Info-Folie: was noch offen ist.">
+  <div class="kicker">Teil 6 · Wo wir stehen <span>// Die ehrliche Flanke</span></div>
+  <h2>«Haben Sie so etwas schon geführt?»</h2>
+  <div class="card hot frag" style="margin-top:18px;max-width:880px;padding:20px 26px">
+    <p style="font-size:19px;font-weight:750;line-height:1.45">«Wer leitet das Projekt bei Ihnen? <span style="color:var(--green-soft)">Haben Sie so etwas schon geführt?</span>»</p>
+    <p style="color:var(--dim);font-size:12px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;margin-top:6px">Rolf Schmid · Fragen-Bank Q43</p>
+  </div>
+  <div class="card frag" style="margin-top:16px;max-width:880px">
+    <p style="font-size:15.5px;color:var(--muted);line-height:1.65"><b style="color:var(--text)">Die ehrliche Antwort:</b> Intern praktizieren wir genau diese Führung <b style="color:var(--text)">täglich</b> (Statusdisziplin, Entscheidungs-Log, Wochenrhythmus). Als formales <b style="color:var(--text)">Kundenmandat ist es unser erstes</b>: deshalb ein benannter Gründer mit Stellvertretung, genau ein Ansprechpartner für vRv, und das Handbuch, das ihr heute gesehen habt. <b style="color:var(--green-soft)">Keine Projektleiter-Rotation, sondern Leute, die es sich nicht leisten können, dass es schiefgeht.</b></p>
+  </div>
+  <p class="footnote">Ehrlich + Struktur schlägt aufgeblasen. Der Prüfer testet nicht das Niveau, er testet, ob wir flunkern (Modul 2).</p>
+</section>
+
+<!-- F47 · Offen-Liste -->
+<section class="slide" data-notes="[T+61 · 1 Klick] Und volle Transparenz für uns selbst, was Stand heute offen ist, Klick: die Preis-Eckwerte entstehen HEUTE, in Entscheid 3, das Feintuning läuft bis 31.7. Die SLA-Zahlen validiert ihr HEUTE, Entscheid 2. Die Versicherungs-Offerten sind bis 1.8. in der Hand, bis dahin heisst es im Aussen in Abschluss. Referenz-Freigaben bis 28.7., nur freigegebene Namen werden genannt. Rechtsform: die Sprachregel lautet, die GmbH-Gründung läuft und ist vor Vertragsstart abgeschlossen. Nichts davon ist peinlich, alles davon ist terminiert, genau so steht es dann auch in der Offerte unter offene Punkte. Damit ist der Stoff durch. Abschluss.">
+  <div class="kicker">Teil 6 · Wo wir stehen <span>// Offen, mit Datum</span></div>
+  <h2>Was noch offen ist. Alles terminiert.</h2>
+  <div class="paper frag" style="max-width:860px;margin-top:20px">
+    <div class="phead"><b>Offene Punkte · Stand 30.7.</b><span>alles mit Termin</span></div>
+    <div class="pbody">
+      <div class="row hl"><p><b>Preismodell-Eckwerte</b> → entstehen HEUTE (Entscheid 3), Feintuning bis 31.7.</p></div>
+      <div class="row hl"><p><b>SLA-Zahlen</b> → validiert ihr HEUTE (Entscheid 2)</p></div>
+      <div class="row"><p><b>Versicherungs-Offerten</b> → in der Hand bis 1.8. (bis dahin: «in Abschluss»)</p></div>
+      <div class="row"><p><b>Referenz-Freigaben</b> → bis 28.7., nur freigegebene Namen nennen</p></div>
+      <div class="row"><p><b>Rechtsform</b> → Sprachregel: «GmbH-Gründung läuft, vor Vertragsstart abgeschlossen»</p></div>
+    </div>
+  </div>
+  <p class="footnote">Nichts davon ist peinlich. Alles davon ist terminiert, und genau so steht es in Offerten-Kapitel 14 («Offene Punkte + Annahmen»).</p>
+</section>
+
+<!-- ============ TEIL 7 · ABSCHLUSS LEHRTEIL (F48-F51) ============ -->
+
+<!-- F48 · Zehn Sätze 1-5 -->
+<section class="slide" data-notes="[T+62 · 0 Klicks] Das Kondensat: zehn Sätze, die am 5.8. sitzen müssen, wörtlich aus dem Primer. Hier die ersten fünf. Nicht vorlesen: alle lesen still, du gibst nur die Stichworte: 1 die Formel. 2 warum kein Gesamtfestpreis. 3 das Konzept gehört Ihnen. 4 der Wochenreport. 5 ein A pro Zeile. Weiter zu den zweiten fünf.">
+  <div class="kicker">Teil 7 · Sprechfähig werden <span>// Sätze 1-5 von 10</span></div>
+  <h2>Zehn Sätze für den 5.8. Die ersten fünf.</h2>
+  <div class="sents">
+    <div class="s" style="font-size:15px"><b>1</b><span>Ihre Frage Festpreis, Dienstleistung oder agil beantworten wir so: Festpreis im Rahmen, agil im Inhalt, pro Phase, mit einem Ausstiegspunkt nach jeder.</span></div>
+    <div class="s" style="font-size:15px"><b>2</b><span>Ein Gesamtfestpreis vor der Analyse wäre entweder mit Angst-Reserve überteuert oder unseriös knapp kalkuliert, beides ginge zu Ihren Lasten.</span></div>
+    <div class="s" style="font-size:15px"><b>3</b><span>Das Detailkonzept gehört Ihnen, auch wenn Sie danach mit jemand anderem bauen. Wir verdienen die nächste Phase mit der Qualität der laufenden.</span></div>
+    <div class="s" style="font-size:15px"><b>4</b><span>Sie bekommen jede Woche eine Seite: erledigt, nächste Schritte, Risiken, und welche Entscheide wir von Ihnen brauchen, mit Frist.</span></div>
+    <div class="s" style="font-size:15px"><b>5</b><span>In unserer Verantwortungstabelle hat jede Aufgabe genau einen Verantwortlichen. Wenn etwas schiefgeht, zeigt die Tabelle wohin, nicht der Finger.</span></div>
+  </div>
+</section>
+
+<!-- F49 · Zehn Sätze 6-10 + Übung -->
+<section class="slide" data-notes="[T+63 · 0 Klicks] Die zweiten fünf: 6 die CR-Regel. 7 der Pilot mit Messkriterien und Netz. 8 die bezifferte Mitarbeit. 9 die Teillose mit uns als Koordinator. 10 die präsentierte Offerte. Und jetzt die Übung, hart auf 90 Sekunden begrenzt: jeder sucht sich ZWEI Sätze aus und sagt sie laut in EIGENEN Worten, nicht auswendig. Reihum. Das ist die halbe Vorbereitung auf die Probe am Wochenende.">
+  <div class="kicker">Teil 7 · Sprechfähig werden <span>// Sätze 6-10 + Übung</span></div>
+  <h2>Die zweiten fünf. Und jetzt ihr.</h2>
+  <div class="sents">
+    <div class="s" style="font-size:15px"><b>6</b><span>Mehraufwand gibt es nur mit schriftlichem Change Request vor der Umsetzung: Beschreibung, Preis, Terminwirkung, Ihr Entscheid. Nie eine Überraschung auf der Rechnung.</span></div>
+    <div class="s" style="font-size:15px"><b>7</b><span>Der Pilot hat vorher definierte Messkriterien; Ihr heutiger Prozess läuft parallel weiter und bleibt das Netz, bis die Kriterien erfüllt sind.</span></div>
+    <div class="s" style="font-size:15px"><b>8</b><span>Was wir von Ihnen brauchen, steht beziffert in der Offerte: ein Ansprechpartner pro Bereich, ein bis zwei Stunden pro Woche in der Konzeptphase, zwei bis drei Hauswarte im Pilot.</span></div>
+    <div class="s" style="font-size:15px"><b>9</b><span>Für Blöcke wie das Netzwerk vor Ort arbeiten wir mit spezialisierten Partnern in getrennten Losen, nach unserem Pflichtenheft, mit uns als Gesamtkoordinator. Sie sehen jeden Franken dort, wo er hingehört.</span></div>
+    <div class="s" style="font-size:15px"><b>10</b><span>Die Offerte präsentieren wir Ihnen in 45 Minuten persönlich; den Termin dafür haben wir ja bereits fixiert.</span></div>
+  </div>
+  <p class="footnote"><b>Übung (90 Sekunden, timeboxt):</b> Such dir zwei Sätze aus und sag sie in deinen eigenen Worten. Reihum.</p>
+</section>
+
+<!-- F50 · Hausaufgabe -->
+<section class="slide" data-notes="[T+64 · 2 Klicks] Die Hausaufgabe, und diesmal ist sie kein Trockentraining, sie koordiniert real unsere Schlusswoche. Klick 1: Aufgabe A: jeder schreibt einen echten Statusreport über seine EIGENE Vorbereitungswoche, die fünf Rubriken aus dem Deck, an die anderen drei gerichtet. Rubrik 4 heisst hier: Entscheide, die ich von EUCH brauche, mit Frist. Und diese Reports haben einen Pflicht-Lesetermin: sie werden zu Beginn der Generalprobe am 3.8. gelesen. Aufgabe B: ein echter Change Request aus unserer Vorbereitung, irgendwas hat sich garantiert geändert, plus drei Abnahme-Messkriterien für die Generalprobe: woran messen wir am 3.8., dass WIR bereit sind? Klick 2: freiwillig plus 30 Minuten: die schriftliche Antwort auf D1 oder D5 in eigenen Worten. Warum ohne Claude: er kennt eure Woche, eure Blocker und eure Zusagen nicht. Abgabe Sonntag 2.8., 18 Uhr, im Hub. Letzte Folie.">
+  <div class="kicker">Teil 7 · Hausaufgabe <span>// Abgabe So 2.8., 18:00</span></div>
+  <h2>Kein Trockentraining: echtes Projektmanagement.</h2>
+  <div class="hw">
+    <div class="card frag">
+      <h3 style="font-size:16.5px;font-weight:800">📋 Zwei Aufgaben (60-90 min)</h3>
+      <ol>
+        <li><b>Dein Statusreport</b> über deine reale Vorbereitungswoche: die 5 Rubriken, an die anderen drei gerichtet. Rubrik 4 = <b>«Entscheide, die ich von EUCH brauche, mit Frist»</b>. Wird am 3.8. zu Beginn der Generalprobe gelesen.</li>
+        <li><b>Ein echter Change Request</b> aus unserer Vorbereitung (Formular im Handout) + <b>3 Abnahme-Messkriterien für die Generalprobe</b>: woran messen wir, dass WIR bereit sind?</li>
+      </ol>
+      <div style="margin-top:14px"><span class="deadline-chip">Abgabe: So 2.8., 18:00 · Hub → Lernen → Modul 5 → Abgaben</span></div>
+    </div>
+    <div class="frag">
+      <div class="card" style="border-color:rgba(139,124,246,.5)"><h3 style="font-size:15px;font-weight:800;color:#BBB1FA">⭐ Freiwillig (+30 min)</h3><p style="font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.5">Schriftliche Antwort auf <b style="color:var(--text)">D1</b> («doppelt so teuer?») oder <b style="color:var(--text)">D5</b> («wer sitzt um 8 Uhr da?») in eigenen Worten, 5-8 Sätze.</p></div>
+      <div class="card" style="margin-top:12px"><h3 style="font-size:15px;font-weight:800">🤖 Warum ohne Claude?</h3><p style="font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.5">Claude kennt <b style="color:var(--text)">deine</b> Woche, deine Blocker und deine Zusagen nicht. Und die Reports koordinieren real unsere Schlusswoche.</p></div>
+    </div>
+  </div>
+  <p class="footnote">Anleitung + ausfüllbare Vorlagen: Handout im Hub (Text + PDF).</p>
+</section>
+
+<!-- F51 · Ende Lehrteil -->
+<section class="slide" data-notes="[T+65 · 0 Klicks] Ende des Lehrteils. Fass zusammen: ihr könnt jetzt das Phasenmodell als Vertragslogik erklären, ihr kennt die sechs Werkzeuge und wisst, welche Todesursache jedes verhindert, ihr könnt die vier Prüfer-Fragen in ganzen Sätzen beantworten, und ihr wisst, wie die Offerte gebaut ist. Kurz durchatmen, vielleicht fünf Minuten Pause. Und dann kommt der Teil, für den es kein Publikum mehr gibt, sondern nur uns: drei Entscheide. Die Dossiers dafür liegen auf den nächsten Folien bereit.">
+  <div class="cover-brand">
+    <div class="logo"><svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg"><rect width="500" height="500" rx="110" ry="110" fill="#17CD82"/><polyline points="100,250 175,250 215,155 285,345 325,250 400,250" fill="none" stroke="white" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div><b>automatisierbar</b><span class="sub">Modul 5 · Lehrteil geschafft</span></div>
+  </div>
+  <div class="grow">
+    <div class="statement" style="font-size:30px;max-width:42ch">Du kannst jetzt: das <em>Phasenmodell</em> erklären, die <em>sechs Werkzeuge</em> den Todesursachen zuordnen, und die <em>vier Prüfer-Fragen</em> in ganzen Sätzen beantworten.</div>
+    <div class="cover-meta">
+      <span class="chip green"><span class="dot"></span>Quiz im Hub · 12 Fragen</span>
+      <span class="chip green"><span class="dot"></span>Hausaufgabe bis So 2.8., 18:00</span>
+      <span class="chip violet"><span class="dot"></span>Jetzt: die drei Entscheide</span>
+    </div>
+  </div>
+  <p class="footnote">Ab der nächsten Folie: der Entscheidungs-Block (3 Dossiers), danach der Anhang zum Nachschlagen.</p>
+</section>
+
+<!-- ============ ENTSCHEIDUNGS-BLOCK (F52-F68) · nach dem Lehrteil ============ -->
+
+<!-- F52 · Block-Intro -->
+<section class="slide" data-notes="[Entscheidungs-Block · 0 Klicks] Ab hier kein Unterricht mehr, sondern Arbeitssitzung. Drei Entscheide, für jeden liegt ein komplettes Dossier auf den nächsten Folien: Ausgangslage, Optionen mit Pro und Contra, Herleitung mit unseren Zahlen, Empfehlung mit Kriterium, und wohin das Ergebnis fliesst. Spielregeln: zehn bis fünfzehn Minuten pro Entscheid, am Ende steht je EIN Satz im Entscheidungs-Log, wie im echten Projekt. Danach zehn Minuten gemeinsame Durchsicht der Vorlagen und der Quiz-Hinweis. Dossier 1.">
+  <div class="kicker" style="color:#BBB1FA">Entscheidungs-Block <span>// nach dem Lehrteil</span></div>
+  <h2>Drei Entscheide. Die Dossiers liegen bereit.</h2>
+  <div class="agenda" style="margin-top:26px">
+    <div class="st" style="border-color:rgba(139,124,246,.5)"><span class="n" style="color:#BBB1FA">1</span><h3>Rollenverteilung am 5.8.</h3><span>~10 min · Dossier F53-57</span></div>
+    <div class="st" style="border-color:rgba(139,124,246,.5)"><span class="n" style="color:#BBB1FA">2</span><h3>SLA-Zahlen validieren</h3><span>~15 min · Dossier F58-62</span></div>
+    <div class="st" style="border-color:rgba(139,124,246,.5)"><span class="n" style="color:#BBB1FA">3</span><h3>Preismodell-Eckwerte</h3><span>~15 min · Dossier F63-68</span></div>
+    <div class="st"><span class="n">+</span><h3>Werkzeugkasten-Durchsicht (Vorlagen im Hub) + Quiz-Hinweis</h3><span>10 min</span></div>
+  </div>
+  <div class="card" style="margin-top:18px;max-width:880px;padding:14px 20px"><p style="font-size:14.5px;color:var(--muted);line-height:1.5"><b style="color:#BBB1FA">Spielregel:</b> Jedes Dossier endet mit einer Empfehlung + Kriterium. Am Ende steht pro Entscheid <b style="color:var(--text)">ein Satz im Entscheidungs-Log</b>, wie im echten Projekt: Datum, Entscheid, wer, Begründung.</p></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F53 · Dossier 1: Ausgangslage -->
+<section class="slide" data-notes="[Entscheid 1 · 2 Klicks] Dossier 1, Rollenverteilung am 5.8. Erst die Ausgangslage, was der Termin laut Drehbuch verlangt. Klick 1: vier Blöcke: zehn Minuten Vorstellung, fünfzehn Minuten Live-Demo, sechzig Minuten Discovery, das Herzstück, und zehn Minuten Abschluss mit der Offerten-Zusage und der Termin-Fixierung. Klick 2: daraus ergeben sich drei Bühnen-Rollen plus eine offene: jemand FÜHRT das Gespräch. Jemand bedient Technik und erfasst die Discovery-Antworten strukturiert im Tool. Jemand fährt die Demo und macht Notizen. Und die vierte Rolle ist genau die Frage dieses Entscheids. Dazu die Unbekannte: wie viele kommen von vRv? Schmid und Böni wahrscheinlich, Guldimann und Kunz eventuell, die Teilnehmerliste kommt aus der Antwort auf die Vorab-Mail. Optionen.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 1 · Rollenverteilung 5.8. <span>// Ausgangslage</span></div>
+  <h2>Was der Termin verlangt.</h2>
+  <div class="grid-2" style="grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px">
+    <div class="card frag" style="text-align:center;padding:16px 12px" data-frag="g1"><div style="font-size:24px">🤝</div><h3 style="font-size:14px;font-weight:800;margin-top:6px">Vorstellung</h3><p style="font-size:12px;color:var(--muted);margin-top:4px">10 min</p></div>
+    <div class="card frag" style="text-align:center;padding:16px 12px" data-frag="g1"><div style="font-size:24px">💻</div><h3 style="font-size:14px;font-weight:800;margin-top:6px">Live-Demo</h3><p style="font-size:12px;color:var(--muted);margin-top:4px">15 min</p></div>
+    <div class="card hot frag" style="text-align:center;padding:16px 12px" data-frag="g1"><div style="font-size:24px">🔎</div><h3 style="font-size:14px;font-weight:800;margin-top:6px">Discovery</h3><p style="font-size:12px;color:var(--muted);margin-top:4px">60 min · Herzstück</p></div>
+    <div class="card frag" style="text-align:center;padding:16px 12px" data-frag="g1"><div style="font-size:24px">📅</div><h3 style="font-size:14px;font-weight:800;margin-top:6px">Abschluss</h3><p style="font-size:12px;color:var(--muted);margin-top:4px">Zusage + Termin</p></div>
+  </div>
+  <div class="card frag" style="margin-top:16px;max-width:920px" data-frag="g2"><p style="font-size:14.5px;color:var(--muted);line-height:1.6"><b style="color:var(--text)">Daraus folgen drei Bühnen-Rollen + eine offene:</b> Gesprächsführung · Technik + Tool-Erfassung (Discovery strukturiert festhalten) · Demo + Notizen · <b style="color:#BBB1FA">Rolle 4 = dieser Entscheid.</b> Unbekannte: vRv-Teilnehmerliste (Schmid + Böni wahrscheinlich, Guldimann/Kunz eventuell), kommt aus der Antwort auf die Vorab-Mail.</p></div>
+  <p class="footnote">Notfall-Szenario aus dem Drehbuch: Es erscheint nur Schmid. Auch dafür muss die Aufstellung funktionieren.</p>
+</section>
+
+<!-- F54 · Dossier 1: Option A -->
+<section class="slide" data-notes="[Entscheid 1 · 2 Klicks] Option A: alle vier fahren nach Solothurn, Patrik als vierte Person am Tisch. Klick 1, dafür spricht: wir SIND vier Gründer, die Firma besteht aus genau diesen Gesichtern, volle Teamstärke zeigen beantwortet still die Frage, was passiert, wenn einer von Ihnen ausfällt. Doppelte Notiz-Kapazität. Und wenn Kunz die Besichtigung der Hauswartung anbietet, können wir uns teilen: zwei gehen mit, zwei bleiben am Tisch. Klick 2, dagegen spricht: wenn von vRv nur zwei Leute sitzen, wirken vier Anbieter schnell wie eine Übermacht, das kann drücken statt beeindrucken. Und eine vierte Person OHNE klare Bühnenrolle wirkt wie ein Zuschauer, das wäre schlimmer als Abwesenheit. Option B.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 1 · Rollenverteilung 5.8. <span>// Option A</span></div>
+  <div class="opt" style="margin-top:6px"><h3>Option A · Alle vier vor Ort <span class="tagopt">Volle Präsenz</span></h3>
+    <div class="pc" style="margin-top:14px">
+      <p class="pro frag" data-frag="g1"><span><b>Wir SIND das Team:</b> vier Gesichter beantworten still die Ausfall-Frage (Q7)</span></p>
+      <p class="con frag" data-frag="g2"><span><b>Übermacht-Risiko:</b> 4 Anbieter vor evtl. 2 vRv-Leuten kann drücken statt beeindrucken</span></p>
+      <p class="pro frag" data-frag="g1"><span><b>Doppelte Notiz-Kapazität</b> in der 60-min-Discovery</span></p>
+      <p class="con frag" data-frag="g2"><span><b>Rolle 4 muss echt sein:</b> ein Zuschauer am Tisch wirkt schlimmer als Abwesenheit</span></p>
+      <p class="pro frag" data-frag="g1"><span><b>Teilbarkeit:</b> Besichtigung Hauswartung (Kunz) parallel möglich: 2 gehen mit, 2 bleiben</span></p>
+      <p class="con frag" data-frag="g2"><span><b>Koordination:</b> vier Stimmen brauchen strengere Disziplin, wer wann spricht</span></p>
+    </div>
+  </div>
+  <p class="footnote">Mögliche echte Rolle 4: Patrik führt das Besichtigungs-Gespräch mit Kunz + verantwortet Print-Unterlagen und Technik-Koffer vor Ort.</p>
+</section>
+
+<!-- F55 · Dossier 1: Option B -->
+<section class="slide" data-notes="[Entscheid 1 · 2 Klicks] Option B: das Dreier-Kernteam fährt, Patrik übernimmt den Support: Drucksachen, Technik-Koffer packen, am Termin-Tag remote auf Standby für Zuarbeit. Klick 1, dafür: ein schlanker Auftritt, drei Leute, drei glasklare Rollen, niemand ohne Job. Passt auch aufs Notfall-Szenario, wenn nur Schmid erscheint. Und Patriks Beitrag ist real, nur eben vor und hinter der Bühne. Klick 2, dagegen: eine Hand weniger, die parallele Besichtigung zwingt uns dann, den Discovery-Tisch zu schwächen. Und wir zeigen das Team kleiner, als es ist, ausgerechnet bei einem Kunden, der nach Fortbestand und Kapazität fragt. Jetzt die Herleitung.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 1 · Rollenverteilung 5.8. <span>// Option B</span></div>
+  <div class="opt" style="margin-top:6px"><h3>Option B · Dreier-Kernteam + Patrik im Support <span class="tagopt">Schlanker Auftritt</span></h3>
+    <div class="pc" style="margin-top:14px">
+      <p class="pro frag" data-frag="g1"><span><b>Drei Leute, drei glasklare Rollen:</b> niemand am Tisch ohne Job</span></p>
+      <p class="con frag" data-frag="g2"><span><b>Eine Hand weniger:</b> parallele Besichtigung schwächt den Discovery-Tisch</span></p>
+      <p class="pro frag" data-frag="g1"><span><b>Passt aufs Notfall-Szenario</b> («nur Schmid erscheint»): kein Übergewicht</span></p>
+      <p class="con frag" data-frag="g2"><span><b>Team wirkt kleiner als es ist</b>, bei einem Kunden, der nach Kapazität fragt (Q8)</span></p>
+      <p class="pro frag" data-frag="g1"><span><b>Patriks Beitrag bleibt real:</b> Print, Technik-Koffer, Remote-Standby für Zuarbeit</span></p>
+      <p class="con frag" data-frag="g2"><span><b>Vier-Gründer-Story</b> («geteilte Verantwortung») muss dann verbal statt sichtbar kommen</span></p>
+    </div>
+  </div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F56 · Dossier 1: Herleitung -->
+<section class="slide" data-notes="[Entscheid 1 · 2 Klicks] Die Herleitung, was fix ist und was variabel. Klick 1: drei Rollen sind durch das Drehbuch praktisch gesetzt und von den Sessions belegt: Nico führt das Gespräch, er hat die Gesprächsführung geprobt und macht den Abschluss inklusive Termin-Fixierung. Joaquin bedient Technik und das Discovery-Tool, er hat es gebaut. Tej fährt die Demo, er kennt die Systeme aus Modul 1 und 6 am tiefsten, und macht Notizen. Diese drei stehen, der Entscheid dreht sich real nur um Rolle 4. Klick 2: der Hebel ist die Teilnehmerliste von vRv: kommen drei oder vier, trägt der Tisch auch uns zu viert, und die Besichtigung wird wahrscheinlich. Kommen ein bis zwei, ist schlank besser. Empfehlung.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 1 · Rollenverteilung 5.8. <span>// Herleitung</span></div>
+  <h2>Drei Rollen sind gesetzt. Es geht um Rolle 4.</h2>
+  <div class="paper frag" style="max-width:880px;margin-top:18px">
+    <div class="phead"><b>Gesetzt (aus Drehbuch + Sessions belegt)</b><span>nicht Teil des Entscheids</span></div>
+    <div class="pbody">
+      <div class="row"><p><b>Nico · Gesprächsführung:</b> eröffnet, führt, macht den Abschluss + Termin-Fixierung</p></div>
+      <div class="row"><p><b>Joaquin · Technik + Tool:</b> erfasst die Discovery strukturiert (er hat das Tool gebaut)</p></div>
+      <div class="row"><p><b>Tej · Demo + Notizen:</b> fährt die Live-Demo (tiefstes Systemwissen, Modul 1 + 6)</p></div>
+    </div>
+  </div>
+  <div class="card hot frag" style="margin-top:16px;max-width:880px"><p style="font-size:15px;line-height:1.6"><b style="color:var(--green-soft)">Der Hebel ist die Teilnehmerliste von vRv:</b> Kommen 3-4 Personen (inkl. Kunz), trägt der Raum uns zu viert, und die Hauswartungs-Besichtigung wird wahrscheinlich → Option A wird stark. Kommen 1-2, wirkt schlank souveräner → Option B.</p></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F57 · Dossier 1: Empfehlung -->
+<section class="slide" data-notes="[Entscheid 1 · 1 Klick] Die Empfehlung, Klick: ein bedingter Entscheid statt Bauchgefühl. Standard ist Option A, alle vier, MIT echter Rolle 4 für Patrik: Besichtigung plus Material. Rückfall auf Option B, falls die Antwort auf die Vorab-Mail zeigt, dass von vRv nur ein bis zwei Personen kommen. Das Kriterium ist damit objektiv: die Teilnehmerliste. Diskutiert kurz, ob ihr das so tragt, und dann formuliert den Log-Satz. Das Ergebnis fliesst in die Generalprobe, dort proben wir in exakt dieser Aufstellung, und in die finale Termin-Bestätigung an vRv. Dossier 2.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 1 · Rollenverteilung 5.8. <span>// Empfehlung + Entscheid</span></div>
+  <h2>Empfehlung: bedingt entscheiden.</h2>
+  <div class="opt reco frag" style="margin-top:16px;max-width:920px"><h3>Empfehlung <span class="tagopt">zur Diskussion</span></h3>
+    <p style="font-size:15.5px;color:var(--muted);line-height:1.65;margin-top:10px"><b style="color:var(--text)">Standard: Option A</b> (alle vier), mit echter Rolle 4 für Patrik: Besichtigung Hauswartung + Print/Technik vor Ort. <b style="color:var(--text)">Rückfall: Option B</b>, falls die vRv-Antwort auf die Vorab-Mail nur 1-2 Teilnehmende nennt.</p>
+  </div>
+  <div class="krit">Kommen von vRv drei oder mehr Personen (die Teilnehmerliste entscheidet), fahren wir zu viert. Sonst Kernteam.</div>
+  <div class="fliesst">Ergebnis fliesst in → <b>Generalprobe 3./4.8. (exakt diese Aufstellung proben)</b> + finale Termin-Bestätigung an vRv</div>
+  <p class="footnote">Log-Satz-Vorlage: «30.7.: Rollen 5.8. = A mit Bedingung Teilnehmerliste ≥3, Rolle 4 Patrik (Besichtigung + Material). Beschlossen: alle vier.»</p>
+</section>
+
+<!-- F58 · Dossier 2: Ausgangslage -->
+<section class="slide" data-notes="[Entscheid 2 · 2 Klicks] Dossier 2, die SLA-Validierung, das ist der Entscheid mit Vertragsrisiko, nehmt ihn ernst. Klick 1: zur Erinnerung, das sind die drei Zusagen im Silber-Vorschlag, die nachher im Vertrag stehen: Servicezeiten Montag bis Freitag 8 bis 17 Uhr. Reaktion auf P1, also Totalausfall, innert vier Arbeitsstunden. Verfügbarkeitsziel 99.5 Prozent. Klick 2: und das ist keine Marketing-Zahl, es hängt Geld dran: verfehlen wir das Verfügbarkeitsziel, gibt es eine Gutschrift, fünf Prozent der Monatspauschale je angefangene halbe Prozentpunkt-Unterschreitung, gedeckelt bei fünfzig Prozent. Diese Zahlen sind ausserdem wörtlich unsere D5-Antwort an Schmid. Der Realitäts-Check.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 2 · SLA validieren <span>// Ausgangslage</span></div>
+  <h2>Drei Zusagen, an denen Geld hängt.</h2>
+  <div class="grid-3 frag" style="margin-top:22px">
+    <div class="card" style="text-align:center;padding:22px 14px"><div style="font-size:26px;font-weight:900;color:var(--green-soft)">Mo-Fr<br>08-17</div><p style="font-size:13px;color:var(--muted);margin-top:8px"><b style="color:var(--text)">Servicezeiten</b><br>(Menschen erreichbar)</p></div>
+    <div class="card" style="text-align:center;padding:22px 14px"><div style="font-size:26px;font-weight:900;color:var(--green-soft)">4 Arb.-Std.</div><p style="font-size:13px;color:var(--muted);margin-top:8px"><b style="color:var(--text)">Reaktion auf P1</b><br>(Totalausfall)</p></div>
+    <div class="card" style="text-align:center;padding:22px 14px"><div style="font-size:26px;font-weight:900;color:var(--green-soft)">99.5%</div><p style="font-size:13px;color:var(--muted);margin-top:8px"><b style="color:var(--text)">Verfügbarkeitsziel</b><br>(je Monat, gemessen)</p></div>
+  </div>
+  <div class="card frag" style="margin-top:18px;max-width:900px;border-color:rgba(240,187,79,.5)"><p style="font-size:14.5px;color:var(--muted);line-height:1.55"><b style="color:var(--amber)">Daran hängt Geld:</b> Bei Verfehlung des Verfügbarkeitsziels gibt es eine <b style="color:var(--text)">Gutschrift von 5% der Monatspauschale je angefangene 0.5 Prozentpunkte</b>, gedeckelt bei 50%. Und diese Zahlen sind wörtlich unsere D5-Antwort an Schmid.</p></div>
+  <p class="footnote">Lösungszeiten bleiben Ziele (Teil 4); garantiert sind Reaktionszeiten + Verfügbarkeitsziel. Genau die validieren wir jetzt.</p>
+</section>
+
+<!-- F59 · Dossier 2: Realitäts-Check -->
+<section class="slide" data-notes="[Entscheid 2 · 3 Klicks] Der Realitäts-Check: der Uni-Dienstag, ab 7.9. sind wir alle an der HSG, geplant sind rund sechs Stunden Firmenarbeit pro Tag, aber mit Vorlesungsfenstern. Spielen wir den Ernstfall durch, drei Klicks: Klick 1: 08:15, das Monitoring meldet P1, die Plattform ist down, Alarm aufs Telefon von allen vieren, automatisch, das funktioniert heute schon. Klick 2: die Frage ist NICHT, wer im Büro sitzt. Reaktionszeit heisst: qualifizierte Antwort an vRv plus Arbeitsbeginn. Das geht vom Campus, zwischen zwei Vorlesungen, vom Laptop. Vier Kalender überlappen sich: die Wahrscheinlichkeit, dass ALLE vier gleichzeitig vier Stunden lang nicht arbeitsfähig sind, ist klein, aber nicht null: Prüfungswochen. Klick 3: die ehrliche Frage an euch: gibt es im Semester wiederkehrende Fenster, in denen KEINER von uns innert vier Arbeitsstunden reagieren kann? Prüfungsblöcke, Pflichtseminare, Militärdienst? Genau dafür sind die Optionen da.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 2 · SLA validieren <span>// Realitäts-Check</span></div>
+  <h2>Der Uni-Dienstag: spielen wir den Ernstfall.</h2>
+  <div class="tline" style="margin-top:56px">
+    <div class="axis"></div>
+    <div class="ev big frag" style="left:10%" data-frag="g1"><div class="dot"></div><div class="lb">08:15 · P1-Alarm</div><div class="sub">Monitoring weckt<br>alle 4 Telefone (automatisch)</div></div>
+    <div class="ev frag" style="left:42%" data-frag="g2"><div class="dot"></div><div class="lb">bis 12:15 nötig</div><div class="sub">qualifizierte Antwort<br>+ Arbeitsbeginn = Reaktion</div></div>
+    <div class="ev frag" style="left:76%" data-frag="g3"><div class="dot"></div><div class="lb">4 Kalender überlappen</div><div class="sub">vom Campus arbeitsfähig,<br>zwischen Vorlesungen</div></div>
+  </div>
+  <div class="card hot frag" style="margin-top:48px;max-width:920px" data-frag="g3"><p style="font-size:15.5px;line-height:1.6"><b style="color:var(--green-soft)">Die ehrliche Frage an uns vier:</b> Gibt es im Semester <b>wiederkehrende Fenster</b> (Prüfungsblöcke, Pflichtseminare, Militär), in denen KEINER innert 4 Arbeitsstunden reagieren kann? Ab 7.9.: alle an der HSG, ~6 h Firmenarbeit pro Tag.</p></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F60 · Dossier 2: Optionen -->
+<section class="slide" data-notes="[Entscheid 2 · 3 Klicks] Die drei Optionen, je ein Klick. Option A, Silber wie vorgeschlagen: P1 in vier Arbeitsstunden, 99.5 Prozent. Pro: marktüblich und konkurrenzfähig, etablierte Anbieter bieten genau das, und es stützt die Premium-Positionierung. Contra: das Gutschrift-Risiko ist real, und in Prüfungswochen wird es eng. Option B, Silber mit P1 auf acht Arbeitsstunden: sicher haltbar, auch in schlechten Wochen, ehrlich. Contra: im Direktvergleich mit einem Systemhaus sieht acht Stunden schwächer aus und kann die Nebenbei-Sorge füttern. Option C, nur Bronze anbieten und Silber als Upgrade-Option reinschreiben: null Risiko, sauberer Upsell-Pfad. Contra: wir signalisieren Selbstzweifel genau an der Stelle, wo Schmid Zuverlässigkeit prüft, und die D5-Antwort wird schwach. Herleitung dazu.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 2 · SLA validieren <span>// Optionen</span></div>
+  <h2>Drei Wege, ehrlich verglichen.</h2>
+  <div class="grid-3" style="margin-top:18px">
+    <div class="opt frag"><h3>A · Silber, wie vorgeschlagen <span class="tagopt">P1 = 4 h</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Marktüblich, konkurrenzfähig, stützt Premium</span></p>
+        <p class="pro"><span>Starke D5-Antwort</span></p>
+        <p class="con"><span>Gutschrift-Risiko real; Prüfungswochen eng</span></p>
+      </div></div>
+    <div class="opt frag"><h3>B · Silber mit P1 = 8 h <span class="tagopt">entschärft</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Sicher haltbar, auch in schlechten Wochen</span></p>
+        <p class="pro"><span>«Lieber ehrliche 8 als gerissene 4»</span></p>
+        <p class="con"><span>Sieht im Direktvergleich schwächer aus; füttert die «Nebenbei»-Sorge</span></p>
+      </div></div>
+    <div class="opt frag"><h3>C · Nur Bronze + Upgrade <span class="tagopt">defensiv</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Null Vertragsrisiko, Upsell-Pfad</span></p>
+        <p class="con"><span>Signalisiert Selbstzweifel genau dort, wo Schmid Zuverlässigkeit prüft</span></p>
+        <p class="con"><span>D5-Antwort wird schwach</span></p>
+      </div></div>
+  </div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F61 · Dossier 2: Herleitung -->
+<section class="slide" data-notes="[Entscheid 2 · 3 Klicks] Was bei der Abwägung hilft, drei Fakten, drei Klicks. Klick 1: P1 ist der SELTENE Fall, Totalausfall der Plattform. Der Support-Alltag besteht aus P3 und P4, und dort sind die Zusagen zwei Arbeitstage, völlig entspannt neben jedem Stundenplan. Wir entscheiden also über den Ernstfall, nicht über den Alltag. Klick 2: die Verfügbarkeit hängt primär am Hosting-Anbieter, nicht an unserer Anwesenheit, und unsere Zusage liegt bewusst UNTER dem Anbieter-SLA, da ist Puffer eingebaut. Klick 3: und die Reaktionszeit ist eine Organisations-Frage: vier Telefone, automatischer Alarm, klare Wochen-Zuständigkeit, wer diese Woche Erst-Responder ist. Mit einem simplen Pikett-Kalender unter uns vieren ist die Vier-Stunden-Marke auch im Semester realistisch, AUSSER in den Fenstern, die ihr gleich benennt. Empfehlung.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 2 · SLA validieren <span>// Herleitung</span></div>
+  <h2>Drei Fakten für die Abwägung.</h2>
+  <div style="display:flex;flex-direction:column;gap:12px;margin-top:22px;max-width:920px">
+    <div class="card frag" style="padding:15px 20px"><p style="font-size:15px;line-height:1.55"><b style="color:var(--green-soft)">1 · P1 ist der seltene Fall.</b> Der Support-Alltag ist P3/P4 mit <b>2 Arbeitstagen</b> Reaktionszeit: entspannt neben jedem Stundenplan. Wir entscheiden über den Ernstfall, nicht den Alltag.</p></div>
+    <div class="card frag" style="padding:15px 20px"><p style="font-size:15px;line-height:1.55"><b style="color:var(--green-soft)">2 · Verfügbarkeit hängt am Hosting-Anbieter</b>, nicht an unserer Anwesenheit. Unsere Zusage liegt bewusst <b>unter</b> dem Anbieter-SLA: eingebauter Puffer.</p></div>
+    <div class="card frag" style="padding:15px 20px"><p style="font-size:15px;line-height:1.55"><b style="color:var(--green-soft)">3 · Reaktionszeit ist Organisation:</b> 4 Telefone, automatischer Alarm, plus ein simpler Wochen-Kalender, <b>wer Erst-Responder ist</b>. Damit ist 4 h realistisch, ausser in den Fenstern, die ihr jetzt benennt.</p></div>
+  </div>
+  <p class="footnote">Referenzwerte zum Einordnen: Gold verspricht 2 h (Mo-Sa) und braucht ein bepreistes Pikett; Bronze 8 h. Volltabelle Anhang A2.</p>
+</section>
+
+<!-- F62 · Dossier 2: Empfehlung -->
+<section class="slide" data-notes="[Entscheid 2 · 1 Klick] Die Empfehlung, Klick: Silber mit P1 gleich vier Arbeitsstunden, ALSO Option A, aber nur, wenn der Dienstag-Test bestanden ist. Der Test, das Kriterium, ganz konkret: jeder von euch schaut jetzt auf sein Herbstsemester und beantwortet die Frage: kann ich in meiner Erst-Responder-Woche JEDE Woche innert vier Arbeitsstunden qualifiziert reagieren? Wenn auch nur einer bei einer wiederkehrenden Lücke zögert und die Lücke nicht durch Tausch abdeckbar ist: dann Option B, acht Stunden, BEVOR die Zahl in die Offerte geht. Denkt an Teil 4: lieber ehrliche acht als gerissene vier. Das Ergebnis fliesst ins Offerten-Kapitel 10.4 und in den SLA-Baukasten. Log-Satz formulieren, dann Dossier 3.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 2 · SLA validieren <span>// Empfehlung + Entscheid</span></div>
+  <h2>Empfehlung: Silber, wenn der Dienstag-Test hält.</h2>
+  <div class="opt reco frag" style="margin-top:16px;max-width:920px"><h3>Empfehlung <span class="tagopt">zur Diskussion</span></h3>
+    <p style="font-size:15.5px;color:var(--muted);line-height:1.65;margin-top:10px"><b style="color:var(--text)">Option A (Silber, P1 = 4 Arbeitsstunden, 99.5%)</b>, abgesichert durch einen internen Erst-Responder-Wochenkalender. <b style="color:var(--text)">Rückfall auf Option B (P1 = 8 h)</b>, falls der Test unten scheitert.</p>
+  </div>
+  <div class="krit">Der Dienstag-Test: Kann jede:r von uns in der eigenen Erst-Responder-Woche JEDE Semesterwoche innert 4 Arbeitsstunden qualifiziert reagieren? Ein wiederkehrendes, nicht tauschbares Nein = Option B, bevor die Zahl in die Offerte geht.</div>
+  <div class="fliesst">Ergebnis fliesst in → <b>Offerten-Kapitel 10.4 + SLA-Baukasten (Zahlen fixiert)</b></div>
+  <p class="footnote">Log-Satz-Vorlage: «30.7.: SLA Silber validiert, P1 = [4/8] h. Erst-Responder-Kalender ab KW37. Beschlossen: alle vier.»</p>
+</section>
+
+<!-- F63 · Dossier 3: Ausgangslage -->
+<section class="slide" data-notes="[Entscheid 3 · 2 Klicks] Dossier 3, das Preismodell, Joaquin führt hier. Klick 1: es sind genau drei Stellschrauben: erstens die Stundensatz-Basis, auf der wir intern kalkulieren. Zweitens der Festpreisrahmen für Phase 1, das Detailkonzept, die erste Zahl, die vRv je von uns sieht. Drittens die Logik der Betriebspauschale, pro Nutzer oder pauschal je Stufe. Klick 2, die Erwartung richtig setzen: heute entstehen ECKWERTE, keine Endpreise. Die durchgerechneten Zahlen entstehen nach dem 5.8. im Offerten-Sprint, wenn das Mengengerüst vom Termin da ist. Aber die Eckwerte von heute bestimmen jede Zahl danach. Für jede Stellschraube gibt es eine Folie mit Optionen. Vorher: die Marktanker, damit wir nicht im Vakuum entscheiden.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 3 · Preismodell-Eckwerte <span>// Ausgangslage</span></div>
+  <h2>Heute: Eckwerte. Keine Endpreise.</h2>
+  <div class="grid-3" style="margin-top:24px">
+    <div class="card frag" style="padding:20px 16px" data-frag="g1"><div style="font-size:26px">⚙️</div><h3 style="font-size:15.5px;font-weight:800;margin-top:8px">1 · Stundensatz-Basis</h3><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">Auf welcher Basis kalkulieren wir intern jede Phase?</p></div>
+    <div class="card frag" style="padding:20px 16px" data-frag="g1"><div style="font-size:26px">📐</div><h3 style="font-size:15.5px;font-weight:800;margin-top:8px">2 · Phase-1-Rahmen</h3><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">Der Festpreis fürs Detailkonzept: die <b style="color:var(--text)">erste Zahl, die vRv je sieht</b>.</p></div>
+    <div class="card frag" style="padding:20px 16px" data-frag="g1"><div style="font-size:26px">🔁</div><h3 style="font-size:15.5px;font-weight:800;margin-top:8px">3 · Betriebs-Logik</h3><p style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">Monatspauschale: pro Nutzer oder pauschal je Servicestufe?</p></div>
+  </div>
+  <div class="card frag" data-frag="g2" style="margin-top:18px;max-width:900px;padding:13px 20px"><p style="font-size:14px;color:var(--muted);line-height:1.5"><b style="color:var(--text)">Warum keine Endpreise heute?</b> Die durchgerechneten Zahlen brauchen das Mengengerüst vom 5.8. Aber die Eckwerte von heute bestimmen jede Zahl danach. Feintuning: Joaquin + Claude im Sparring bis 31.7.</p></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F64 · Dossier 3: Marktanker -->
+<section class="slide" data-notes="[Entscheid 3 · 4 Klicks] Die Marktanker, alles belegte Zahlen aus unseren Dossiers, vier Klicks: Klick 1: Branchen-Standardlösungen für Immobilienverwaltungen kosten 150 bis 700 Franken pro Monat, plus Einführung, das ist der Vergleichsrahmen, den Schmid im Kopf haben wird. Klick 2: Microsofts eigene Feld-Lösung, Dynamics Field Service, kostet 105 Dollar pro Nutzer und Monat, ein wunderbarer Anker dafür, dass Individuallösungen mit Betrieb ihren Preis haben. Klick 3: der Managed-Workplace-Markt liegt bei 50 bis 120 Franken pro Nutzer und Monat, relevant, falls der Scope-Entscheid E4 dazukommt. Klick 4: und unsere eigene Realität aus Dossier E: im Managed-Betrieb läge unser effektiver Stundensatz bei 63 bis 100 Franken. Das ist der BODEN, nicht das Ziel: jede Kalkulation, die darunter fällt, subventioniert den Kunden. Stellschraube 1.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 3 · Preismodell-Eckwerte <span>// Marktanker, belegt</span></div>
+  <h2>Damit wir nicht im Vakuum entscheiden.</h2>
+  <div class="paper" style="max-width:920px;margin-top:18px">
+    <div class="phead"><b>Marktanker · aus unseren Dossiers</b><span>jede Zahl mit Herkunft</span></div>
+    <div class="pbody">
+      <div class="row frag"><p><b>Branchen-Standardlösungen (Immobilien):</b> CHF 150-700/Monat + Einführung <span style="color:#8795A4">· Fragen-Bank, Antwort-Anker Q11</span></p></div>
+      <div class="row frag"><p><b>Microsoft Dynamics Field Service:</b> USD 105/Nutzer/Monat <span style="color:#8795A4">· Dossier C, Kostenanker</span></p></div>
+      <div class="row frag"><p><b>Managed-Workplace-Markt:</b> CHF 50-120/Nutzer/Monat <span style="color:#8795A4">· Dossier E (falls Geräte-Betreuung Teil des Angebots ist, Entscheid vom 21.7.)</span></p></div>
+      <div class="row hl frag"><p><b>Unsere Effektiv-Realität (Boden, nicht Ziel):</b> CHF 63-100/h im Managed-Betrieb <span style="color:#8795A4">· Dossier E, E4-Rechnung</span></p></div>
+    </div>
+  </div>
+  <p class="footnote">Der letzte Anker ist der wichtigste: Jede Kalkulation, die effektiv darunter fällt, subventioniert den Kunden.</p>
+</section>
+
+<!-- F65 · Dossier 3: Stellschraube 1 -->
+<section class="slide" data-notes="[Entscheid 3 · 3 Klicks] Stellschraube 1, die Stundensatz-Basis, drei Richtungen, je ein Klick. Unter Markt: schnell verkauft, aber es signalisiert billig, widerspricht frontal unserer Kein-Gratis-Premium-Linie, und ankert JEDEN späteren Preis tief, Rabatte merkt sich ein Kunde für immer. Markt-Satz: verteidigbar und unauffällig, aber wir konkurrieren dann exakt auf dem Feld der Systemhäuser, die mehr Referenzen haben als wir. Premium-Satz: konsistent mit unserer Linie, hebt uns aus dem Vergleich, verlangt aber Substanz-Beleg, und den haben wir: die Live-Demo unserer eigenen Systeme ist der Beweis, dass wir liefern. Die Herleitung im Raum: wo genau die Zahl liegt, rechnet Joaquin im Sparring, heute entscheidet ihr die RICHTUNG. Stellschraube 2.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 3 · Preismodell-Eckwerte <span>// Stellschraube 1: Stundensatz-Basis</span></div>
+  <h2>Unter Markt, am Markt, oder Premium?</h2>
+  <div class="grid-3" style="margin-top:18px">
+    <div class="opt frag"><h3>Unter Markt <span class="tagopt">verwerfen?</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Schnell verkauft, tiefe Einstiegshürde</span></p>
+        <p class="con"><span>Signalisiert «billig», widerspricht der Kein-Gratis-Premium-Linie frontal</span></p>
+        <p class="con"><span><b>Ankert jeden späteren Preis tief</b>: Rabatte merkt sich ein Kunde für immer</span></p>
+      </div></div>
+    <div class="opt frag"><h3>Markt-Satz <span class="tagopt">solide</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Verteidigbar, unauffällig, wenig Diskussion</span></p>
+        <p class="con"><span>Wir konkurrieren exakt auf dem Feld der Systemhäuser, die mehr Referenzen haben</span></p>
+      </div></div>
+    <div class="opt reco frag"><h3>Premium-Satz <span class="tagopt">Linie</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Konsistent mit der Premium-Positionierung, hebt aus dem Direktvergleich</span></p>
+        <p class="pro"><span>Substanz-Beleg existiert: die <b>Live-Demo unserer eigenen Systeme</b></span></p>
+        <p class="con"><span>Verlangt Souveränität: kein Zögern, wenn die Zahl fällt</span></p>
+      </div></div>
+  </div>
+  <p class="footnote">Heute wird die <b>Richtung</b> entschieden; die exakte Zahl rechnet Joaquin im Sparring bis 31.7. Boden: die Effektiv-Realität von F64.</p>
+</section>
+
+<!-- F66 · Dossier 3: Stellschraube 2 -->
+<section class="slide" data-notes="[Entscheid 3 · 2 Klicks] Stellschraube 2, der Phase-1-Rahmen, die heikelste Zahl, denn sie ist die erste, die vRv je von uns sieht, und sie ankert alles. Zwei Richtungen, je ein Klick. Tiefer Einstiegs-Anker: senkt die Hürde, ja zu sagen, ABER: ein tiefes Konzept ankert die Folgephasen tief, es riecht nach dem Gratis-Prototyp-Muster, das wir explizit verworfen haben, und es entwertet ausgerechnet das Dokument, dessen Besitz wir als Verkaufsargument benutzen. Wertbasiert: das Konzept ist ein eigenständiges Produkt, umsetzerunabhängig, es enthält dokumentierte Prozesse, Architektur, Anforderungskatalog, Mengengerüst und die schriftliche pebe-Klärung. Ein Dokument, mit dem vRv JEDEN Anbieter beauftragen könnte, hat einen echten Preis, und Satz 3 macht genau daraus das Vertrauensargument. Contra: verlangt eine saubere Aufwands-Herleitung, die liefert das Sparring. Stellschraube 3.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 3 · Preismodell-Eckwerte <span>// Stellschraube 2: Phase-1-Rahmen</span></div>
+  <h2>Die erste Zahl, die vRv je sieht.</h2>
+  <div class="grid-2" style="margin-top:18px">
+    <div class="opt frag"><h3>Tiefer Einstiegs-Anker <span class="tagopt">Türöffner</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Senkt die Hürde für das erste Ja</span></p>
+        <p class="con"><span><b>Ankert alle Folgephasen tief</b>; der Kunde rechnet ab jetzt in dieser Währung</span></p>
+        <p class="con"><span>Riecht nach dem Gratis-Prototyp-Muster, das wir <b>explizit verworfen</b> haben</span></p>
+        <p class="con"><span>Entwertet das Dokument, dessen Besitz unser Verkaufsargument ist (Satz 3)</span></p>
+      </div></div>
+    <div class="opt reco frag"><h3>Wertbasierter Festpreis <span class="tagopt">Linie</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Das Konzept ist ein <b>eigenständiges Produkt</b>: Prozesse, Architektur, Katalog, Mengengerüst, pebe-Klärung schriftlich</span></p>
+        <p class="pro"><span>Umsetzerunabhängig = echter Marktwert; Satz 3 macht daraus Vertrauen</span></p>
+        <p class="con"><span>Verlangt saubere Aufwands-Herleitung (liefert das Sparring bis 31.7.)</span></p>
+      </div></div>
+  </div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F67 · Dossier 3: Stellschraube 3 -->
+<section class="slide" data-notes="[Entscheid 3 · 2 Klicks] Stellschraube 3, die Betriebs-Logik, zwei Modelle, je ein Klick. Pro Nutzer und Monat: skaliert automatisch mit, und es ist marktüblich, der Field-Service-Anker rechnet genauso. Aber: bei einer stabilen 28-Personen-Firma gibt es kaum Wachstums-Upside, dafür Diskussionen über jede einzelne Nutzer-Lizenz. Pauschale je Servicestufe: für vRv planbar, ein Betrag pro Monat, fertig, es passt eins zu eins zu Bronze, Silber, Gold aus Entscheid 2, und es belohnt UNS für Effizienz statt für Nutzerzählen. Contra: wächst nicht automatisch, dafür gibt es die Etappen- und CR-Mechanik. Und die Fussnote, die für beide gilt: durchgereichte Fremd-Lizenzen, Microsoft und Co., weisen wir IMMER getrennt aus, kein Durchlaufumsatz, das ist unsere Transparenz-Linie aus Teil 4. Die Empfehlungs-Folie.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 3 · Preismodell-Eckwerte <span>// Stellschraube 3: Betriebs-Logik</span></div>
+  <h2>Pro Nutzer oder Pauschale je Stufe?</h2>
+  <div class="grid-2" style="margin-top:18px">
+    <div class="opt frag" data-frag="g1"><h3>Pro Nutzer / Monat <span class="tagopt">marktüblich</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Skaliert automatisch; Markt-Anker rechnen genauso (USD 105/User)</span></p>
+        <p class="con"><span>Bei stabilen ~28 Personen kaum Upside, dafür <b>Diskussion um jede Lizenz</b></span></p>
+      </div></div>
+    <div class="opt reco frag" data-frag="g2"><h3>Pauschale je Servicestufe <span class="tagopt">planbar</span></h3>
+      <div class="pc" style="grid-template-columns:1fr;margin-top:10px">
+        <p class="pro"><span>Für vRv <b>planbar</b>: ein Betrag pro Monat; passt 1:1 zu Bronze/Silber/Gold</span></p>
+        <p class="pro"><span>Belohnt uns für Effizienz statt für Nutzerzählen</span></p>
+        <p class="con"><span>Wächst nicht automatisch (dafür: Etappen- + CR-Mechanik)</span></p>
+      </div></div>
+  </div>
+  <div class="card frag" style="margin-top:16px;max-width:900px;padding:13px 20px" data-frag="g2"><p style="font-size:14.5px;color:var(--muted);line-height:1.5"><b style="color:var(--text)">Gilt für beide Modelle:</b> Durchgereichte Fremd-Lizenzen (Microsoft &amp; Co.) weisen wir <b style="color:var(--green-soft)">immer getrennt</b> aus. Kein Durchlaufumsatz: unsere Transparenz-Linie.</p></div>
+  <p class="footnote"></p>
+</section>
+
+<!-- F68 · Dossier 3: Empfehlung -->
+<section class="slide" data-notes="[Entscheid 3 · 1 Klick] Die Empfehlung für alle drei Stellschrauben zusammen, Klick: Premium-Richtung beim Satz, wertbasierter Phase-1-Festpreis, Betriebs-Pauschale je Servicestufe mit getrennt ausgewiesenen Lizenzen. Das ist die konsistente Linie zu allem, was wir am 10.7. entschieden haben: kein Gratis, Premium, Wert über Substanz. Das Kriterium für jede einzelne Zahl, die daraus entsteht: können wir sie am 5.8. ohne Zögern aussprechen und mit Substanz belegen? Wenn nein, ist die Zahl falsch, egal in welche Richtung. Ihr entscheidet jetzt die drei Richtungen, den Rest rechnet das Sparring bis morgen Abend, und jede Zahl landet mit Herkunft in Kapitel 13. Log-Satz, dann seid ihr durch: Werkzeugkasten-Durchsicht und Quiz, und Feierabend.">
+  <div class="kicker" style="color:#BBB1FA">Entscheid 3 · Preismodell-Eckwerte <span>// Empfehlung + Entscheid</span></div>
+  <h2>Die konsistente Linie.</h2>
+  <div class="opt reco frag" style="margin-top:16px;max-width:920px"><h3>Empfehlung <span class="tagopt">zur Diskussion</span></h3>
+    <p style="font-size:15.5px;color:var(--muted);line-height:1.7;margin-top:10px"><b style="color:var(--text)">Satz:</b> Premium-Richtung (Substanz-Beleg: Live-Demo) · <b style="color:var(--text)">Phase 1:</b> wertbasierter Festpreis (das Konzept ist ein Produkt) · <b style="color:var(--text)">Betrieb:</b> Pauschale je Servicestufe, Fremd-Lizenzen getrennt. Konsistent mit der Linie vom 10.7.: <b style="color:var(--green-soft)">kein Gratis, Premium, Wert über Substanz.</b></p>
+  </div>
+  <div class="krit">Für jede Zahl, die daraus entsteht: Können wir sie am 5.8. ohne Zögern aussprechen und mit Substanz belegen? Wenn nein, ist die Zahl falsch, in beide Richtungen.</div>
+  <div class="fliesst">Ergebnis fliesst in → <b>Sparring Joaquin + Claude bis 31.7. → Offerten-Kapitel 13</b> · jede Zahl mit Herkunft</div>
+  <p class="footnote">Log-Satz-Vorlage: «30.7.: Preis-Eckwerte = Premium-Satz / wertbasierte Phase 1 / Stufen-Pauschale. Zahlen bis 31.7. im Sparring. Beschlossen: alle vier.»</p>
+</section>
+
+<!-- ============ ANHANG (F69-F73) ============ -->
+
+<!-- F69 · A1 RACI-Volltabelle -->
+<section class="slide" data-notes="[Anhang · 0 Klicks] Nachschlagefolie: die komplette Verantwortungstabelle aus unserer Vorlage, elf Zeilen, wie sie in Offerten-Kapitel 11.4 geht. Zwei Zeilen hängen an offenen Entscheiden: Büronetz/Endgeräte am Scope-Entscheid, Archiv-Ablageort an Frage g7 vom 5.8.">
+  <div class="kicker" style="color:var(--amber)">Anhang · nur zum Nachschlagen <span>// A1</span></div>
+  <h2>RACI: die Volltabelle.</h2>
+  <table class="tbl" style="margin-top:14px">
+    <tr><th>Aufgabe</th><th>Wir</th><th>vRv</th><th>pebe AG</th><th>IT-Partner</th></tr>
+    <tr><td style="font-size:13px">Architektur + Detailkonzept</td><td><b>R/A</b></td><td>C</td><td>C (Formatfragen)</td><td>I</td></tr>
+    <tr><td style="font-size:13px">Plattform-Bau + Tests</td><td><b>R/A</b></td><td>C (Feedback)</td><td>·</td><td>·</td></tr>
+    <tr><td style="font-size:13px">pebe-Formatspezifikation</td><td>C</td><td>I</td><td><b>R/A</b></td><td>·</td></tr>
+    <tr class="hl"><td style="font-size:13px">Import-Freigabe im Betrieb</td><td>I</td><td><b>R/A (Buchhaltung)</b></td><td>·</td><td>·</td></tr>
+    <tr><td style="font-size:13px">Testdaten + Beispieldossiers</td><td>C</td><td><b>R/A</b></td><td>·</td><td>·</td></tr>
+    <tr><td style="font-size:13px">Pilot-Abnahme</td><td>C</td><td><b>R/A</b></td><td>·</td><td>·</td></tr>
+    <tr><td style="font-size:13px">Schulung Hauswarte</td><td><b>R/A</b></td><td>C (Leitung Hauswartung)</td><td>·</td><td>·</td></tr>
+    <tr><td style="font-size:13px">Büronetz / Endgeräte</td><td>I</td><td>A</td><td>·</td><td>R · je nach Entscheid vom 21.7.</td></tr>
+    <tr><td style="font-size:13px">Betrieb Plattform + SLA</td><td><b>R/A</b></td><td>I</td><td>·</td><td>·</td></tr>
+    <tr><td style="font-size:13px">Datenmigration (Skripte, Testläufe)</td><td><b>R/A</b></td><td>C (Stichproben-Abnahme)</td><td>C</td><td>·</td></tr>
+    <tr><td style="font-size:13px">Revisionssicheres Archiv (Ablageort)</td><td>C</td><td>A</td><td>·</td><td>R · je nach Frage g7</td></tr>
+  </table>
+  <p class="footnote">Eiserne Regel: ein A pro Zeile. Quelle: templates/projekthandbuch-vorlagen.md, geht in Offerten-Kapitel 11.4.</p>
+</section>
+
+<!-- F70 · A2 SLA-Volltabelle -->
+<section class="slide" data-notes="[Anhang · 0 Klicks] Nachschlagefolie: alle drei Servicestufen mit sämtlichen Werten plus die Gutschrift-Mechanik. Quelle ist der SLA-Baukasten; nach Entscheid 2 werden die validierten Zahlen dort fixiert.">
+  <div class="kicker" style="color:var(--amber)">Anhang · nur zum Nachschlagen <span>// A2</span></div>
+  <h2>SLA: alle Stufen, alle Werte.</h2>
+  <table class="tbl" style="margin-top:12px">
+    <tr><th>Merkmal</th><th>Bronze</th><th>Silber (Empfehlung)</th><th>Gold</th></tr>
+    <tr><td style="font-size:13px">Servicezeiten (Menschen)</td><td>Mo-Fr 08-17</td><td><b>Mo-Fr 08-17</b></td><td>Mo-Sa 07-19</td></tr>
+    <tr class="hl"><td style="font-size:13px">Reaktionszeit P1</td><td>8 Arbeitsstunden</td><td><b>4 Arbeitsstunden</b></td><td>2 Stunden</td></tr>
+    <tr><td style="font-size:13px">Reaktionszeit P2</td><td>nächster Arbeitstag</td><td><b>8 Arbeitsstunden</b></td><td>4 Stunden</td></tr>
+    <tr><td style="font-size:13px">Reaktionszeit P3/P4</td><td>3 Arbeitstage</td><td><b>2 Arbeitstage</b></td><td>1 Arbeitstag</td></tr>
+    <tr><td style="font-size:13px">Lösungsziel P1 (Umgehung / Behebung)</td><td>2 / 5 Arbeitstage</td><td><b>8 Arb.-Std. / 2 Arbeitstage</b></td><td>4 Std. / 1 Arbeitstag</td></tr>
+    <tr class="hl"><td style="font-size:13px">Verfügbarkeit (Monat, HTTP)</td><td>99.0%</td><td><b>99.5%</b></td><td>99.7%</td></tr>
+    <tr><td style="font-size:13px">Kanäle / Report</td><td>E-Mail / quartalsweise</td><td><b>+ Telefon / monatlich</b></td><td>+ Direktnummer / + Review</td></tr>
+    <tr><td style="font-size:13px">Zusatz</td><td>·</td><td>·</td><td>Pikett ausserhalb, separat bepreist</td></tr>
+  </table>
+  <p class="footnote"><b>In allen Stufen:</b> 24/7-Monitoring + Alarm · tägliche verschlüsselte 3-2-1-Backups mit geübtem Restore · Sicherheits-Patches 48 h · Wartungsfenster mit 3 Tagen Vorlauf. <b>Gutschrift:</b> 5% der Monatspauschale je angefangene 0.5 Punkte unter dem Ziel, Deckel 50%. Lösungszeiten = Ziele.</p>
+</section>
+
+<!-- F71 · A3 Offerten-Kapitel -->
+<section class="slide" data-notes="[Anhang · 0 Klicks] Nachschlagefolie: die komplette Kapitelstruktur der Offerte und der Ablauf nach dem Termin. Kapitel mit Stern sind Platzhalter, die erst nach dem 5.8. gefüllt werden können.">
+  <div class="kicker" style="color:var(--amber)">Anhang · nur zum Nachschlagen <span>// A3</span></div>
+  <h2>Die Offerte: Kapitel + Fahrplan.</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px">
+    <div class="card" style="padding:16px 20px"><p style="font-size:12.5px;color:var(--muted);line-height:1.8">0 Begleitbrief* · 1 Management Summary* · 2 Ausgangslage + unser Verständnis* · 3 Firma, Team, Ansprechpartner · 4 Lösungskonzept* · 5 Variante A: Microsoft-Ausbau · 6 Variante B: Plattform* · 7 Variante C: Hybrid* · 8 Sicherheit, Datenschutz, Compliance · 9 Versicherungen + Referenzen · 10 Offertstruktur Dienstleistungen (10.4 = SLA) · 11 Vorgehen + Projektorganisation (11.3 Formel, 11.4 RACI, 11.5 Mitarbeit) · 12 Stärken/Schwächen · 13 Kosten (Entscheid 3!) · 14 Offene Punkte · 15 Anhang<br><span style="color:var(--dim)">* = wird erst nach dem 5.8. gefüllt</span></p></div>
+    <div class="card" style="padding:16px 20px"><p style="font-size:13.5px;color:var(--muted);line-height:1.9"><b style="color:var(--text)">6.8.</b> Tool-Synthese einfüllen + pebe AG kontaktieren (P1-P8)<br><b style="color:var(--text)">7.8.</b> Scope-Kapitel an die gehörte Realität anpassen<br><b style="color:var(--text)">7.-8.8.</b> Kosten kalkulieren · Management Summary zuletzt<br><b style="color:var(--text)">Review</b> Nico + Joaquin gegen die Ehrlichkeitsregeln<br><b style="color:var(--text)">~19.8.</b> Präsentation, 45 min, Termin bereits fixiert</p></div>
+  </div>
+  <p class="footnote">Davor liegt die Abdeckungs-Matrix: Offerte geht erst raus, wenn jede «Gewünschte Information» abgehakt ist.</p>
+</section>
+
+<!-- F72 · A4 Statusreport-Muster -->
+<section class="slide" data-notes="[Anhang · 0 Klicks] Nachschlagefolie: das Statusreport-Muster in voller Länge, exakt die Vorlage, die auch in der Hausaufgabe benutzt wird und als Muster in den Offerten-Anhang geht.">
+  <div class="kicker" style="color:var(--amber)">Anhang · nur zum Nachschlagen <span>// A4</span></div>
+  <h2>Der Statusreport: das ganze Muster.</h2>
+  <div class="paper" style="max-width:880px;margin-top:14px">
+    <div class="phead"><b>Statusreport · Woche [KW] · Projekt vRv Order2Cash</b><span>1 Seite · jeden [Wochentag] bis [Uhrzeit]</span></div>
+    <div class="pbody">
+      <div class="row"><span class="no">1</span><p><b>Erledigt</b> (max. 5, Ergebnisse statt Tätigkeiten): «Ist-Prozess Verrechnung dokumentiert + reviewt»</p></div>
+      <div class="row"><span class="no">2</span><p><b>Nächste Schritte</b> (max. 5, mit «wer»): «Architektur-Entwurf an Böni (wir, bis Fr)»</p></div>
+      <div class="row"><span class="no">3</span><p><b>Risiken</b> (Ampel + Gegenmassnahme): «GELB: pebe-Antwort P3 offen → Weg B als Planungsfall»</p></div>
+      <div class="row hl"><span class="no">4</span><p><b>Entscheide, die wir von Ihnen brauchen</b> (Entscheid · Grundlage · Frist · Wirkung wenn offen)</p></div>
+      <div class="row"><span class="no">5</span><p><b>Ohne Verrechnung erledigt</b> (Kulanz, sichtbar): «Spaltenname angepasst (20 min)»</p></div>
+      <div class="row" style="border-top:2px solid #E1E7EE;margin-top:6px"><p style="color:#8795A4"><b>Fusszeile:</b> Aufwandstand Phase: [x] von [Budget] · Termin-Prognose Phasen-Abnahme: [Datum]</p></div>
+    </div>
+  </div>
+  <p class="footnote">Exakt diese Vorlage benutzt ihr in der Hausaufgabe, und exakt sie geht als Muster in den Offerten-Anhang (mit CR-Formular + RACI).</p>
+</section>
+
+<!-- F73 · A5 Spickzettel -->
+<section class="slide" data-notes="[Anhang · 0 Klicks] Der Spickzettel: alle Kernbegriffe des Moduls in je einem Satz, identisch im Handout. Für die schnelle Wiederholung vor dem Quiz und vor dem 5.8.">
+  <div class="kicker" style="color:var(--amber)">Anhang · nur zum Nachschlagen <span>// A5</span></div>
+  <h2>Spickzettel: die Begriffe in je einem Satz.</h2>
+  <div class="sents" style="display:grid;grid-template-columns:1fr 1fr;gap:9px 14px;margin-top:16px">
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Phasenmodell:</b> 3 Phasen, je einzeln beauftragt, je eigener Preis + eigener Wert</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Tor (Gate):</b> Haltepunkt nach jeder Phase; Ausstieg mit Gegenwert</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Die Formel:</b> «Festpreis im Rahmen, agil im Inhalt»</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Kostendach:</b> nach Aufwand, aber nie mehr als die Obergrenze</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Statusreport:</b> 1 Seite/Woche; Rubrik 4 = Entscheide mit Frist</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Entscheidungs-Log:</b> jeder Geld-/Termin-/Umfang-Entscheid, innert 24 h</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>RACI:</b> R macht, A verantwortet (genau eins!), C wird einbezogen, I informiert</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Change Request:</b> halbe Seite mit Preis, entschieden VOR der Umsetzung</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Abnahme:</b> «Fertig ist ein Messwert»; Mängel A/B/C; Schweigen ≠ Abnahme</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>P1-P4:</b> Störungsklassen von «alles steht» bis «kosmetisch»</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Bronze/Silber/Gold:</b> Servicestufen; garantiert sind Reaktion + Verfügbarkeit, Lösung = Ziel</span></div>
+    <div class="s" style="font-size:12.5px"><b>·</b><span><b>Abdeckungs-Matrix:</b> jede «Gewünschte Information» → Kapitel → Haken</span></div>
+  </div>
+  <p class="footnote">Identisch im Handout. Quiz: 12 Fragen im Hub, Bestehensgrenze 10 von 12.</p>
+</section>
+</div></div>
+
+<div id="hud"><div id="bar"></div></div>
+<div id="counter">1 / 73</div>
+<div id="navhint">← → weiter (Klick-Schritte + Folien) · N Notizen</div>
+<button class="navbtn" id="prev" aria-label="Zurück">‹</button>
+<button class="navbtn" id="next" aria-label="Weiter">›</button>
+<div id="notes"><div class="nt">Referentennotizen</div><p id="notes-text"></p></div>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=Math.min(Math.max(parseInt(location.hash.slice(1),10)||1,1),slides.length)-1;
+  var bar=document.getElementById('bar'),counter=document.getElementById('counter');
+  var notes=document.getElementById('notes'),notesText=document.getElementById('notes-text');
+  var navhint=document.getElementById('navhint');
+  var reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function frags(slide){return [].slice.call(slide.querySelectorAll('.frag'))}
+  // Klick-Gruppen: Elemente mit gleichem data-frag erscheinen zusammen (Reihenfolge = erstes Vorkommen im DOM)
+  function fragGroups(slide){
+    var groups=[],seen={};
+    frags(slide).forEach(function(f,idx){
+      var key=f.getAttribute('data-frag')||('__solo'+idx);
+      if(!(key in seen)){seen[key]=groups.length;groups.push([])}
+      groups[seen[key]].push(f);
+    });
+    return groups;
+  }
+  function revealAll(slide){frags(slide).forEach(function(f){f.classList.add('on')})}
+  function hideAll(slide){frags(slide).forEach(function(f){f.classList.remove('on')})}
+
+  function render(n,mode){
+    // mode: 'fwd' (Frags versteckt), 'back' (Frags aufgedeckt), 'jump' (aufgedeckt)
+    i=Math.min(Math.max(n,0),slides.length-1);
+    slides.forEach(function(s,k){s.classList.toggle('active',k===i)});
+    if(mode==='fwd'){hideAll(slides[i])}else{revealAll(slides[i])}
+    bar.style.width=((i+1)/slides.length*100)+'%';
+    counter.textContent=(i+1)+' / '+slides.length;
+    notesText.textContent=slides[i].getAttribute('data-notes')||'(keine Notizen)';
+    navhint.classList.toggle('hidden',i!==0);
+    history.replaceState(null,'','#'+(i+1));
+  }
+  var pending=false;
+  function transition(fn){
+    if(!reduced && document.startViewTransition){
+      pending=true;
+      var vt=document.startViewTransition(fn);
+      vt.finished.catch(function(){}).finally(function(){pending=false});
+    }
+    else{fn()}
+  }
+  function next(){
+    if(pending)return;
+    var groups=fragGroups(slides[i]);
+    for(var g=0;g<groups.length;g++){
+      if(groups[g].some(function(f){return !f.classList.contains('on')})){
+        groups[g].forEach(function(f){f.classList.add('on')});
+        return;
+      }
+    }
+    if(i<slides.length-1){transition(function(){render(i+1,'fwd')})}
+  }
+  function prev(){
+    if(pending)return;
+    var groups=fragGroups(slides[i]);
+    for(var g=groups.length-1;g>=0;g--){
+      if(groups[g].every(function(f){return f.classList.contains('on')})){
+        groups[g].forEach(function(f){f.classList.remove('on')});
+        return;
+      }
+    }
+    if(i>0){transition(function(){render(i-1,'back')})}
+  }
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();next()}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();prev()}
+    else if(e.key==='Home'){transition(function(){render(0,'jump')})}
+    else if(e.key==='End'){transition(function(){render(slides.length-1,'jump')})}
+    else if(e.key==='n'||e.key==='N'){notes.classList.toggle('open')}
+  });
+  document.getElementById('next').addEventListener('click',next);
+  document.getElementById('prev').addEventListener('click',prev);
+
+  window.addEventListener('hashchange',function(){
+    var n=parseInt(location.hash.slice(1),10);
+    if(n>=1&&n<=slides.length&&n-1!==i)transition(function(){render(n-1,'jump')});
+  });
+
+  var tx=null;
+  document.addEventListener('touchstart',function(e){tx=e.changedTouches[0].clientX},{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(tx===null)return;
+    var dx=e.changedTouches[0].clientX-tx;
+    if(Math.abs(dx)>60){dx<0?next():prev()}
+    tx=null;
+  },{passive:true});
+
+  var stage=document.getElementById('stage');
+  function fit(){
+    var s=Math.min(window.innerWidth/1280,window.innerHeight/720);
+    stage.style.transform='scale('+s+')';
+  }
+  window.addEventListener('resize',fit);
+  fit(); render(i,'jump');
+})();
+</script>
+</body>
+</html>

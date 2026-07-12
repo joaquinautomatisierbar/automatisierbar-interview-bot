@@ -443,9 +443,9 @@ def test_docs_manifest_shape_and_all_files_exist(client, monkeypatch):
     assert [s["id"] for s in sections] == [
         "lernen", "termin", "praesentation", "offerte", "vertraege", "wissen", "plan"]
     items = [item for s in sections for item in s["items"]]
-    assert len(items) == 43
+    assert len(items) == 46
     paths = [item["path"] for item in items]
-    assert len(set(paths)) == 43
+    assert len(set(paths)) == 46
     for item in items:
         assert item["title"] and item["desc"]
         assert item["kind"] in ("md", "pdf", "pptx", "html")
