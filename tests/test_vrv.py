@@ -443,9 +443,9 @@ def test_docs_manifest_shape_and_all_files_exist(client, monkeypatch):
     assert [s["id"] for s in sections] == [
         "lernen", "termin", "praesentation", "offerte", "vertraege", "wissen", "plan"]
     items = [item for s in sections for item in s["items"]]
-    assert len(items) == 46
+    assert len(items) == 48
     paths = [item["path"] for item in items]
-    assert len(set(paths)) == 46
+    assert len(set(paths)) == 48
     for item in items:
         assert item["title"] and item["desc"]
         assert item["kind"] in ("md", "pdf", "pptx", "html")
@@ -571,8 +571,8 @@ def test_lernen_paths_follow_module_prefix_convention():
     pattern = re.compile(
         r"^upskilling/modul-\d+-(primer|quiz|deck|handout)\.(md|html|pdf)$")
     for item in lernen["items"]:
-        if "fragen-bank" in item["path"]:
-            continue
+        if "fragen-bank" in item["path"] or item["path"].startswith("upskilling/guide-"):
+            continue  # extras: own cards in the hub (Drill / Session-Werkstatt)
         assert pattern.match(item["path"]), item["path"]
 
 
@@ -693,3 +693,127 @@ def test_upload_does_not_touch_state(client, monkeypatch, data_dir):
     _login(client, monkeypatch)
     assert _post_upload(client).status_code == 201
     assert store.load_state()["answers"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Hub: self-service session materials (deck/handout per module)
+# ---------------------------------------------------------------------------
+
+from vrv import materials as vrv_materials  # noqa: E402
+
+
+def _post_material(client, *, modul="modul-3", role="deck", who="Patrik",
+                   content=b"<!DOCTYPE html><html><body>Deck</body></html>",
+                   mime="text/html", name="modul-3-deck.html"):
+    return client.post("/api/vrv/materials", data={
+        "modul": modul, "role": role, "who": who,
+        "file": (io.BytesIO(content), name, mime),
+    }, content_type="multipart/form-data")
+
+
+def test_materials_fail_closed_and_reject_client_session(client, monkeypatch):
+    monkeypatch.delenv("VRV_PASSWORD", raising=False)
+    assert _post_material(client).status_code == 401
+    assert client.get("/api/vrv/materials").status_code == 401
+    assert client.delete("/api/vrv/materials/deadbeef").status_code == 401
+    _client_session(client, monkeypatch)
+    assert _post_material(client).status_code == 401
+    assert client.get("/api/vrv/materials").status_code == 401
+    assert client.delete("/api/vrv/materials/deadbeef").status_code == 401
+
+
+def test_material_roundtrip_manifest_merge_and_sandbox(client, monkeypatch, data_dir):
+    monkeypatch.delenv("VRV_DOCS_DIR", raising=False)
+    _login(client, monkeypatch)
+    r = _post_material(client)
+    assert r.status_code == 201
+    body = r.get_json()["material"]
+    assert body["path"] == "upskilling/modul-3-deck.html"
+    assert "stored" not in body                      # on-disk name never leaves
+    # virtual entry appears in the manifest's lernen section
+    sections = client.get("/api/vrv/docs").get_json()["sections"]
+    lernen = [s for s in sections if s["id"] == "lernen"][0]
+    virt = [i for i in lernen["items"] if i["path"] == "upskilling/modul-3-deck.html"]
+    assert len(virt) == 1
+    assert virt[0]["kind"] == "html"
+    assert virt[0]["exists"] is True
+    assert virt[0].get("material") is True
+    assert "Patrik" in virt[0]["desc"]
+    # served inline as html, but sandboxed (opaque origin) + nosniff
+    f = client.get("/api/vrv/docs/upskilling/modul-3-deck.html")
+    assert f.status_code == 200 and f.mimetype == "text/html"
+    csp = f.headers.get("Content-Security-Policy", "")
+    assert "sandbox" in csp and "allow-scripts" in csp
+    assert f.headers["X-Content-Type-Options"] == "nosniff"
+    assert "attachment" not in (f.headers.get("Content-Disposition") or "")
+    # committed decks stay sandbox-free
+    static_deck = client.get("/api/vrv/docs/upskilling/modul-5-deck.html")
+    assert static_deck.status_code == 200
+    assert "Content-Security-Policy" not in static_deck.headers
+    # delete removes entry, file and manifest presence
+    assert client.delete(f"/api/vrv/materials/{body['id']}").status_code == 200
+    assert client.get("/api/vrv/docs/upskilling/modul-3-deck.html").status_code == 404
+    leftovers = [p for p in os.listdir(os.path.join(data_dir, "materials"))
+                 if not p.startswith(".")]
+    assert leftovers == []
+
+
+def test_material_handout_md_roundtrip(client, monkeypatch, data_dir):
+    _login(client, monkeypatch)
+    r = _post_material(client, role="handout", content="# Modul 3 · Handout ü".encode(),
+                       mime="text/markdown", name="modul-3-handout.md")
+    assert r.status_code == 201
+    f = client.get("/api/vrv/docs/upskilling/modul-3-handout.md")
+    assert f.status_code == 200
+    assert f.mimetype == "text/markdown"
+    assert f.headers["X-Content-Type-Options"] == "nosniff"
+    assert "ü" in f.get_data(as_text=True)
+
+
+def test_material_replace_per_slot(client, monkeypatch, data_dir):
+    _login(client, monkeypatch)
+    first = _post_material(client).get_json()["material"]
+    second = _post_material(client, content=b"<html>v2</html>").get_json()["material"]
+    assert first["id"] != second["id"]
+    listed = client.get("/api/vrv/materials?modul=modul-3").get_json()["materials"]
+    assert [m["id"] for m in listed] == [second["id"]]
+    files = [p for p in os.listdir(os.path.join(data_dir, "materials"))
+             if not p.startswith(".")]
+    assert len(files) == 1                            # old file removed on replace
+
+
+def test_material_static_slot_conflict_and_validation(client, monkeypatch):
+    _login(client, monkeypatch)
+    # committed slots (modul-2/modul-5) can never be shadowed
+    assert _post_material(client, modul="modul-5").status_code == 409
+    assert _post_material(client, modul="modul-2", role="handout",
+                          content=b"# x", mime="text/markdown", name="h.md").status_code == 409
+    # type must match the role
+    assert _post_material(client, role="handout").status_code == 415
+    assert _post_material(client, role="handout-pdf", content=b"# x",
+                          mime="text/markdown", name="h.md").status_code == 415
+    # meta validation
+    assert _post_material(client, who="Eve").status_code == 400
+    assert _post_material(client, role="virus").status_code == 400
+    assert _post_material(client, modul="hack").status_code == 400
+    assert client.post("/api/vrv/materials", data={"modul": "modul-3", "role": "deck",
+                       "who": "Patrik"}, content_type="multipart/form-data").status_code == 400
+    assert _post_material(client, content=b"").status_code == 400
+    # size cap → JSON 413
+    r = _post_material(client, content=b"x" * (vrv_materials.MAX_MATERIAL_BYTES + 1))
+    assert r.status_code == 413 and r.get_json()["ok"] is False
+    # static slots surfaced for the hub UI
+    assert set(client.get("/api/vrv/materials?modul=modul-5").get_json()["static_slots"]) == \
+        {"deck", "handout", "handout-pdf"}
+    assert client.get("/api/vrv/materials?modul=modul-3").get_json()["static_slots"] == []
+    # unknown id
+    assert client.delete("/api/vrv/materials/deadbeefdeadbeef").status_code == 404
+
+
+def test_material_resolve_stays_traversal_proof(client, monkeypatch, data_dir):
+    _login(client, monkeypatch)
+    assert _post_material(client).status_code == 201
+    assert docs.resolve("upskilling/modul-3-deck.html") is not None
+    assert docs.resolve("upskilling/../upskilling/modul-3-deck.html") is None
+    assert docs.resolve("UPSKILLING/MODUL-3-DECK.HTML") is None
+    assert client.get("/api/vrv/docs/upskilling/modul-9-deck.html").status_code == 404

@@ -30,7 +30,7 @@ Drei Bitten vorab:
   `https://cockpit.automatisierbar.ch/vrv/kunde?k=Y-nEjyA6pcjrL-Qo9DqvZ-it`
   (in der Mail als klickbaren Link einfügen, nichts direkt dahinter anhängen, sonst bricht der Zugangsschlüssel)
 
-Von unserer Seite nehmen [ANZAHL] Personen teil: [NAMEN + ROLLEN gemäss Entscheid 4.2; Vorschlag: "Nico (Gesprächsführung), Joaquin (Architektur und Technik), Tej (Demo)"; Nachnamen ergänzen!].
+Von unserer Seite nehmen [ANZAHL] Personen teil: [NAMEN + ROLLEN gemäss Entscheid 4.2 (Modul-5-Dossier 1); Standard zu zweit: "Nico (Gesprächsführung), Tej (Demo und Technik)"; falls Fallback zu dritt greift, zusätzlich "Joaquin (Architektur und Technik)"; Nachnamen ergänzen!].
 
 Freundliche Grüsse
 [NAME]
@@ -39,7 +39,7 @@ Automatisierbar, [Signatur]
 ## Checkliste vor Versand (Halt-Gate)
 
 - [x] Tool v2 live und Link getestet? **Ja, 10.7.: Seite live, Autosave verifiziert, Isolation getestet (Kunde sieht nur die 10 Fragen, keine internen Felder)**
-- [ ] Teilnehmer + Rollen final entschieden (WS4.2)? Sonst Satz auf "wir kommen zu dritt" vereinfachen und Namen weglassen
+- [ ] Teilnehmer + Rollen final entschieden (WS4.2, Dossier 1 in S6)? Sonst Satz auf "wir kommen zu zweit" vereinfachen und Namen weglassen. Achtung: Der Zwei-oder-drei-Entscheid hängt an der vRv-Antwort auf GENAU DIESE Mail; wenn die Antwort 3+ Teilnehmende oder eine Besichtigung nennt, kann eine kurze Nachmeldung folgen ("zusätzlich begleitet uns Joaquin")
 - [ ] Absender-Adresse und Signatur (mit Nachnamen!) korrekt?
 - [ ] Nico-Review erfolgt?
 - [ ] Joaquin-Review erfolgt?

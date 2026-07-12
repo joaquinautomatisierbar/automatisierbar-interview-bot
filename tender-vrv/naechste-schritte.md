@@ -16,7 +16,7 @@
 
 - [ ] **Versicherungs-Anfragen abschicken** ([Vorlage](templates/versicherungsanfrage.md) ist fertig, nur noch senden!) **bis 14.7., zeitkritisch**
 - [ ] Fotos + Kurz-Lebensläufe von allen vier sammeln **bis 20.7.**
-- [ ] Später: Drucksachen (4x) + Technik-Koffer packen **bis 3.8.**
+- Drucksachen + Technik-Koffer: **an Tej übertragen** (Patrik ist bis 10.8. in den Ferien)
 
 ## Nico
 
@@ -29,14 +29,16 @@
 - [ ] Kunde Juglans um Erlaubnis fragen (Referenzblatt) **bis 28.7.**
 - [ ] Demo-Ablauf mit Joaquin drehen: Hub + Feld-App + Beleg-App, mit Fallback-Screenshots **bis 27.7.**
 - [ ] Präsentations-Folien anschauen + Feedback geben (Deck unter Unterlagen → Präsentation)
+- [ ] Drucksachen (4x) + Technik-Koffer packen (von Patrik übernommen) **bis 3.8.**
 
 ## Alle zusammen
 
 - [ ] **Modul-2-Hausaufgabe: Sicherheits-Audit** ([Handout](upskilling/modul-2-handout.md)) machen und im Hub abgeben (Lernen → Modul 2 → Abgaben) **bis Mi 15.7., 18:00**
 - [ ] **Modul-5-Hausaufgabe (nach Session 30.7.): Statusreport über die eigene Woche + CR + Generalprobe-Kriterien** ([Handout](upskilling/modul-5-handout.md)) im Hub abgeben (Lernen → Modul 5 → Abgaben) **bis So 2.8., 18:00**; die Reports werden am 3.8. zu Beginn der Generalprobe gelesen
 - [ ] **21.7. Scope-Entscheid** (an Session 3): Was bieten wir selbst an, wo Partner? Vorbereitung: [Dossier E](research/dossier-e-machbarkeit.md) lesen
-- [ ] 1./2.8. [Probe-Meeting](meeting/mock-meeting-s7.md): Claude spielt die Kundenseite
-- [ ] 3./4.8. Generalprobe: Deck, Demo, Technik-Check
+- [ ] 1./2.8. [Probe-Meeting](meeting/mock-meeting-s7.md): Claude spielt die Kundenseite (Joaquin + Patrik per Video, beide in den Ferien)
+- [ ] 3./4.8. Generalprobe: Deck, Demo, Technik-Check (Joaquin + Patrik per Video; **am 5.8. sind nur Nico + Tej vor Ort**, siehe Modul-5-Dossier 1)
+- Ferien-Kalender: Joaquin weg bis 6.8. · Patrik bis 10.8. · **11.8. bis 1.9. alle in Costa Rica** → Offerten-Präsentation am 10./11.8. oder 1.9.
 
 ## Und Claude?
 

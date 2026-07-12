@@ -1,6 +1,6 @@
 # Mock-Meeting S7: Drehbuch, Personas, Szenario-Kanon
 
-> Tasks 2.8 (Mock-Meeting) + 4.4 (Red-Team-Drill) + 1.7 (Ernstfall-Test Tool). Termin: Sa 1.8. oder So 2.8. (folgt aus 2.0). Dauer: 150 min Vollprogramm, 90-min-Kurzvariante unten. Teilnehmer: alle vier + Claude als Kundenseite.
+> Tasks 2.8 (Mock-Meeting) + 4.4 (Red-Team-Drill) + 1.7 (Ernstfall-Test Tool). Termin: Sa 1.8. oder So 2.8. (folgt aus 2.0). Dauer: 150 min Vollprogramm, 90-min-Kurzvariante unten. Teilnehmer: alle vier + Claude als Kundenseite (Joaquin + Patrik per Video, beide in den Ferien; geprobt wird die Aufstellung aus Entscheid 1: Standard Nico + Tej zu zweit).
 > Zweck: EIN Durchlauf testet alles gleichzeitig: Rollen, Deck, Demo-Übergänge, Tool im Meeting-Modus, Fragen-Bank-Sitz, Abschluss-Disziplin. Was hier bricht, wird bis S8 gefixt statt am 5.8. entdeckt.
 
 ---

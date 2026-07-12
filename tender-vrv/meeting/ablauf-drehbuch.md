@@ -1,7 +1,10 @@
 # Ablauf-Drehbuch 5. August 2026, vR verwaltungen ag, Solothurn
 
 > Task WS4.3. Minutengenauer Fahrplan 10/15/60/10 mit Rollen, Übergängen, Notfall-Szenarien und BAMFAM-Abschluss. Wird in S7 (Mock-Meeting) und S8 (Generalprobe) geprobt.
-> Rollen unten = Vorschlag aus 4.2 (**Team-Entscheid in S6**): Nico führt das Gespräch, Joaquin Technik + Tool-Erfassung, Tej Demo + Notizen, Patrik optional. Gegenseite erwartet: Schmid (GF, entscheidet), Böni (Prozess), evtl. Guldimann (Bewirtschaftung), evtl. Kunz (Hauswartung). Teilnehmerliste kommt aus der Antwort auf die Vorab-Mail.
+> Rollen = **Team-Entscheid in S6 (Dossier 1 im Modul-5-Deck)**. Verfügbarkeit am 5.8.: nur Nico + Tej sind in der Schweiz (Joaquin in den Ferien bis 6.8., Patrik bis 10.8.).
+> **Standard (zu zweit):** Nico führt das Gespräch + Abschluss, Tej übernimmt Demo + Technik + Tool-Erfassung (das Discovery-Tool erfasst die Fakten strukturiert, O-Töne direkt als Tool-Notiz). Überall, wo unten "Joaquin" steht, übernimmt im Zu-zweit-Szenario Tej die Aufgabe.
+> **Fallback (zu dritt):** Kommt vRv mit 3+ Personen oder wird die Besichtigung Teil des Termins, fliegt Joaquin zurück (~150 CHF) und die Drei-Rollen-Fassung unten gilt wörtlich: Nico Gespräch, Joaquin Technik + Tool, Tej Demo + Notizen.
+> Gegenseite erwartet: Schmid (GF, entscheidet), Böni (Prozess), evtl. Guldimann (Bewirtschaftung), evtl. Kunz (Hauswartung). Teilnehmerliste kommt aus der Antwort auf die Vorab-Mail; sie löst auch den Zwei-oder-drei-Entscheid aus.
 
 ## Vorbereitung
 
@@ -57,8 +60,8 @@ Zwischencheck T+70 (**Joaquin**, Blick auf Muss-Zähler): fehlt ein Muss-Kapitel
 **Nico führt.** Wörtlich in dieser Reihenfolge:
 
 1. **Spiegeln (2 min):** "Was wir mitnehmen: [drei konkrete Dinge aus dem Gespräch, von Tejs Notizen]. Haben wir das richtig verstanden?"
-2. **Zusage mit Datum:** "Sie erhalten von uns die Offerte mit drei durchgerechneten Varianten und einem 3-Jahres-Kostenvergleich bis **[konkretes Datum nennen: Ziel innert 2 Wochen, also bis 19.8.]**."
-3. **BAMFAM (der wichtigste Satz):** "Damit Sie die Offerte nicht nur lesen müssen: Lassen Sie uns **jetzt gleich den Termin fixieren, an dem wir sie Ihnen in 45 Minuten präsentieren**, bei Ihnen oder online. Passt Ihnen die Woche vom [KW nennen]?" → Termin IM RAUM in den Kalender. Kein "wir melden uns".
+2. **Zusage mit Datum:** "Sie erhalten von uns die Offerte mit drei durchgerechneten Varianten und einem 3-Jahres-Kostenvergleich, und wir stellen sie Ihnen persönlich vor."
+3. **BAMFAM (der wichtigste Satz):** "Damit Sie die Offerte nicht nur lesen müssen: Lassen Sie uns **jetzt gleich den Termin fixieren, an dem wir sie Ihnen in 45 Minuten präsentieren**, bei Ihnen oder online. Wir können am **10. oder 11. August**, oder am **1. September**, was passt Ihnen besser?" → Termin IM RAUM in den Kalender. Kein "wir melden uns". (Intern: 11.8. bis 1.9. sind wir alle weg. Dem Kunden nur die zwei Fenster nennen, keine Begründung nötig.)
 4. **pebe-Freigabe bestätigen** (falls in Block 3 zugesagt): "Wir kontaktieren die pebe AG diese Woche mit unserem Fragenkatalog, wie besprochen."
 5. Dank + Besichtigungs-Bitte einlösen.
 

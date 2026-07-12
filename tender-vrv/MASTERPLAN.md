@@ -103,7 +103,7 @@ Nach der Scope-Entscheidung (0.10) werden Module vertieft: Entscheidet ihr euch,
 | # | Aufgabe | Owner | Details |
 |---|---|---|---|
 | 4.1 | Vorab-Mail an Rolf Schmid (bis ~22.7.) | Nico + Claude entwirft | Dank, Agenda-Vorschlag (90-120 min), Teilnehmer beidseits klären, Bitte um Besichtigung Hauswartung (Kunz' Prozesse live sehen), optional: Vorab-Fragebogen-Link (Tool-Modus 3). Versand erst nach Joaquin-Review + Halt-Gate |
-| 4.2 | Rollenverteilung | Team entscheidet in S6 | Vorschlag: Nico Gesprächsführung, Joaquin Architektur/Technik + Tool-Erfassung, Tej Demo + Notizen. Patrik optional (3 Personen wirken bei 28-MA-KMU fokussierter; Entscheid beim Team) |
+| 4.2 | Rollenverteilung | Team entscheidet in S6 (Dossier 1 im Modul-5-Deck) | Am 5.8. sind nur Nico + Tej in der Schweiz (Joaquin Ferien bis 6.8., Patrik bis 10.8.). Standard: zu zweit (Nico Gesprächsführung, Tej Demo + Technik + Tool). Fallback: zu dritt per Joaquin-Rückflug (~150 CHF), falls vRv-Liste 3+ oder Besichtigung |
 | 4.3 | Ablauf-Drehbuch | Claude | 10 min Vorstellung (Deck kompakt) · 15 min Demo · 60 min Discovery mit Tool (Kapitel A-H, Mengengerüst zuerst) · 10 min nächste Schritte: **BAMFAM, Offerten-Präsentationstermin direkt fixieren** |
 | 4.4 | Red-Team-Vorbereitung | Claude + alle | Die 50-Fragen-Bank aus WS2, Fokus Haftung/Versicherung/Grösse/Referenzen |
 | 4.5 | Tech-Kit | Patrik | Laptop + iPad geladen, Hotspot als Backup, Offline-Fallback (Screenshots/PDF-Deck lokal), Visitenkarten?, Beamer-Adapter |

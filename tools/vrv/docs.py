@@ -51,6 +51,8 @@ DOCS_MANIFEST = [
         _i("upskilling/modul-5-handout.md", "Modul 5 · Handout & Hausaufgabe", "Spickzettel + Statusreport-Übung · Abgabe So 2.8., 18:00"),
         _i("upskilling/modul-5-handout.pdf", "Modul 5 · Handout (PDF)", "Druckfassung mit ausfüllbaren Vorlagen", kind="pdf"),
         _i("upskilling/fragen-bank-schmid.md", "Fragen-Bank: Was Schmid fragen wird", "50 Prüfer-Fragen mit ehrlichen Musterantworten, Drill in S7"),
+        _i("upskilling/guide-praesentation.md", "Session-Werkstatt · Präsentations-Guide", "So baust du dein Session-Deck mit Claude Code, inkl. Upload-Anleitung"),
+        _i("upskilling/guide-handout.md", "Session-Werkstatt · Handout-Guide", "Einheitliche Handout-Struktur + Copy-paste-Vorlage für dein Modul"),
     ]},
     {"id": "termin", "title": "Termin 5.8.", "items": [
         _i("meeting/ablauf-drehbuch.md", "Ablauf-Drehbuch 5.8.", "Minutenplan 10/15/60/10 mit Rollen, Notfällen und Abschluss"),
@@ -109,17 +111,49 @@ def manifest():
     for section in sections:
         for item in section["items"]:
             item["exists"] = (base / item["path"]).is_file()
+    # Self-service materials (tools/vrv/materials.py) merge into "lernen" as
+    # virtual entries so the hub groups/labels them like committed modules.
+    # Static wins: paths already in _BY_PATH are never shadowed. Degrades to
+    # the static manifest if the materials layer is broken.
+    try:
+        from vrv import materials as _materials
+        extra = [it for it in _materials.manifest_items() if it["path"] not in _BY_PATH]
+        for item in extra:
+            entry = _materials.by_virtual_path(item["path"])
+            item["exists"] = bool(entry) and os.path.isfile(_materials.abs_path_for(entry))
+        for section in sections:
+            if section["id"] == "lernen":
+                section["items"].extend(extra)
+                break
+    except Exception:  # noqa: BLE001 — manifest must degrade, not 500
+        pass
     return sections
 
 
 def resolve(relpath):
     """(absolute path, manifest item) — or None unless relpath is EXACTLY a
-    manifest key. The lookup happens before any filesystem call, so encoded
-    traversal (../, %2e%2e) is just a string that isn't in the dict."""
+    manifest key or a registered material's virtual path. Both lookups compare
+    user input against stored strings before any filesystem call, so encoded
+    traversal (../, %2e%2e) is just a string that isn't in either index."""
     item = _BY_PATH.get(relpath)
-    if item is None:
+    if item is not None:
+        return docs_dir() / relpath, item
+    try:
+        from vrv import materials as _materials
+        entry = _materials.by_virtual_path(relpath)
+    except Exception:  # noqa: BLE001 — a broken materials layer must not 500 docs
+        entry = None
+    if entry is None:
         return None
-    return docs_dir() / relpath, item
+    from pathlib import Path as _Path
+    item = {
+        "path": relpath,
+        "title": entry.get("orig_name", relpath),
+        "desc": "",
+        "kind": _materials.ROLES[entry["role"]]["kind"],
+        "material": True,
+    }
+    return _Path(_materials.abs_path_for(entry)), item
 
 
 def read_doc_text(relpath):

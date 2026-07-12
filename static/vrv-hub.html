@@ -426,6 +426,7 @@ function route(){
   else if(hash==="#/lernen"){tab="lernen";renderLernen()}
   else if(hash==="#/unterlagen"){tab="unterlagen";renderUnterlagen()}
   else if(hash.indexOf("#/abgaben/")===0){tab="lernen";renderAbgaben(hash.slice(10))}
+  else if(hash.indexOf("#/material/")===0){tab="lernen";renderMaterial(hash.slice(11))}
   else if(hash.indexOf("#/doc/")===0){tab="";openDoc(hash.slice(6))}
   else {renderStart()}
   document.querySelectorAll("#tabs a").forEach(function(a){
@@ -557,13 +558,23 @@ function renderLernen(){
     });
     html.push('<div class="mod"><div class="mod-top"><span class="num">Session '+(idx+1)+'</span><h3>'+esc(primer.title)+'</h3></div>'+
       '<p>'+esc(primer.desc)+'</p><div class="row" style="flex-wrap:wrap">'+btns.join("")+'</div>'+
-      '<a class="abg-link" href="#/abgaben/'+g.key+'">Abgaben ansehen<span id="abgc-'+g.key+'"></span> ›</a></div>');
+      '<div class="row" style="flex-wrap:wrap;gap:14px">'+
+      '<a class="abg-link" href="#/abgaben/'+g.key+'">Abgaben ansehen<span id="abgc-'+g.key+'"></span> ›</a>'+
+      '<a class="abg-link" href="#/material/'+g.key+'">Material ›</a></div></div>');
   });
   html.push('</div>');
-  extras.forEach(function(fb){
+  var guides = extras.filter(function(x){return x.path.indexOf("upskilling/guide-")===0});
+  extras.filter(function(x){return guides.indexOf(x)<0}).forEach(function(fb){
     html.push('<div class="mod" style="margin-top:12px"><div class="mod-top"><span class="num">Drill</span><h3>'+esc(fb.title)+'</h3></div>'+
       '<p>'+esc(fb.desc)+'</p><div class="row"><a class="btn btn-primary btn-small" href="#/doc/'+fb.path+'">Öffnen</a></div></div>');
   });
+  if(guides.length){
+    html.push('<div class="mod" style="margin-top:12px"><div class="mod-top"><span class="num">Session-Werkstatt</span><h3>Deine eigene Session bauen</h3></div>'+
+      '<p>Guide + dein Thema an dein Claude Code geben, Deck und Handout bauen lassen, dann bei deinem Modul unter «Material» hochladen. Referenz-Deck: Modul 5 (herunterladbar über den Präsentations-Guide).</p>'+
+      '<div class="row" style="flex-wrap:wrap">'+guides.map(function(gd){
+        return '<a class="btn btn-primary btn-small" href="#/doc/'+gd.path+'">'+esc(gd.title.replace("Session-Werkstatt · ",""))+'</a>';
+      }).join("")+'</div></div>');
+  }
   $("content").innerHTML = html.join("");
   // progressive per-card counts: one call, silent on failure
   api("/api/vrv/uploads").then(function(r){return r.json()}).then(function(b){
@@ -653,6 +664,102 @@ function renderAbgaben(modul){
       if(String(e.message)!=="401") errEl.textContent = "Upload fehlgeschlagen. Datei evtl. zu gross (max. 15 MB) oder Verbindung weg.";
     }).then(function(){ $("uplBtn").disabled=false; $("uplBtn").textContent="Hochladen"; });
   };
+}
+var MATERIAL_ROLES = [
+  {role:"deck", label:"Präsentation (HTML-Deck)", accept:".html,.htm", hint:"Selbst-enthaltenes HTML-Deck nach dem Präsentations-Guide"},
+  {role:"handout", label:"Handout (Markdown)", accept:".md,text/markdown", hint:"Struktur nach dem Handout-Guide: Spickzettel, Hausaufgabe, Abgabe-Zeile"},
+  {role:"handout-pdf", label:"Handout (PDF)", accept:".pdf,application/pdf", hint:"Druckfassung des Handouts"}
+];
+function refreshManifest(){
+  return api("/api/vrv/docs").then(function(r){return r.json()}).then(function(b){
+    MANIFEST = b.sections;
+    BY_PATH = {};
+    MANIFEST.forEach(function(sec){ sec.items.forEach(function(it){ BY_PATH[it.path]={item:it,section:sec} }) });
+  });
+}
+function renderMaterial(modul){
+  var el = $("content");
+  if(!/^modul-\d+$/.test(modul)){
+    el.innerHTML = '<div class="doc-head"><a class="backlink" href="#/lernen">← Zurück zu Lernen</a></div>'+
+      '<div class="notice">Unbekanntes Modul.</div>';
+    return;
+  }
+  var nr = modul.split("-")[1];
+  el.innerHTML =
+    '<div class="doc-head"><a class="backlink" href="#/lernen">← Zurück zu Lernen</a></div>'+
+    '<h2 class="section-title" style="margin-top:4px">Material · Modul '+nr+'</h2>'+
+    '<div class="card"><div class="kicker">// So funktioniert es</div>'+
+    '<p class="muted small">Deck und Handout nach den Guides bauen (Karte «Session-Werkstatt» unter Lernen), dann hier hochladen. '+
+    'Ein neuer Upload <b>ersetzt</b> die alte Datei des gleichen Typs. Nach dem Upload erscheinen die Buttons automatisch auf deiner Modul-Karte.</p>'+
+    '<div class="upl-form" style="margin-top:8px"><label class="muted small" for="matWho" style="align-self:center">Hochgeladen von:</label>'+
+    '<select id="matWho">'+FOUNDERS.map(function(n){return '<option>'+n+'</option>'}).join("")+'</select></div>'+
+    '<div class="err" id="matErr"></div></div>'+
+    '<div id="matSlots"><div class="notice">Lade…</div></div>';
+
+  function load(){
+    api("/api/vrv/materials?modul="+encodeURIComponent(modul)).then(function(r){return r.json()}).then(function(b){
+      var byRole = {};
+      (b.materials||[]).forEach(function(m){byRole[m.role]=m});
+      var staticSlots = b.static_slots||[];
+      var html = [];
+      MATERIAL_ROLES.forEach(function(spec){
+        var isStatic = staticSlots.indexOf(spec.role)>=0;
+        var m = byRole[spec.role];
+        var inner = '<div class="grow"><div class="t">'+esc(spec.label)+'</div><div class="d">';
+        if(isStatic){
+          inner += 'Fix im Repo (wird von Joaquin gepflegt), Upload hier gesperrt.</div></div>';
+          html.push('<div class="doc-row">'+inner+'<span class="chip">fix im Repo</span></div>');
+          return;
+        }
+        if(m){
+          inner += esc(m.who)+' · '+esc((m.uploaded_at||"").slice(0,16).replace("T"," "))+' · '+esc(m.orig_name)+' · '+fmtSize(m.size||0)+'</div></div>';
+          html.push('<div class="doc-row">'+inner+
+            '<div class="doc-actions">'+
+            '<a class="btn btn-ghost btn-small" href="'+docUrl(m.path)+'" target="_blank" rel="noopener">Öffnen</a>'+
+            '<button class="btn btn-ghost btn-small" data-mdel="'+m.id+'">Löschen</button></div></div>');
+        } else {
+          inner += esc(spec.hint)+'</div></div>';
+          html.push('<div class="doc-row">'+inner+'<span class="chip">noch leer</span></div>');
+        }
+        html.push('<div class="upl-form" style="margin:2px 0 14px">'+
+          '<input type="file" id="matFile-'+spec.role+'" accept="'+spec.accept+'">'+
+          '<button class="btn btn-primary btn-small" data-mup="'+spec.role+'">'+(m?"Ersetzen":"Hochladen")+'</button></div>');
+      });
+      $("matSlots").innerHTML = html.join("");
+
+      document.querySelectorAll("#matSlots [data-mdel]").forEach(function(btn){
+        btn.onclick = function(){
+          if(!confirm("Dieses Material wirklich löschen?")) return;
+          api("/api/vrv/materials/"+btn.getAttribute("data-mdel"),{method:"DELETE"})
+            .then(function(){return refreshManifest()})
+            .then(function(){load()}).catch(function(){});
+        };
+      });
+      document.querySelectorAll("#matSlots [data-mup]").forEach(function(btn){
+        btn.onclick = function(){
+          var role = btn.getAttribute("data-mup");
+          var f = $("matFile-"+role).files[0];
+          var errEl = $("matErr");
+          errEl.textContent = "";
+          if(!f){ errEl.textContent = "Bitte zuerst eine Datei wählen ("+role+")."; return; }
+          if(f.size > 15*1024*1024){ errEl.textContent = "Datei zu gross (max. 15 MB)."; return; }
+          var fd = new FormData();
+          fd.append("modul", modul);
+          fd.append("role", role);
+          fd.append("who", $("matWho").value);
+          fd.append("file", f);
+          btn.disabled = true; btn.textContent = "Lädt…";
+          api("/api/vrv/materials", {method:"POST", body:fd}).then(function(r){
+            if(r.status===201){ return refreshManifest().then(function(){load()}); }
+            return r.json().then(function(b){ errEl.textContent = (b&&b.error)||("Fehler ("+r.status+")"); });
+          }).catch(function(e){
+            if(String(e.message)!=="401") errEl.textContent = "Upload fehlgeschlagen. Verbindung weg oder Datei zu gross.";
+          }).then(function(){ btn.disabled=false; });
+        };
+      });
+    }).catch(function(){ $("matSlots").innerHTML='<div class="notice">Konnte Material nicht laden.</div>'; });
+  }
+  load();
 }
 function renderUnterlagen(){
   var html = ['<h2 class="section-title" style="margin-top:14px">Unterlagen</h2>',

@@ -95,7 +95,7 @@ Die Ausschreibung fragt wörtlich nach "Verantwortlichkeiten, Leistungsabgrenzun
 
 ## 8. S6-Entscheid-Agenda (in dieser Session festnageln)
 
-1. **Rollenverteilung 5.8. (Task 4.2):** Vorschlag Nico Gespräch, Joaquin Technik+Tool, Tej Demo+Notizen, Patrik optional 4. Person oder Fokus Tech-Kit/Print. Entscheiden, dann Vorab-Mail-Teilnehmersatz finalisieren.
+1. **Rollenverteilung 5.8. (Task 4.2):** Am 5.8. sind nur Nico + Tej in der Schweiz (Joaquin Ferien bis 6.8., Patrik bis 10.8.). Vorschlag: zu zweit als Standard (Nico Gespräch, Tej Demo + Technik + Tool), Fallback zu dritt per Joaquin-Rückflug (~150 CHF), falls vRv-Liste 3+ oder Besichtigung. Entscheiden, dann Vorab-Mail-Teilnehmersatz finalisieren.
 2. **SLA-Zahlen validieren** (sla-baukasten.md §2): Können wir Silber-Reaktionszeiten neben HSG-Stundenplänen halten? Wenn nein: Zeiten anpassen, BEVOR sie in der Offerte stehen.
 3. **Preismodell-Eckwerte (5.3):** Stundensatz-Basis, Phasen-1-Festpreisrahmen, Betriebs-Pauschalen-Logik. Joaquin führt, Ergebnis geht in Offerten-Kapitel 13.
 

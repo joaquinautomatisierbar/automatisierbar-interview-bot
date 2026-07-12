@@ -109,17 +109,29 @@ def vrv_docs_file(relpath):
     if not path.is_file():
         return jsonify({"ok": False, "error": "Datei fehlt auf dem Server"}), 404
     if item["kind"] == "md":
-        return Response(
+        resp = Response(
             path.read_text(encoding="utf-8", errors="replace"),
             mimetype="text/markdown",
         )
-    return send_file(
+        if item.get("material"):
+            resp.headers["X-Content-Type-Options"] = "nosniff"
+        return resp
+    resp = send_file(
         path,
         mimetype=docs.MIME_BY_KIND[item["kind"]],
         as_attachment=item["kind"] in docs.ATTACHMENT_KINDS,
         download_name=path.name,
         conditional=True,
     )
+    if item.get("material"):
+        # Uploaded (not committed) files: never sniff, and HTML decks run in a
+        # CSP sandbox → opaque origin → the SameSite=Lax session cookie is not
+        # sent on requests they make: no authenticated cockpit calls from
+        # uploaded content. Self-contained decks work unchanged.
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        if item["kind"] == "html":
+            resp.headers["Content-Security-Policy"] = "sandbox allow-scripts allow-modals"
+    return resp
 
 
 @bp.route("/api/vrv/dashboard", methods=["GET"])
@@ -214,6 +226,67 @@ def vrv_upload_delete(uid):
     if not uploads.delete_upload(uid):
         return jsonify({"ok": False, "error": "Unbekannte Abgabe"}), 404
     current_app.logger.info("vrv upload %s deleted", uid)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Hub: self-service session materials (deck/handout per module). One slot per
+# (modul, role); upload replaces. Served through /api/vrv/docs/<path> via the
+# manifest merge in docs.py (uploaded HTML gets a CSP sandbox there).
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/vrv/materials", methods=["POST"])
+def vrv_material_create():
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import materials
+    f = request.files.get("file")
+    if f is None or not (f.filename or "").strip():
+        return jsonify({"ok": False, "error": "Datei fehlt (Feld 'file')"}), 400
+    modul = (request.form.get("modul") or "").strip()
+    role = (request.form.get("role") or "").strip()
+    who = (request.form.get("who") or "").strip()
+    error = materials.validate_meta(modul, role, who)
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    content = f.read(materials.MAX_MATERIAL_BYTES + 1)
+    if not content:
+        return jsonify({"ok": False, "error": "Datei ist leer"}), 400
+    if len(content) > materials.MAX_MATERIAL_BYTES:
+        return jsonify({"ok": False, "error": "Datei zu gross (max. 15 MB)"}), 413
+    try:
+        entry = materials.save_material(modul, role, who, content, f.mimetype, f.filename)
+    except materials.StaticSlotError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 415
+    current_app.logger.info("vrv material %s/%s uploaded by %s", modul, role, who)
+    return jsonify({"ok": True, "material": materials.public_entry(entry)}), 201
+
+
+@bp.route("/api/vrv/materials", methods=["GET"])
+def vrv_material_list():
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import materials
+    modul = (request.args.get("modul") or "").strip() or None
+    payload = {"materials": [materials.public_entry(e) for e in materials.list_materials(modul)]}
+    if modul:
+        payload["static_slots"] = materials.static_slots(modul)
+    return jsonify(payload)
+
+
+@bp.route("/api/vrv/materials/<uid>", methods=["DELETE"])
+def vrv_material_delete(uid):
+    guard = _require_internal()
+    if guard:
+        return guard
+    from vrv import materials
+    if not materials.delete_material(uid):
+        return jsonify({"ok": False, "error": "Unbekanntes Material"}), 404
+    current_app.logger.info("vrv material %s deleted", uid)
     return jsonify({"ok": True})
 
 
