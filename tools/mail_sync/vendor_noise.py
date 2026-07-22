@@ -14,6 +14,7 @@ MERGED with the baseline, never replaces it.
 from __future__ import annotations
 
 import os
+import re
 
 # Keep in step with DEFAULT_VENDOR_DOMAINS in the Hub's vendor-noise.ts.
 DEFAULT_VENDOR_DOMAINS = (
@@ -39,7 +40,10 @@ TRANSACTIONAL_LOCAL_PARTS = frozenset({
     "do-not-reply", "notifications", "notification", "notify", "alerts", "alert",
     "news", "newsletter", "updates", "security", "team", "hello", "mail", "mailer",
     "service", "services", "info", "admin", "system",
+    "calendar", "invite", "reminder", "digest", "receipt",
 })
+
+_SEGMENT_SPLIT = re.compile(r"[._-]+")
 
 _NOREPLY_PREFIXES = ("no-reply", "noreply", "donotreply", "do-not-reply",
                      "mailer-daemon", "bounce")
@@ -78,6 +82,10 @@ def is_vendor_noise(email: str | None, denylist=None) -> bool:
         return False
     local = local.split("+")[0]          # strip plus-addressing
     if local in TRANSACTIONAL_LOCAL_PARTS:
+        return True
+    # Compound transactional addresses (calendar-notification@google.com). Match per SEGMENT, never as
+    # a raw substring: segments keep anna.meier@ and infanger@ safe. Only reached for a vendor domain.
+    if any(seg in TRANSACTIONAL_LOCAL_PARTS for seg in _SEGMENT_SPLIT.split(local)):
         return True
     return local.startswith(_NOREPLY_PREFIXES)
 

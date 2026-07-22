@@ -256,6 +256,8 @@ def test_hub_client_does_not_retry_client_error():
     "support+ticket-42@hostinger.com",  # plus-addressing
     "  SUPPORT@Anthropic.COM ",         # casing + whitespace
     "no-reply-42@linkedin.com",         # no-reply prefix
+    "calendar-notification@google.com",  # compound, segment-matched (aus Prod)
+    "billing.alerts@stripe.com",
 ])
 def test_vendor_noise_drops_the_senders_that_clogged_the_postfach(addr):
     assert vendor_noise.is_vendor_noise(addr) is True
@@ -267,6 +269,9 @@ def test_vendor_noise_drops_the_senders_that_clogged_the_postfach(addr):
     "support@kunde.ch",           # transactional local-part, ordinary domain
     "support@anthropic.com.evil.ch",
     "support@notanthropic.com",
+    "infanger@microsoft.com",           # "info" als Teilstring — Segment-Match rettet den Namen
+    "supporter.klaus@google.com",
+    "marcalert@apple.com",
     "",
     None,
     "kein-at-zeichen",
