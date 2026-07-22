@@ -32,10 +32,11 @@ _TOOLS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _TOOLS_DIR not in sys.path:
     sys.path.insert(0, _TOOLS_DIR)
 
-from mail_sync import imap_read, classify, payload, hub_client, taxonomy
+from mail_sync import imap_read, classify, payload, hub_client, taxonomy, vendor_noise
 from mail_sync import state as mstate
 
 DEFAULT_SINCE_DAYS = 14      # the "last 2 weeks" window == the backfill window
+_VENDOR_DOMAINS = vendor_noise.vendor_domains()  # baseline + LEADMAIL_VENDOR_DOMAINS
 DEFAULT_MAX_SCAN = 300       # cap classify calls per mailbox per run
 _ALL = "all"
 
@@ -92,6 +93,12 @@ def _process_folder(*, imap, folder, direction, since_str, state, counts, mailbo
             skip, reason = imap_read.should_skip(p)
         else:
             skip, reason = imap_read.should_skip_outbound(p)
+        # Vendor/support/billing mail (Anthropic, Hostinger, Stripe...) is never lead correspondence.
+        # The Hub drops it at ingest too (it is authoritative); skipping here just saves the Claude
+        # classify call. Deliberately AFTER the cheap gates so the skip reason stays specific.
+        if not skip and vendor_noise.is_vendor_noise(
+                vendor_noise.counterparty_of(p, direction), _VENDOR_DOMAINS):
+            skip, reason = True, "vendor-noise"
         if skip:
             counts["skipped"] += 1
             if verbose:

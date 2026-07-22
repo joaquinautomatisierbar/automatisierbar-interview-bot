@@ -21,6 +21,7 @@ import types  # noqa: E402
 from mail_sync import taxonomy, payload, imap_read  # noqa: E402
 from mail_sync import state as mstate  # noqa: E402
 from mail_sync import classify, hub_client  # noqa: E402
+from mail_sync import vendor_noise  # noqa: E402
 
 _SENTINEL = object()
 
@@ -239,3 +240,57 @@ def test_hub_client_does_not_retry_client_error():
                                    transport=transport, max_attempts=3, sleep=lambda s: None)
     assert res.ok is False
     assert calls["n"] == 1  # a 400 is terminal — no retry storm
+
+
+# ── R5·C1: vendor/support noise never becomes a Postfach entry ──────────────────
+# Mirror of the Hub's vendor-noise.spec.ts. The Hub is authoritative (it filters at ingest); this copy
+# only saves the Claude classify call, so the two rules must stay identical.
+
+
+@pytest.mark.parametrize("addr", [
+    "support@anthropic.com",
+    "support@hostinger.com",
+    "billing@stripe.com",
+    "notifications@github.com",
+    "noreply@mail.notion.so",          # subdomain of a denylisted domain
+    "support+ticket-42@hostinger.com",  # plus-addressing
+    "  SUPPORT@Anthropic.COM ",         # casing + whitespace
+    "no-reply-42@linkedin.com",         # no-reply prefix
+])
+def test_vendor_noise_drops_the_senders_that_clogged_the_postfach(addr):
+    assert vendor_noise.is_vendor_noise(addr) is True
+
+
+@pytest.mark.parametrize("addr", [
+    "anna.meier@anthropic.com",   # a real person who happens to work at a vendor
+    "info@treuhand-baden.ch",     # the decisive guard: Swiss SMEs write from info@
+    "support@kunde.ch",           # transactional local-part, ordinary domain
+    "support@anthropic.com.evil.ch",
+    "support@notanthropic.com",
+    "",
+    None,
+    "kein-at-zeichen",
+    "@anthropic.com",
+])
+def test_vendor_noise_keeps_everything_else(addr):
+    assert vendor_noise.is_vendor_noise(addr) is False
+
+
+def test_vendor_domains_merge_env_with_the_baseline():
+    merged = vendor_noise.vendor_domains({"LEADMAIL_VENDOR_DOMAINS": "neuer-vendor.ch"})
+    assert "neuer-vendor.ch" in merged
+    assert "anthropic.com" in merged  # ops can extend the list, never disable it
+    assert vendor_noise.is_vendor_noise("support@neuer-vendor.ch", merged) is True
+    assert vendor_noise.is_vendor_noise("info@kunde.ch", merged) is False
+
+
+def test_parse_vendor_domains_tolerates_commas_at_signs_and_casing():
+    assert vendor_noise.parse_vendor_domains("Foo.com, @bar.ch   baz.io") == [
+        "foo.com", "bar.ch", "baz.io"]
+    assert vendor_noise.parse_vendor_domains(None) == []
+
+
+def test_counterparty_is_the_external_party_per_direction():
+    p = {"from_email": "kunde@beispiel.ch", "to_email": "tej@automatisierbar.ch"}
+    assert vendor_noise.counterparty_of(p, "incoming") == "kunde@beispiel.ch"
+    assert vendor_noise.counterparty_of(p, "outgoing") == "tej@automatisierbar.ch"
