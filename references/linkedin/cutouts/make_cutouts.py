@@ -37,7 +37,7 @@ def bottom_connected(solid):
         prev = s
     up = Image.fromarray((seed*255).astype(np.uint8)).resize(
         (solid.shape[1], solid.shape[0]), Image.NEAREST)
-    return np.array(up.filter(ImageFilter.MaxFilter(31))) > 0
+    return np.array(up.filter(ImageFilter.MaxFilter(9))) > 0
 
 def duotone(rgb):
     L = (0.299*rgb[...,0] + 0.587*rgb[...,1] + 0.114*rgb[...,2]) / 255
@@ -52,17 +52,26 @@ for name,(f,(x0,y0,x1,y1)) in CROPS.items():
     a = np.asarray(im).astype(float)
     r,g,b = a[...,0], a[...,1], a[...,2]
     d = g - np.maximum(r,b)
-    t0,t1 = 8.0, 45.0
+    # exakt das Rezept des freigegebenen Banner-Cutouts: t0=5/t1=40 + harter Floor
+    # (killt den Schatten-Schleier um die Silhouette -> kein "smoky" Halo vor der Aurora)
+    t0,t1 = 5.0, 40.0
     alpha = np.clip((t1 - d)/(t1 - t0), 0, 1) * 255
     g2 = np.minimum(g, np.maximum(r,b))
     rgb = np.stack([r,g2,b], axis=-1)
+    alpha[alpha < 40] = 0
+    alpha[alpha >= 200] = 255
     # keep only the figure (connected to bottom), zero residual haze
     keep = bottom_connected(alpha > 160)
     alpha[~keep] = 0
-    alpha[alpha < 12] = 0
-    # smooth ramp stays (NO hard floor, NO erosion) -> natural edges; light AA blur
-    alpha = np.array(Image.fromarray(alpha.astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2)), float)
-    alpha[~keep] = 0
+    # Morphologisches Opening: entfernt vorstehende Schatten-Kloetze (~<14px) an der Silhouette,
+    # ohne die Kante global zu verschieben; dann weiche Kanten-Glaettung. Ergebnis: crisp, nicht smoky, nicht blockig.
+    solidm = Image.fromarray(((alpha > 128)*255).astype(np.uint8))
+    opened = solidm.filter(ImageFilter.MinFilter(15)).filter(ImageFilter.MaxFilter(13))
+    sm = np.array(opened.filter(ImageFilter.GaussianBlur(2.5))).astype(float)
+    alpha = np.minimum(alpha, sm)
+    # Median rundet die restliche Zacken-Kontur organisch, dann minimaler AA-Blur
+    alpha = np.array(Image.fromarray(alpha.astype(np.uint8)).filter(ImageFilter.MedianFilter(13)).filter(ImageFilter.GaussianBlur(0.8)), float)
+    alpha[alpha < 10] = 0
     ys,xs = np.where(alpha > 10)
     yA = max(0, ys.min()-30); xA = max(0, xs.min()-30); xB = min(alpha.shape[1]-1, xs.max()+30)
     nat = np.dstack([rgb, alpha]).astype(np.uint8)[yA:, xA:xB+1]
