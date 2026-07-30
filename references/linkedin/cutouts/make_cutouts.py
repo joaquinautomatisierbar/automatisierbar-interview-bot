@@ -2,7 +2,14 @@
 """Master-Cutouts der 4 Gruender aus den Greenscreen-Originalen.
 
 Quelle: ~/Desktop/Automatisierbar/automatisierbar bilder/IMG_{3256,3258,3263,3264}.JPG
-Output: <name>-natural.png (Cutout, echte Farben) + <name>-duotone.png (Banner-Grade)
+Output pro Person:
+  <name>-master.png   VOLLE Aufloesung, RGBA, UNGRADED (echte Farben) — DIE kanonische Datei.
+                      Jede Verwendung (Banner, OG-Karten, Posts) leitet sich hieraus ab:
+                      croppen/skalieren/graden ja, NIE neu keyen.
+  <name>-natural.png  2400px-Variante in echten Farben (Kompatibilitaet/Vorschau)
+  <name>-duotone.png  2400px-Banner-Duotone (Legacy-Grade; seit 2026-07-29 NICHT mehr
+                      fuer Banner verwenden — wirkt smoky, siehe
+                      research/linkedin-banner-image-quality.md)
 Regel: Fuer ALLE kuenftigen Banner/Karten/Posts DIESE Master verwenden, nie neu keyen.
 Run: .venv/bin/python3 references/linkedin/cutouts/make_cutouts.py
 """
@@ -47,6 +54,27 @@ def duotone(rgb):
     out[...,1] += 10*np.sin(np.pi*L)
     return np.clip(out, 0, 255)
 
+def remove_print_arr(a):
+    """Tej: Tommy-Hilfiger-Print auf der Brust entfernen (Marken-Verbot). Arbeitet in-place auf RGBA-Array."""
+    h,w = a.shape[:2]
+    lum = a[...,:3].astype(float).mean(axis=2)
+    m = np.zeros((h,w), bool)
+    m[int(h*0.36):int(h*0.58), int(w*0.14):int(w*0.86)] = True
+    pm = m & (a[...,3]>150) & (lum>36)
+    if pm.sum() == 0: return a
+    pm = np.array(Image.fromarray((pm*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(17))) > 0
+    shirt = m & (a[...,3]>150) & (lum<=35) & ~pm
+    med = np.median(a[shirt][:,:3], axis=0)
+    rng = np.random.default_rng(7)
+    a[pm,:3] = np.clip(med + rng.normal(0,3.5,(pm.sum(),3)), 0, 255).astype(np.uint8)
+    im2 = Image.fromarray(a)
+    ys,xs = np.where(pm)
+    y0,y1,x0,x1 = ys.min(),ys.max(),xs.min(),xs.max()
+    box = im2.crop((x0-10,y0-10,x1+10,y1+10)).filter(ImageFilter.GaussianBlur(3))
+    mask = Image.fromarray((pm*255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2)).crop((x0-10,y0-10,x1+10,y1+10))
+    im2.paste(box, (x0-10,y0-10), mask)
+    return np.array(im2)
+
 for name,(f,(x0,y0,x1,y1)) in CROPS.items():
     im = Image.open(SRC+f).transpose(Image.ROTATE_90).crop((x0,y0,x1,y1))
     a = np.asarray(im).astype(float)
@@ -63,51 +91,27 @@ for name,(f,(x0,y0,x1,y1)) in CROPS.items():
     # keep only the figure (connected to bottom), zero residual haze
     keep = bottom_connected(alpha > 160)
     alpha[~keep] = 0
-    # Morphologisches Opening: entfernt vorstehende Schatten-Kloetze (~<14px) an der Silhouette,
-    # ohne die Kante global zu verschieben; dann weiche Kanten-Glaettung. Ergebnis: crisp, nicht smoky, nicht blockig.
+    # Morphologisches Opening: entfernt vorstehende Schatten-Kloetze an der Silhouette;
+    # bei voller Aufloesung wirken die Kernel relativ feiner -> crispere Kante als die 2400er von 07/24.
     solidm = Image.fromarray(((alpha > 128)*255).astype(np.uint8))
     opened = solidm.filter(ImageFilter.MinFilter(15)).filter(ImageFilter.MaxFilter(13))
     sm = np.array(opened.filter(ImageFilter.GaussianBlur(2.5))).astype(float)
     alpha = np.minimum(alpha, sm)
-    # Median rundet die restliche Zacken-Kontur organisch, dann minimaler AA-Blur
     alpha = np.array(Image.fromarray(alpha.astype(np.uint8)).filter(ImageFilter.MedianFilter(13)).filter(ImageFilter.GaussianBlur(0.8)), float)
     alpha[alpha < 10] = 0
     ys,xs = np.where(alpha > 10)
     yA = max(0, ys.min()-30); xA = max(0, xs.min()-30); xB = min(alpha.shape[1]-1, xs.max()+30)
-    nat = np.dstack([rgb, alpha]).astype(np.uint8)[yA:, xA:xB+1]
-    duo = np.dstack([duotone(rgb), alpha]).astype(np.uint8)[yA:, xA:xB+1]
-    for arr, suffix in [(nat,"natural"), (duo,"duotone")]:
+    nat_full = np.dstack([rgb, alpha]).astype(np.uint8)[yA:, xA:xB+1]
+    if name == "tej":
+        nat_full = remove_print_arr(nat_full)
+    # 1) MASTER: volle Aufloesung, ungraded
+    Image.fromarray(nat_full).save(os.path.join(OUT, f"{name}-master.png"))
+    # 2) Kompat-Varianten @2400
+    duo_full = np.dstack([duotone(nat_full[...,:3].astype(float)), nat_full[...,3]]).astype(np.uint8)
+    for arr, suffix in [(nat_full,"natural"), (duo_full,"duotone")]:
         img = Image.fromarray(arr)
         if img.height > 2400:
             sc = 2400/img.height
             img = img.resize((int(img.width*sc), 2400), Image.LANCZOS)
         img.save(os.path.join(OUT, f"{name}-{suffix}.png"))
-    print(name, "->", img.size)
-
-# --- Tej: Tommy-Hilfiger-Print entfernen (Marken-Verbot auf Karten) ---
-def remove_print(path):
-    im = Image.open(path)
-    a = np.array(im)
-    h,w = a.shape[:2]
-    lum = a[...,:3].astype(float).mean(axis=2)
-    m = np.zeros((h,w), bool)
-    # Print sitzt auf der Brust: mittleres Drittel, ~36-56% der Hoehe (NICHT tiefer — dort sind die Unterarme)
-    m[int(h*0.36):int(h*0.58), int(w*0.14):int(w*0.86)] = True
-    pm = m & (a[...,3]>150) & (lum>36)
-    if pm.sum() == 0: return
-    pm = np.array(Image.fromarray((pm*255).astype(np.uint8)).filter(ImageFilter.MaxFilter(17))) > 0
-    shirt = m & (a[...,3]>150) & (lum<=35) & ~pm
-    med = np.median(a[shirt][:,:3], axis=0)
-    rng = np.random.default_rng(7)
-    a[pm,:3] = np.clip(med + rng.normal(0,3.5,(pm.sum(),3)), 0, 255).astype(np.uint8)
-    im2 = Image.fromarray(a)
-    ys,xs = np.where(pm)
-    y0,y1,x0,x1 = ys.min(),ys.max(),xs.min(),xs.max()
-    box = im2.crop((x0-10,y0-10,x1+10,y1+10)).filter(ImageFilter.GaussianBlur(3))
-    mask = Image.fromarray((pm*255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(2)).crop((x0-10,y0-10,x1+10,y1+10))
-    im2.paste(box, (x0-10,y0-10), mask)
-    im2.save(path)
-    print("print removed:", path, pm.sum(), "px")
-
-for s in ["natural","duotone"]:
-    remove_print(os.path.join(OUT, f"tej-{s}.png"))
+    print(name, "master:", nat_full.shape[1], "x", nat_full.shape[0], "| compat:", img.size)
