@@ -30,34 +30,40 @@ Herleitung (Kurzform, Details im LinkedIn-Playbook §4/§9):
 
 ---
 
-## 2. Info / About (max. 2.600 Zeichen) — v2 2026-07-24 (komplett ohne Kosten-Sprache; von Joaquin noch hochzuladen)
+## 2. Info / About (max. 2.600 Zeichen) — FINAL v3 2026-07-30 (7 Iterationsrunden mit Joaquin; von ihm noch hochzuladen)
 
-> Die ersten zwei Zeilen sind der Haken. LinkedIn klappt den Rest hinter "…mehr" ein. Aufbau: Kunde zuerst → Story → Zusammenarbeits-Pfeile → Grand-Slam-Offer als Risk Reversal OHNE Kosten-Wort (User-Entscheid 2026-07-24: kein "kostenlos/kostet nichts", Wert-Reihenfolge trägt die Risikoübernahme) → Build-in-public-Zeile → Booking-CTA. KEIN Anfänger-Status-Framing (User-Entscheid 2026-07-24, siehe Memory no-beginner-status-framing).
+> Aufbau (IntelliLab-Muster als Massstab, Tune-Up-konform): ruhiger Klassifikations-Hook (nie hinterfragte Abläufe) → Ursache = veralteter Prozess, NIE die Person, NIE "Betriebe wissen nicht was möglich ist" (Affront) → kompaktes Intro (Know-how liegt bei den Leuten; optimieren UND automatisieren) → EIN anonymes Pilot-Beispiel (Offerten per Klick; Menschen prüfen weiter = Kontroll-Angst abgeräumt) → positive Brücke ("mit dem Team, das Sie schon haben", keine Verneinung) → Pfeile OHNE Labels ("Zuerst verstehen:" etc. = robotisch), 2-Wochen-Prototyp (nie "innert Tagen"), Bewährt-sich-Frame statt Risk-Reversal ("Sie sehen zuerst das Ergebnis, dann entscheiden Sie" = säht Zweifel, gestrichen) → Partner-Block ohne Upsell-Vibe → CTA-Satz + nackter Link (kein "Termin aussuchen:"-Label, kein Mail-Zweit-CTA) → Dogfooding-PS.
 
 ```
-Niemand kennt Ihren Betrieb so gut wie Sie und Ihr Team.
+In jedem Betrieb gibt es Abläufe, die heute noch genau so laufen wie vor zehn Jahren. Nicht, weil das die beste Lösung wäre. Sondern weil im Alltag nie jemand Zeit hat, sie zu hinterfragen.
 
-Genau darauf bauen wir, wenn wir Ihre Abläufe in Bestform bringen.
+Genau dort setzen wir an.
 
-Ich bin Joaquin, Co-Founder von Automatisierbar. Angefangen haben wir zu viert, mit einer einfachen Überzeugung: In den meisten KMU steckt mehr, als der Alltag zulässt. Also sind wir in Betriebe gegangen und haben vor allem eines gemacht: zugehört. Dabei zeigte sich immer dasselbe Muster: Das Know-how ist längst da, bei den Leuten, die die Arbeit jeden Tag machen. Unsere Aufgabe ist, dieses Wissen in KI-Automatisierungen zu übersetzen, die Ihrem Team zuarbeiten.
+Ich bin Joaquin, Co-Founder von Automatisierbar. Wir nehmen uns diese Abläufe zusammen mit den Leuten vor, die sie jeden Tag machen, denn bei ihnen liegt das Know-how. Manches wird einfacher, manches schneller, und was sich automatisieren lässt, läuft danach von selbst.
+
+Ein Beispiel aus einem laufenden Pilotprojekt: Offerten, die vorher von Hand geschrieben wurden, entstehen heute per Klick. Geprüft und verschickt wird wie vorher von Menschen. Nur eben in einem Bruchteil der Zeit.
+
+Genau das bringen wir in Ihren Betrieb: mehr schaffen mit dem Team, das Sie schon haben.
 
 So läuft die Zusammenarbeit:
-→ Zuerst verstehen: In einem Gespräch von 40 bis 60 Minuten nehmen wir Ihren Ablauf auf, wie er im Alltag wirklich läuft. Ohne Vorbereitung auf Ihrer Seite.
-→ Dann bauen: Innert Tagen steht ein Prototyp, den Ihr Team im Echtbetrieb testet.
-→ Dann messen: Die gesparte Zeit liegt auf dem Tisch, bevor wir über Aufbau und Betreuung sprechen.
 
-Sie sehen zuerst das Ergebnis. Dann entscheiden Sie, ob wir gemeinsam weitergehen.
+→ Wir setzen uns mit Ihnen und Ihrem Team zusammen und schauen uns Ihre Abläufe gemeinsam an: was sich optimieren lässt, was sich automatisieren lässt, und was am besten so bleibt, wie es ist. Ohne Vorbereitung auf Ihrer Seite.
 
-Ich zeige hier auf LinkedIn, was wir bauen und was dabei herauskommt: der Ablauf vorher, die Lösung, das Ergebnis.
+→ Innert zwei Wochen steht ein Prototyp, den Ihr Team im Echtbetrieb testet.
 
-Wenn es in Ihrem Betrieb einen Ablauf gibt, der mehr kann, reden wir am besten kurz darüber:
-→ Termin aussuchen: cockpit.automatisierbar.ch/book
-→ Oder direkt: joaquin@automatisierbar.ch
+→ Bewährt er sich, bauen wir ihn zur fertigen Lösung aus und halten sie am Laufen. Einmal richtig gebaut, trägt sie die nächsten zehn Jahre.
+
+Was uns dabei wichtig ist: Wir kommen nicht für eine einzelne Automatisierung und sind wieder weg. Wir wollen der Partner sein, mit dem Ihr Betrieb von Jahr zu Jahr besser läuft.
+
+Wenn Sie beim Lesen an einen bestimmten Ablauf denken mussten: Genau darüber sollten wir reden.
+cockpit.automatisierbar.ch/book
+
+PS: Auch den Terminkalender hinter diesem Link haben wir selbst gebaut.
 ```
 
-v1→v2 (2026-07-24, vier Stellen): "So läuft das konkret" → "So läuft die Zusammenarbeit"; Messen-Pfeil auf Wert-zuerst-Aussage umgestellt; Kosten-Absatz ("Der Start kostet Sie dabei nichts …") ersetzt durch "Sie sehen zuerst das Ergebnis. Dann entscheiden Sie, ob wir gemeinsam weitergehen." (Risk Reversal ohne Kosten-Wort); "Und der ehrliche Stand: Wir sind vier Gründer, die ersten Pilotprojekte laufen"-Beichte GESTRICHEN (Anfänger-Positionierung, O-Ton: "das interessiert niemanden"), Build-in-public-Zeile bleibt als Kompetenz-Beweis. Experience/OG-Karte gleicht Joaquin parallel in anderer Session an.
+Verworfene Richtungen (nicht wiederholen): Kompliment-Hook ("Niemand kennt Ihren Betrieb…" = kein Zug), Szene-Hook mit Twist ("Das muss halt so. / Muss es nicht." = unprofessionell), Gründungs-Story im Lern-Modus ("zu viert gestartet, zugehört" = Anfänger-Vibe), Zahlen-Flex (120 Automatisierungen / zu viert wie zehn = "woher kommen die Zahlen", liest niemand), Build-in-public-Meta-Zeile (unprofessionell), "die Ihrem Team zuarbeiten" (nicht menschlich), Backoffice-only-Klassifikation (wir optimieren auch bezahlte Kernarbeit, Bsp. Offerten).
 
-Offene Feinschliff-Punkte (nächste Woche): Pilot-Beispiel mit echter Zahl einbauen (sobald freigegeben), PS-Zeile mit menschlichem Detail (erhöht Reichweite laut Kurs), evtl. benannter Begriff für die Methode.
+**Geplanter Rework-Trigger (O-Ton Joaquin 2026-07-30):** sobald 2-3 echte Clients/Use-Cases da sind, wird die About überarbeitet und die Cases "überall reingepoppt" (Credibility). Bis dahin gilt diese Version. Dann auch: Terminkalender-Seite hinter /book aufhübschen (erste Impression nach dem Klick).
 
 ---
 
